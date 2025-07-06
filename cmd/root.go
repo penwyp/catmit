@@ -1,0 +1,203 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"os/exec"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/penwyp/catmit/client"
+	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/prompt"
+	"github.com/penwyp/catmit/ui"
+	"github.com/spf13/cobra"
+)
+
+// 将关键依赖抽象为接口以便测试时注入 Mock。
+// 若在运行时未被替换，则使用默认实现。
+var (
+	collectorProvider func() collectorInterface                   = defaultCollectorProvider
+	promptProvider    func(lang string) promptInterface           = defaultPromptProvider
+	clientProvider    func(timeout time.Duration) clientInterface = defaultClientProvider
+	committer         commitInterface                             = defaultCommitter{}
+)
+
+type collectorInterface interface {
+	RecentCommits(ctx context.Context, n int) ([]string, error)
+	Diff(ctx context.Context) (string, error)
+	BranchName(ctx context.Context) (string, error)
+	ChangedFiles(ctx context.Context) ([]string, error)
+}
+
+type promptInterface interface {
+	Build(seed, diff string, commits []string, branch string, files []string) string
+}
+
+type clientInterface interface {
+	GetCommitMessage(ctx context.Context, prompt string) (string, error)
+}
+
+type commitInterface interface {
+	Commit(message string) error
+}
+
+// ---------------- 默认实现 ------------------
+func defaultCollectorProvider() collectorInterface {
+	// 使用真实 Runner（os/exec）实现，后续补充。
+	return collector.New(realRunner{})
+}
+
+func defaultPromptProvider(lang string) promptInterface {
+	return prompt.NewBuilder(lang, 0)
+}
+
+func defaultClientProvider(timeout time.Duration) clientInterface {
+	baseURL := os.Getenv("DEEPSEEK_API_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com"
+	}
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	return client.NewClient(baseURL, apiKey, timeout)
+}
+
+// realRunner 实际执行系统命令；仅在生产模式使用。
+// 暂简化实现。
+
+type realRunner struct{}
+
+func (realRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	return cmd.CombinedOutput()
+}
+
+// defaultCommitter 使用 git commit -m 执行提交。
+
+type defaultCommitter struct{}
+
+func (defaultCommitter) Commit(message string) error {
+	cmd := exec.Command("git", "commit", "-m", message)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// -------------------------------------------------
+
+var rootCmd = &cobra.Command{
+	Use:   "catmit [SEED_TEXT]",
+	Short: "AI-powered commit message generator",
+	RunE:  run,
+}
+
+var (
+	flagLang    string
+	flagTimeout int
+	flagYes     bool
+	flagDryRun  bool
+)
+
+func init() {
+	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "commit message language (ISO 639-1)")
+	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
+	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
+	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
+}
+
+func Execute() error { return rootCmd.Execute() }
+
+func run(cmd *cobra.Command, args []string) error {
+	seedText := ""
+	if len(args) > 0 {
+		seedText = args[0]
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(flagTimeout)*time.Second)
+	defer cancel()
+
+	// Dry-run 与 -y 快速路径，保留同步逻辑
+	if flagDryRun || flagYes {
+		// 执行同步流程
+		col := collectorProvider()
+		diffText, err := col.Diff(ctx)
+		if err != nil {
+			if err == collector.ErrNoDiff {
+				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+				return nil
+			}
+			return err
+		}
+		commits, err := col.RecentCommits(ctx, 10)
+		if err != nil {
+			return err
+		}
+		builder := promptProvider(flagLang)
+		promptTxt := builder.Build(seedText, diffText, commits, "", []string{})
+		cli := clientProvider(time.Duration(flagTimeout) * time.Second)
+		message, err := cli.GetCommitMessage(ctx, promptTxt)
+		if err != nil {
+			return err
+		}
+
+		if flagDryRun {
+			fmt.Fprintln(cmd.OutOrStdout(), message)
+			return nil
+		}
+
+		// yes = commit
+		fmt.Fprintln(cmd.OutOrStdout(), "Committing...")
+		if err := stageAll(); err != nil {
+			return err
+		}
+		return committer.Commit(message)
+	}
+
+	// 交互模式：显示进度 Spinner，然后进入 Review TUI
+	lm := ui.NewLoadingModel(ctx, collectorProvider(), promptProvider(flagLang), clientProvider(time.Duration(flagTimeout)*time.Second), seedText, flagLang)
+	finalLM, errProgram := tea.NewProgram(&lm).Run()
+	if errProgram != nil {
+		return errProgram
+	}
+	if flm, ok := finalLM.(*ui.LoadingModel); ok {
+		lm = *flm
+	}
+	msg, err := lm.IsDone()
+	if err != nil {
+		return err
+	}
+
+	// 无 diff
+	if msg == "" {
+		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+		return nil
+	}
+
+	reviewModel := ui.NewReviewModel(msg)
+	finalModel, err := tea.NewProgram(reviewModel).Run()
+	if err != nil {
+		return err
+	}
+	if m, ok := finalModel.(ui.ReviewModel); ok {
+		_, decision, finalMsg := m.IsDone()
+		switch decision {
+		case ui.DecisionAccept:
+			if err := stageAll(); err != nil {
+				return err
+			}
+			return committer.Commit(finalMsg)
+		case ui.DecisionCancel:
+			fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
+		}
+	}
+	return nil
+}
+
+// stage all changes (tracked and untracked)
+func stageAll() error {
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
+}
