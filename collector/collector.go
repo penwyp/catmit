@@ -85,7 +85,10 @@ func (c *Collector) Diff(ctx context.Context) (string, error) {
 	combined = strings.TrimSpace(combined)
 	if combined == "" {
 		// 可能是新文件删除等导致 diff 为空，检查 git status
-		status, _ := c.runner.Run(ctx, "git", "status", "--porcelain")
+		status, err := c.runner.Run(ctx, "git", "status", "--porcelain")
+		if err != nil {
+			return "", fmt.Errorf("git status --porcelain failed: %w", err)
+		}
 		statusStr := strings.TrimSpace(string(status))
 		if statusStr == "" {
 			return "", ErrNoDiff

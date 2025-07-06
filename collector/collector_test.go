@@ -57,12 +57,34 @@ func TestCollector_Diff(t *testing.T) {
 
 	t.Run("no_diff", func(t *testing.T) {
 		mr := &mockRunner{
-			outputs: [][]byte{[]byte(""), []byte("")},
-			errs:    []error{nil, nil},
+			outputs: [][]byte{[]byte(""), []byte(""), []byte("")},
+			errs:    []error{nil, nil, nil},
 		}
 		c := New(mr)
 		_, err := c.Diff(context.Background())
 		require.ErrorIs(t, err, ErrNoDiff)
+	})
+
+	t.Run("no_diff_but_git_status_has_changes", func(t *testing.T) {
+		mr := &mockRunner{
+			outputs: [][]byte{[]byte(""), []byte(""), []byte("M  file.txt\nA  newfile.txt")},
+			errs:    []error{nil, nil, nil},
+		}
+		c := New(mr)
+		diff, err := c.Diff(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, "M  file.txt\nA  newfile.txt", diff)
+	})
+
+	t.Run("git_status_command_fails", func(t *testing.T) {
+		mr := &mockRunner{
+			outputs: [][]byte{[]byte(""), []byte(""), []byte("")},
+			errs:    []error{nil, nil, errors.New("git status failed")},
+		}
+		c := New(mr)
+		_, err := c.Diff(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "git status --porcelain failed")
 	})
 }
 

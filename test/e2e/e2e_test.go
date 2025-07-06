@@ -145,3 +145,38 @@ func TestE2E_Timeout(t *testing.T) {
 		t.Fatalf("expected exit error with code 124, got %v\n%s", err, out.String())
 	}
 }
+
+func TestE2E_NothingToCommit(t *testing.T) {
+	bin := buildBinary(t)
+
+	// No need for API server since we won't reach that point
+	repo := initGitRepo(t)
+
+	// Test with -y flag
+	t.Run("yes_mode", func(t *testing.T) {
+		cmd := exec.Command(bin, "-y")
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+
+		err := cmd.Run()
+		require.NoError(t, err, out.String())
+		require.Contains(t, out.String(), "Nothing to commit")
+	})
+
+	// Test with --dry-run flag
+	t.Run("dry_run_mode", func(t *testing.T) {
+		cmd := exec.Command(bin, "--dry-run")
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+
+		err := cmd.Run()
+		require.NoError(t, err, out.String())
+		require.Contains(t, out.String(), "Nothing to commit")
+	})
+}

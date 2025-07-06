@@ -47,7 +47,7 @@ type commitInterface interface {
 // ---------------- 默认实现 ------------------
 func defaultCollectorProvider() collectorInterface {
 	// 使用真实 Runner（os/exec）实现，后续补充。
-	return collector.New(realRunner{})
+	return collector.New(realRunner{debug: flagDebug})
 }
 
 func defaultPromptProvider(lang string) promptInterface {
@@ -64,13 +64,26 @@ func defaultClientProvider(timeout time.Duration) clientInterface {
 }
 
 // realRunner 实际执行系统命令；仅在生产模式使用。
-// 暂简化实现。
+type realRunner struct {
+	debug bool
+}
 
-type realRunner struct{}
-
-func (realRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	return cmd.CombinedOutput()
+	if r.debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Running: %s %v\n", name, args)
+	}
+	output, err := cmd.CombinedOutput()
+	if r.debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Output length: %d bytes\n", len(output))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Error: %v\n", err)
+		}
+		if len(output) > 0 && len(output) < 1000 {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Output: %q\n", string(output))
+		}
+	}
+	return output, err
 }
 
 // defaultCommitter 使用 git commit -m 执行提交。
@@ -97,6 +110,7 @@ var (
 	flagTimeout int
 	flagYes     bool
 	flagDryRun  bool
+	flagDebug   bool
 )
 
 func init() {
@@ -104,6 +118,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
 	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
 	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
+	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -125,9 +140,15 @@ func run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			if err == collector.ErrNoDiff {
 				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+				if flagDebug {
+					fmt.Fprintln(cmd.ErrOrStderr(), "[DEBUG] No staged or unstaged changes detected by git commands")
+				}
 				return nil
 			}
-			return err
+			if flagDebug {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[DEBUG] Diff collection failed: %v\n", err)
+			}
+			return fmt.Errorf("failed to collect git diff: %w", err)
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
@@ -165,6 +186,11 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	msg, err := lm.IsDone()
 	if err != nil {
+		// Check if it's the "nothing to commit" error
+		if err == collector.ErrNoDiff {
+			fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+			return nil
+		}
 		return err
 	}
 

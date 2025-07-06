@@ -94,11 +94,23 @@ func TestRoot_YesFlag_Commits(t *testing.T) {
 }
 
 func TestRoot_NoDiff_NoCommit(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalFlagDryRun := flagDryRun
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		flagDryRun = originalFlagDryRun
+	}()
+
 	flagDryRun = false
 	collectorProvider = func() collectorInterface { return mockCollector{diff: "", err: collector.ErrNoDiff} }
 	promptProvider = func(lang string) promptInterface { return mockPrompt{} }
 
-	rootCmd.SetArgs([]string{})
+	rootCmd.SetArgs([]string{"--dry-run"})
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetErr(&buf)
@@ -230,7 +242,7 @@ func TestRun_ErrorPaths(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		require.Equal(t, context.DeadlineExceeded, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
 	t.Run("recent_commits_error", func(t *testing.T) {
@@ -247,7 +259,7 @@ func TestRun_ErrorPaths(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		require.Equal(t, context.DeadlineExceeded, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
 	t.Run("client_error", func(t *testing.T) {
@@ -268,7 +280,7 @@ func TestRun_ErrorPaths(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		require.Equal(t, context.DeadlineExceeded, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 }
 
@@ -303,4 +315,34 @@ func TestRun_WithSeedText(t *testing.T) {
 	err := rootCmd.Execute()
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "feat: with seed")
+}
+
+func TestRoot_NoDiff_YesMode(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalFlagDryRun := flagDryRun
+	originalFlagYes := flagYes
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		flagDryRun = originalFlagDryRun
+		flagYes = originalFlagYes
+	}()
+
+	flagDryRun = false
+	flagYes = true
+	collectorProvider = func() collectorInterface { return mockCollector{diff: "", err: collector.ErrNoDiff} }
+	promptProvider = func(lang string) promptInterface { return mockPrompt{} }
+
+	rootCmd.SetArgs([]string{"-y"})
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), "Nothing to commit")
 }
