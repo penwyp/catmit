@@ -77,13 +77,13 @@ type realRunner struct {
 
 func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	if r.debug && appLogger != nil {
+	if r.debug {
 		appLogger.Debug("Running command",
 			zap.String("command", name),
 			zap.Strings("args", args))
 	}
 	output, err := cmd.CombinedOutput()
-	if r.debug && appLogger != nil {
+	if r.debug {
 		appLogger.Debug("Command output",
 			zap.Int("output_length", len(output)),
 			zap.Error(err),
@@ -172,12 +172,12 @@ func run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			if err == collector.ErrNoDiff {
 				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
-				if flagDebug && appLogger != nil {
+				if flagDebug {
 					appLogger.Debug("No staged or unstaged changes detected by git commands")
 				}
 				return nil
 			}
-			if flagDebug && appLogger != nil {
+			if flagDebug {
 				appLogger.Debug("Diff collection failed", zap.Error(err))
 			}
 			return fmt.Errorf("failed to collect git diff: %w", err)
