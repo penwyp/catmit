@@ -33,12 +33,14 @@ type collectorInterface interface {
 	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
+	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
 }
 
 type promptInterface interface {
 	Build(seed, diff string, commits []string, branch string, files []string) string
 	BuildSystemPrompt() string
 	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
+	BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error)
 }
 
 type clientInterface interface {
@@ -188,7 +190,19 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		builder := promptProvider(flagLang)
 		systemPrompt := builder.BuildSystemPrompt()
-		userPrompt := builder.BuildUserPrompt(seedText, diffText, commits, "", []string{})
+		
+		// Try to use the new BuildUserPromptWithBudget method
+		userPrompt, err := builder.BuildUserPromptWithBudget(ctx, col, seedText)
+		if err != nil {
+			if flagDebug {
+				appLogger.Debug("Smart prompt building failed, falling back to traditional method", zap.Error(err))
+			}
+			// Fallback to traditional method
+			branch, _ := col.BranchName(ctx)
+			files, _ := col.ChangedFiles(ctx)
+			userPrompt = builder.BuildUserPrompt(seedText, diffText, commits, branch, files)
+		}
+		
 		cli := clientProvider(time.Duration(flagTimeout) * time.Second)
 		message, err := cli.GetCommitMessage(ctx, systemPrompt, userPrompt)
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/penwyp/catmit/collector"
 )
 
 // Stage 表示进度阶段
@@ -13,6 +14,7 @@ type Stage int
 
 const (
 	StageCollect Stage = iota
+	StagePreprocess // 新增：智能数据预处理阶段
 	StagePrompt
 	StageQuery
 	StageDone
@@ -24,12 +26,16 @@ type collectorInterface interface {
 	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
+	// 新增：支持文件状态摘要
+	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
 }
 
 type promptInterface interface {
 	Build(seed, diff string, commits []string, branch string, files []string) string
 	BuildSystemPrompt() string
 	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
+	// 新增：支持token预算控制的智能prompt构建
+	BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error)
 }
 
 type clientInterface interface {
@@ -91,11 +97,19 @@ func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case diffCollectedMsg:
-		// 进入 Prompt 阶段
+		// 进入预处理阶段，尝试使用新的智能处理流程
+		m.stage = StagePreprocess
+		return m, preprocessCmd(m.collector, m.ctx)
+	case preprocessDoneMsg:
+		// 预处理完成，进入智能Prompt构建阶段
 		m.stage = StagePrompt
-		return m, buildPromptCmd(m.promptBuild, msg.seed, msg.diff, msg.commits, msg.branch, msg.files)
+		return m, buildSmartPromptCmd(m.promptBuild, m.collector, m.ctx, m.seed)
+	case smartPromptBuiltMsg:
+		// 智能prompt构建完成，进入Query阶段
+		m.stage = StageQuery
+		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt)
 	case promptBuiltMsg:
-		// 进入 Query 阶段
+		// 传统prompt构建完成，进入Query阶段（fallback路径）
 		m.stage = StageQuery
 		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt)
 	case queryDoneMsg:
@@ -123,6 +137,9 @@ func (m *LoadingModel) View() string {
 	case StageCollect:
 		status = "Collecting diff…"
 		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // Orange
+	case StagePreprocess:
+		status = "Preprocessing files…"
+		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208")) // Dark orange
 	case StagePrompt:
 		status = "Crafting prompt…"
 		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")) // Blue
@@ -145,14 +162,24 @@ func (m *LoadingModel) IsDone() (string, error) {
 // ---------------- tea.Msg 定义 ----------------
 
 type diffCollectedMsg struct {
-	seed    string
 	diff    string
 	commits []string
 	branch  string
 	files   []string
 }
 
+// 新增：预处理完成消息
+type preprocessDoneMsg struct {
+	summary *collector.FileStatusSummary
+}
+
 type promptBuiltMsg struct {
+	systemPrompt string
+	userPrompt   string
+}
+
+// 新增：智能prompt构建完成消息
+type smartPromptBuiltMsg struct {
 	systemPrompt string
 	userPrompt   string
 }
@@ -179,13 +206,33 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	}
 }
 
-func buildPromptCmd(pb promptInterface, seed, diff string, commits []string, branch string, files []string) tea.Cmd {
+// 新增：预处理命令，获取文件状态摘要
+func preprocessCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		systemPrompt := pb.BuildSystemPrompt()
-		userPrompt := pb.BuildUserPrompt(seed, diff, commits, branch, files)
-		return promptBuiltMsg{systemPrompt: systemPrompt, userPrompt: userPrompt}
+		// 尝试使用新的FileStatusSummary方法
+		summary, err := col.FileStatusSummary(ctx)
+		if err != nil {
+			// 如果新方法失败，可能collector没有实现新接口，返回错误
+			return errorMsg{err}
+		}
+		return preprocessDoneMsg{summary: summary}
 	}
 }
+
+// 新增：智能prompt构建命令，使用token预算控制
+func buildSmartPromptCmd(pb promptInterface, col collectorInterface, ctx context.Context, seed string) tea.Cmd {
+	return func() tea.Msg {
+		// 尝试使用新的BuildUserPromptWithBudget方法
+		systemPrompt := pb.BuildSystemPrompt()
+		userPrompt, err := pb.BuildUserPromptWithBudget(ctx, col, seed)
+		if err != nil {
+			// 如果新方法失败，fallback到传统方法
+			return errorMsg{err}
+		}
+		return smartPromptBuiltMsg{systemPrompt: systemPrompt, userPrompt: userPrompt}
+	}
+}
+
 
 func queryCmd(cli clientInterface, ctx context.Context, systemPrompt, userPrompt string) tea.Cmd {
 	return func() tea.Msg {

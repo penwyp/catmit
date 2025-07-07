@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
+	"github.com/penwyp/catmit/collector"
 )
 
 // ---------------- mock implementations ----------------
@@ -29,6 +30,15 @@ func (m mockCollector) ChangedFiles(ctx context.Context) ([]string, error) {
 	return []string{"a.go"}, nil
 }
 
+func (m mockCollector) FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error) {
+	return &collector.FileStatusSummary{
+		BranchName: "test",
+		Files: []collector.FileStatus{
+			{Path: "a.go", IndexStatus: 'M'},
+		},
+	}, m.err
+}
+
 type mockPrompt struct{}
 
 func (mockPrompt) Build(seed, diff string, commits []string, branch string, files []string) string {
@@ -41,6 +51,10 @@ func (mockPrompt) BuildSystemPrompt() string {
 
 func (mockPrompt) BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string {
 	return "user prompt"
+}
+
+func (mockPrompt) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
+	return "user prompt with budget", nil
 }
 
 type mockClient struct {
@@ -70,7 +84,7 @@ func TestLoadingModel_Success(t *testing.T) {
 	finalModel, err := runModel(lm)
 	require.NoError(t, err)
 
-	if m, ok := finalModel.(LoadingModel); ok {
+	if m, ok := finalModel.(*LoadingModel); ok {
 		msg, err := m.IsDone()
 		require.NoError(t, err)
 		require.Equal(t, "feat: ok", msg)
@@ -85,7 +99,7 @@ func TestLoadingModel_Error(t *testing.T) {
 
 	finalModel, err := runModel(lm)
 	require.NoError(t, err)
-	if m, ok := finalModel.(LoadingModel); ok {
+	if m, ok := finalModel.(*LoadingModel); ok {
 		_, e := m.IsDone()
 		require.ErrorIs(t, e, context.Canceled)
 	} else {

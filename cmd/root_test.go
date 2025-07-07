@@ -28,6 +28,14 @@ func (m mockCollector) BranchName(_ context.Context) (string, error) { return "t
 func (m mockCollector) ChangedFiles(_ context.Context) ([]string, error) {
 	return []string{"file.txt"}, nil
 }
+func (m mockCollector) FileStatusSummary(_ context.Context) (*collector.FileStatusSummary, error) {
+	return &collector.FileStatusSummary{
+		BranchName: "test",
+		Files: []collector.FileStatus{
+			{Path: "file.txt", IndexStatus: 'M'},
+		},
+	}, m.err
+}
 
 type mockPrompt struct{}
 
@@ -41,6 +49,10 @@ func (mockPrompt) BuildSystemPrompt() string {
 
 func (mockPrompt) BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string {
 	return "user prompt"
+}
+
+func (mockPrompt) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
+	return "user prompt with budget", nil
 }
 
 type mockClient struct {

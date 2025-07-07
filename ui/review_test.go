@@ -9,7 +9,7 @@ import (
 
 func TestNewReviewModel(t *testing.T) {
 	msg := "feat: add new feature"
-	model := NewReviewModel(msg)
+	model := NewReviewModel(msg, "en")
 	
 	require.Equal(t, msg, model.message)
 	require.False(t, model.editing)
@@ -19,45 +19,45 @@ func TestNewReviewModel(t *testing.T) {
 }
 
 func TestReviewModel_Init(t *testing.T) {
-	model := NewReviewModel("test")
+	model := NewReviewModel("test", "en")
 	cmd := model.Init()
 	require.Nil(t, cmd)
 }
 
 func TestReviewModel_Update_AcceptKey(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test 'a' key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.True(t, rm.done)
 	require.Equal(t, DecisionAccept, rm.decision)
 	require.NotNil(t, cmd) // Should return tea.Quit
 }
 
 func TestReviewModel_Update_AcceptKeyUppercase(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test 'A' key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.True(t, rm.done)
 	require.Equal(t, DecisionAccept, rm.decision)
 	require.NotNil(t, cmd) // Should return tea.Quit
 }
 
 func TestReviewModel_Update_CancelKey(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test 'c' key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.True(t, rm.done)
 	require.Equal(t, DecisionCancel, rm.decision)
 	require.NotNil(t, cmd) // Should return tea.Quit
@@ -67,11 +67,11 @@ func TestReviewModel_Update_CancelKeyVariants(t *testing.T) {
 	testCases := []rune{'C', 'q', 'Q'}
 	
 	for _, key := range testCases {
-		model := NewReviewModel("feat: test")
+		model := NewReviewModel("feat: test", "en")
 		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}}
 		updatedModel, cmd := model.Update(keyMsg)
 		
-		rm := updatedModel.(ReviewModel)
+		rm := updatedModel.(*ReviewModel)
 		require.True(t, rm.done, "Key %c should trigger cancel", key)
 		require.Equal(t, DecisionCancel, rm.decision, "Key %c should set DecisionCancel", key)
 		require.NotNil(t, cmd, "Key %c should return tea.Quit", key)
@@ -79,13 +79,13 @@ func TestReviewModel_Update_CancelKeyVariants(t *testing.T) {
 }
 
 func TestReviewModel_Update_EditKey(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test 'e' key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.True(t, rm.editing)
 	require.False(t, rm.done)
 	require.Equal(t, DecisionNone, rm.decision)
@@ -93,13 +93,13 @@ func TestReviewModel_Update_EditKey(t *testing.T) {
 }
 
 func TestReviewModel_Update_EditKeyUppercase(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test 'E' key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'E'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.True(t, rm.editing)
 	require.False(t, rm.done)
 	require.Equal(t, DecisionNone, rm.decision)
@@ -107,7 +107,7 @@ func TestReviewModel_Update_EditKeyUppercase(t *testing.T) {
 }
 
 func TestReviewModel_Update_EditingMode(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	model.editing = true
 	
 	// Test enter key to save changes
@@ -115,13 +115,13 @@ func TestReviewModel_Update_EditingMode(t *testing.T) {
 	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
 	updatedModel, _ := model.Update(enterKey)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.False(t, rm.editing)
 	require.Equal(t, "feat: updated message", rm.message)
 }
 
 func TestReviewModel_Update_EditingModeEscape(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	model.editing = true
 	originalMessage := model.message
 	
@@ -130,49 +130,52 @@ func TestReviewModel_Update_EditingModeEscape(t *testing.T) {
 	escKey := tea.KeyMsg{Type: tea.KeyEscape}
 	updatedModel, _ := model.Update(escKey)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.False(t, rm.editing)
 	require.Equal(t, originalMessage, rm.message) // Should remain unchanged
 }
 
 func TestReviewModel_Update_UnknownKey(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test unknown key
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
 	updatedModel, cmd := model.Update(keyMsg)
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.False(t, rm.done)
 	require.Equal(t, DecisionNone, rm.decision)
 	require.Nil(t, cmd)
 }
 
 func TestReviewModel_Update_NonKeyMessage(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Test non-key message
 	updatedModel, cmd := model.Update("some string")
 	
-	rm := updatedModel.(ReviewModel)
+	rm := updatedModel.(*ReviewModel)
 	require.False(t, rm.done)
 	require.Equal(t, DecisionNone, rm.decision)
 	require.Nil(t, cmd)
 }
 
 func TestReviewModel_View_Normal(t *testing.T) {
-	model := NewReviewModel("feat: add new feature")
+	model := NewReviewModel("feat: add new feature", "en")
 	view := model.View()
 	
 	require.Contains(t, view, "Commit Preview")
 	require.Contains(t, view, "feat: add new feature")
-	require.Contains(t, view, "[A] Accept")
-	require.Contains(t, view, "[E] Edit")
-	require.Contains(t, view, "[C] Cancel")
+	require.Contains(t, view, "A")
+	require.Contains(t, view, "Accept")
+	require.Contains(t, view, "E")
+	require.Contains(t, view, "Edit")
+	require.Contains(t, view, "C")
+	require.Contains(t, view, "Cancel")
 }
 
 func TestReviewModel_View_Editing(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	model.editing = true
 	view := model.View()
 	
@@ -182,7 +185,7 @@ func TestReviewModel_View_Editing(t *testing.T) {
 }
 
 func TestReviewModel_View_MultilineMessage(t *testing.T) {
-	model := NewReviewModel("feat: add new feature\n\nThis is a detailed description")
+	model := NewReviewModel("feat: add new feature\n\nThis is a detailed description", "en")
 	view := model.View()
 	
 	require.Contains(t, view, "feat: add new feature")
@@ -190,7 +193,7 @@ func TestReviewModel_View_MultilineMessage(t *testing.T) {
 }
 
 func TestReviewModel_IsDone(t *testing.T) {
-	model := NewReviewModel("feat: test")
+	model := NewReviewModel("feat: test", "en")
 	
 	// Initially not done
 	done, decision, message := model.IsDone()
