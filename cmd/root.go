@@ -239,12 +239,6 @@ func run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// 无 diff
-	if msg == "" {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
-		return nil
-	}
-
 	reviewModel := ui.NewReviewModel(msg)
 	finalModel, err := tea.NewProgram(reviewModel).Run()
 	if err != nil {

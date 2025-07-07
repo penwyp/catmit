@@ -50,7 +50,7 @@ It analyzes recent repository history and pending changes, crafts a rich prompt,
 | ID   | Requirement                                                                                   |
 | ---- | --------------------------------------------------------------------------------------------- |
 | F-1  | Collect last **10** commits on current branch.                                                |
-| F-2  | Collect staged **and** unstaged diffs.                                                        |
+| F-2  | Collect staged **and** unstaged diffs, including untracked files.                             |
 | F-3  | Accept optional seed text (`catmit "feat: seed"`).                                        |
 | F-4  | Compose a single prompt containing: seed text, diff digest, log digest, language instruction. |
 | F-5  | Read API key from `DEEPSEEK_API_KEY`; invoke DeepSeek chat API.                               |
@@ -159,7 +159,7 @@ Body: {
 
 | Scenario         | Behaviour                                                 |
 | ---------------- | --------------------------------------------------------- |
-| No diff detected | Print “nothing to commit” warning, exit 0.                |
+| No changes | Print "nothing to commit" warning, exit 0. (No staged, unstaged, or untracked files) |
 | Timeout reached  | Cancel request, print “Timeout (N s) exceeded”, exit 124. |
 | DeepSeek 4xx/5xx | Print status & body, exit 1.                              |
 | Git commit fails | Propagate git’s exit code.                                |
