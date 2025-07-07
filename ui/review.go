@@ -109,7 +109,7 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e", "E":
 			m.editing = true
 			return m, nil
-		case "c", "C", "q", "Q":
+		case "c", "C", "q", "Q", "esc":
 			m.decision = DecisionCancel
 			m.done = true
 			return m, tea.Quit
@@ -134,6 +134,43 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// wordWrap wraps a string to a given line width, preserving paragraph breaks.
+func wordWrap(s string, width int) string {
+	var finalResult strings.Builder
+	paragraphs := strings.Split(s, "\n")
+
+	for i, paragraph := range paragraphs {
+		if strings.TrimSpace(paragraph) == "" {
+			finalResult.WriteString("\n")
+			continue
+		}
+		var paraBuilder strings.Builder
+		var line strings.Builder
+		words := strings.Fields(paragraph)
+
+		for _, word := range words {
+			if line.Len() == 0 {
+				line.WriteString(word)
+			} else if lipgloss.Width(line.String()+" "+word) <= width {
+				line.WriteString(" ")
+				line.WriteString(word)
+			} else {
+				paraBuilder.WriteString(line.String() + "\n")
+				line.Reset()
+				line.WriteString(word)
+			}
+		}
+		if line.Len() > 0 {
+			paraBuilder.WriteString(line.String())
+		}
+		finalResult.WriteString(paraBuilder.String())
+		if i < len(paragraphs)-1 {
+			finalResult.WriteString("\n")
+		}
+	}
+	return finalResult.String()
+}
+
 // View 渲染
 func (m *ReviewModel) View() string {
 	// --- 调色板 ---
@@ -145,7 +182,7 @@ func (m *ReviewModel) View() string {
 		cRed           = lipgloss.Color("196")
 		cWhite         = lipgloss.Color("255")
 		cBlack         = lipgloss.Color("0")
-		contentWidth   = 60
+		contentWidth   = 100
 		padding        = 1
 		effectiveWidth = contentWidth - (padding * 2)
 	)
@@ -166,7 +203,6 @@ func (m *ReviewModel) View() string {
 	commitBodyStyle := lipgloss.NewStyle().Foreground(cGray)
 
 	// --- 辅助函数：行渲染器 ---
-	// renderLine 是核心，确保所有内容行都有统一的宽度和边框
 	renderLine := func(content string) string {
 		linePadding := contentWidth - lipgloss.Width(content)
 		if linePadding < 0 {
@@ -181,8 +217,14 @@ func (m *ReviewModel) View() string {
 		tStyle := lipgloss.NewStyle().Foreground(textStyle)
 
 		if isSelected {
-			hStyle = hStyle.Copy().Background(selectedBg)
-			tStyle = tStyle.Copy().Background(selectedBg)
+			// 当按钮被选中时，设置高对比度的前景色以确保可读性
+			fgColor := cBlack
+			// 红色背景上白色文字更清晰
+			if selectedBg == cRed {
+				fgColor = cWhite
+			}
+			hStyle = hStyle.Copy().Background(selectedBg).Foreground(fgColor)
+			tStyle = tStyle.Copy().Background(selectedBg).Foreground(fgColor)
 		}
 
 		return lipgloss.JoinHorizontal(lipgloss.Top,
@@ -220,7 +262,10 @@ func (m *ReviewModel) View() string {
 	// 渲染后续行 (Body)
 	if len(lines) > 1 {
 		bodyBuilder.WriteString(renderLine("") + "\n") // 空行
-		for _, l := range lines[1:] {
+		bodyText := strings.Join(lines[1:], "\n")
+		// 对 Body 进行自动换行，-2 是为了左右的内边距
+		wrappedBody := wordWrap(bodyText, contentWidth-2)
+		for _, l := range strings.Split(wrappedBody, "\n") {
 			lineContent := " " + commitBodyStyle.Render(l)
 			bodyBuilder.WriteString(renderLine(lineContent) + "\n")
 		}
@@ -238,7 +283,10 @@ func (m *ReviewModel) View() string {
 	bottomBorder := borderStyle.Render("└" + strings.Repeat("─", contentWidth) + "┘")
 	footer := strings.Join([]string{blankLine, buttonRow, bottomBorder}, "\n")
 
-	return strings.Join([]string{header, bodyBuilder.String(), footer}, "\n")
+	// 移除 body 末尾可能存在的多余换行符，避免破坏布局
+	finalBody := strings.TrimRight(bodyBuilder.String(), "\n")
+
+	return strings.Join([]string{header, finalBody, footer}, "\n")
 }
 
 // IsDone 返回模型是否结束，以及决策和最终消息。
