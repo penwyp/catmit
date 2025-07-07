@@ -80,6 +80,12 @@ func (m *LoadingModel) Init() tea.Cmd {
 // Update 处理消息
 func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			m.err = context.Canceled
+			return m, tea.Quit
+		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)

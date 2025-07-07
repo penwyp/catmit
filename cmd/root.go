@@ -234,10 +234,14 @@ func run(cmd *cobra.Command, args []string) error {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 			return nil
 		}
+		// 如果用户在加载时按 Ctrl+C 取消，则静默退出
+		if err == context.Canceled {
+			return nil
+		}
 		return err
 	}
 
-	reviewModel := ui.NewReviewModel(msg)
+	reviewModel := ui.NewReviewModel(msg, flagLang)
 	finalReviewModel, err := tea.NewProgram(reviewModel).Run()
 	if err != nil {
 		return err
