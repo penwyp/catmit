@@ -30,24 +30,27 @@ type ReviewModel struct {
 }
 
 // NewReviewModel 创建初始模型。
-func NewReviewModel(msg string) ReviewModel {
+func NewReviewModel(msg string) *ReviewModel {
+	// 移除 \r 并裁剪首尾空白，避免回车符导致 TUI 渲染异常
+	cleanMsg := strings.TrimSpace(strings.ReplaceAll(msg, "\r", ""))
+
 	ti := textinput.New()
 	ti.Placeholder = "Edit commit message"
-	ti.SetValue(msg)
+	ti.SetValue(cleanMsg)
 	ti.CharLimit = 256
 	ti.Focus()
-	return ReviewModel{
-		message:   msg,
+	return &ReviewModel{
+		message:   cleanMsg,
 		editing:   false,
 		textInput: ti,
 	}
 }
 
 // Init 实现 tea.Model 接口
-func (m ReviewModel) Init() tea.Cmd { return nil }
+func (m *ReviewModel) Init() tea.Cmd { return nil }
 
 // Update 处理按键事件
-func (m ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.editing {
@@ -83,7 +86,7 @@ func (m ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View 渲染
-func (m ReviewModel) View() string {
+func (m *ReviewModel) View() string {
 	if m.editing {
 		return fmt.Sprintf("\nEditing commit message (enter to save, esc to cancel):\n%s\n", m.textInput.View())
 	}
@@ -95,6 +98,8 @@ func (m ReviewModel) View() string {
 	// 对 message 按行分割并填充
 	var bodyLines []string
 	for _, l := range strings.Split(m.message, "\n") {
+		// 再次清理潜在的 \r，双保险
+		l = strings.ReplaceAll(l, "\r", "")
 		bodyLines = append(bodyLines, fmt.Sprintf("│ %-50s │", l))
 	}
 	body := strings.Join(bodyLines, "\n") + "\n"
@@ -102,6 +107,6 @@ func (m ReviewModel) View() string {
 }
 
 // IsDone 返回模型是否结束，以及决策和最终消息。
-func (m ReviewModel) IsDone() (bool, Decision, string) {
+func (m *ReviewModel) IsDone() (bool, Decision, string) {
 	return m.done, m.decision, m.message
 }

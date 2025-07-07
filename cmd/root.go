@@ -221,15 +221,13 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// 交互模式：显示进度 Spinner，然后进入 Review TUI
-	lm := ui.NewLoadingModel(ctx, collectorProvider(), promptProvider(flagLang), clientProvider(time.Duration(flagTimeout)*time.Second), seedText, flagLang)
-	finalLM, errProgram := tea.NewProgram(&lm).Run()
-	if errProgram != nil {
-		return errProgram
+	loadingModel := ui.NewLoadingModel(ctx, collectorProvider(), promptProvider(flagLang), clientProvider(time.Duration(flagTimeout)*time.Second), seedText, flagLang)
+	finalLoadingModel, err := tea.NewProgram(loadingModel).Run()
+	if err != nil {
+		return err
 	}
-	if flm, ok := finalLM.(*ui.LoadingModel); ok {
-		lm = *flm
-	}
-	msg, err := lm.IsDone()
+
+	msg, err := finalLoadingModel.(*ui.LoadingModel).IsDone()
 	if err != nil {
 		// Check if it's the "nothing to commit" error
 		if err == collector.ErrNoDiff {
@@ -240,33 +238,36 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	reviewModel := ui.NewReviewModel(msg)
-	finalModel, err := tea.NewProgram(reviewModel).Run()
+	finalReviewModel, err := tea.NewProgram(reviewModel).Run()
 	if err != nil {
 		return err
 	}
-	if m, ok := finalModel.(ui.ReviewModel); ok {
-		_, decision, finalMsg := m.IsDone()
-		switch decision {
-		case ui.DecisionAccept:
-			// Only stage all if there are no staged changes and flagStageAll is true
-			if flagStageAll && !hasStagedChanges(ctx) {
-				if err := stageAll(ctx); err != nil {
-					return err
-				}
-			}
-			if err := committer.Commit(ctx, finalMsg); err != nil {
+
+	m, ok := finalReviewModel.(*ui.ReviewModel)
+	if !ok {
+		return fmt.Errorf("internal error: unexpected model type, got %T", finalReviewModel)
+	}
+	_, decision, finalMsg := m.IsDone()
+	switch decision {
+	case ui.DecisionAccept:
+		// Only stage all if there are no staged changes and flagStageAll is true
+		if flagStageAll && !hasStagedChanges(ctx) {
+			if err := stageAll(ctx); err != nil {
 				return err
 			}
-			if flagPush {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
-				if err := committer.Push(ctx); err != nil {
-					return fmt.Errorf("push failed: %w", err)
-				}
-			}
-			return nil
-		case ui.DecisionCancel:
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
 		}
+		if err := committer.Commit(ctx, finalMsg); err != nil {
+			return err
+		}
+		if flagPush {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
+			if err := committer.Push(ctx); err != nil {
+				return fmt.Errorf("push failed: %w", err)
+			}
+		}
+		return nil
+	case ui.DecisionCancel:
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
 	}
 	return nil
 }

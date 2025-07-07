@@ -42,12 +42,3 @@ func New(debug bool) (*zap.Logger, error) {
 
 	return logger, nil
 }
-
-// NewSugar creates a sugared logger for easier printf-style logging
-func NewSugar(debug bool) (*zap.SugaredLogger, error) {
-	logger, err := New(debug)
-	if err != nil {
-		return nil, err
-	}
-	return logger.Sugar(), nil
-}

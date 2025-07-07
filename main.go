@@ -13,19 +13,10 @@ import (
 
 // main 为 CLI 入口，调用 cmd.Execute。
 func main() {
-	// Setup a channel to listen for SIGINT and SIGTERM signals.
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	// Create a context that will be used for the command execution.
-	ctx := context.Background()
-
-	// Start a goroutine to handle signals.
-	go func() {
-		sig := <-sigs
-		log.Printf("Received signal: %s, exiting immediately.", sig)
-		os.Exit(1)
-	}()
+	// 使用 signal.NotifyContext 创建可取消的 Context；
+	// 当收到 Ctrl+C (SIGINT) 或 SIGTERM 时，ctx.Done() 会被触发。
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop() // 释放资源
 
 	// Execute the root command.
 	if err := cmd.ExecuteContext(ctx); err != nil {

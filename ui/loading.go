@@ -57,10 +57,10 @@ type LoadingModel struct {
 	err     error
 }
 
-func NewLoadingModel(ctx context.Context, col collectorInterface, pb promptInterface, cli clientInterface, seed, lang string) LoadingModel {
+func NewLoadingModel(ctx context.Context, col collectorInterface, pb promptInterface, cli clientInterface, seed, lang string) *LoadingModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
-	return LoadingModel{
+	return &LoadingModel{
 		stage:       StageCollect,
 		spinner:     sp,
 		ctx:         ctx,
@@ -73,12 +73,12 @@ func NewLoadingModel(ctx context.Context, col collectorInterface, pb promptInter
 }
 
 // Init 启动第一个阶段
-func (m LoadingModel) Init() tea.Cmd {
+func (m *LoadingModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, collectCmd(m.collector, m.ctx))
 }
 
 // Update 处理消息
-func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -108,11 +108,11 @@ func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View 根据阶段显示文字
-func (m LoadingModel) View() string {
+func (m *LoadingModel) View() string {
 	// Define colors for different stages
 	var statusStyle lipgloss.Style
 	var status string
-	
+
 	switch m.stage {
 	case StageCollect:
 		status = "Collecting diff…"
@@ -127,12 +127,12 @@ func (m LoadingModel) View() string {
 		status = "Processing…"
 		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")) // Gray
 	}
-	
+
 	return m.spinner.View() + " " + statusStyle.Render(status)
 }
 
 // IsDone 返回结果
-func (m LoadingModel) IsDone() (string, error) {
+func (m *LoadingModel) IsDone() (string, error) {
 	return m.message, m.err
 }
 
@@ -146,9 +146,9 @@ type diffCollectedMsg struct {
 	files   []string
 }
 
-type promptBuiltMsg struct{ 
+type promptBuiltMsg struct {
 	systemPrompt string
-	userPrompt string
+	userPrompt   string
 }
 
 type queryDoneMsg struct{ message string }
