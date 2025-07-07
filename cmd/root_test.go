@@ -61,8 +61,12 @@ type recordCommitter struct {
 	msg    string
 }
 
-func (r *recordCommitter) Commit(message string) error { r.called = true; r.msg = message; return nil }
-func (r *recordCommitter) Push() error { return nil }
+func (r *recordCommitter) Commit(ctx context.Context, message string) error {
+	r.called = true
+	r.msg = message
+	return nil
+}
+func (r *recordCommitter) Push(ctx context.Context) error { return nil }
 
 // ------------------------------------------------
 
