@@ -171,7 +171,7 @@ func run(cmd *cobra.Command, args []string) error {
 		diffText, err := col.Diff(ctx)
 		if err != nil {
 			if err == collector.ErrNoDiff {
-				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 				if flagDebug {
 					appLogger.Debug("No staged or unstaged changes detected by git commands")
 				}
@@ -196,12 +196,12 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 
 		if flagDryRun {
-			fmt.Fprintln(cmd.OutOrStdout(), message)
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), message)
 			return nil
 		}
 
 		// yes = commit
-		fmt.Fprintln(cmd.OutOrStdout(), "Committing...")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Committing...")
 		// Only stage all if there are no staged changes and flagStageAll is true
 		if flagStageAll && !hasStagedChanges() {
 			if err := stageAll(); err != nil {
@@ -212,7 +212,7 @@ func run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if flagPush {
-			fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
 			if err := committer.Push(); err != nil {
 				return fmt.Errorf("push failed: %w", err)
 			}
@@ -233,7 +233,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		// Check if it's the "nothing to commit" error
 		if err == collector.ErrNoDiff {
-			fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 			return nil
 		}
 		return err
@@ -241,7 +241,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// 无 diff
 	if msg == "" {
-		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 		return nil
 	}
 
@@ -264,14 +264,14 @@ func run(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			if flagPush {
-				fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
 				if err := committer.Push(); err != nil {
 					return fmt.Errorf("push failed: %w", err)
 				}
 			}
 			return nil
 		case ui.DecisionCancel:
-			fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
 		}
 	}
 	return nil

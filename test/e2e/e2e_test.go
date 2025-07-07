@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,7 +47,7 @@ func initGitRepo(t *testing.T) string {
 	run("config", "user.name", "tester")
 
 	// 初始提交
-	ioutil.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644)
 	run("add", "README.md")
 	run("commit", "-m", "chore: init")
 
@@ -67,8 +66,8 @@ func TestE2E_HappyPathYes(t *testing.T) {
 
 	repo := initGitRepo(t)
 	// 创建文件并 stage
-	os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content"), 0644)
-	exec.Command("git", "-C", repo, "add", "file.txt").Run()
+	_ = os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content"), 0644)
+	_ = exec.Command("git", "-C", repo, "add", "file.txt").Run()
 
 	cmd := exec.Command(bin, "-y")
 	cmd.Dir = repo
@@ -98,8 +97,8 @@ func TestE2E_DryRun(t *testing.T) {
 	defer server.Close()
 
 	repo := initGitRepo(t)
-	os.WriteFile(filepath.Join(repo, "a.go"), []byte("package main"), 0644)
-	exec.Command("git", "-C", repo, "add", "a.go").Run()
+	_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte("package main"), 0644)
+	_ = exec.Command("git", "-C", repo, "add", "a.go").Run()
 
 	cmd := exec.Command(bin, "--dry-run")
 	cmd.Dir = repo
@@ -128,8 +127,8 @@ func TestE2E_Timeout(t *testing.T) {
 	defer server.Close()
 
 	repo := initGitRepo(t)
-	os.WriteFile(filepath.Join(repo, "b.txt"), []byte("x"), 0644)
-	exec.Command("git", "-C", repo, "add", "b.txt").Run()
+	_ = os.WriteFile(filepath.Join(repo, "b.txt"), []byte("x"), 0644)
+	_ = exec.Command("git", "-C", repo, "add", "b.txt").Run()
 
 	cmd := exec.Command(bin, "-y", "-t", "1")
 	cmd.Dir = repo
