@@ -64,11 +64,25 @@ type chatMessage struct {
 	Content string `json:"content"`
 }
 
-// chatResponse 对应 DeepSeek Chat API 的响应格式。
+// chatResponse 对应 DeepSeek Chat API 的完整响应格式。
+// 包含所有 API 返回的字段，确保与实际响应结构匹配。
 type chatResponse struct {
-	Choices []struct {
-		Message chatMessage `json:"message"`
+	ID                string `json:"id"`
+	Object            string `json:"object"`
+	Created           int64  `json:"created"`
+	Model             string `json:"model"`
+	SystemFingerprint string `json:"system_fingerprint"`
+	Choices           []struct {
+		Index        int         `json:"index"`
+		Message      chatMessage `json:"message"`
+		LogProbs     interface{} `json:"logprobs"`
+		FinishReason string      `json:"finish_reason"`
 	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
 }
 
 // GetCommitMessage 调用 DeepSeek API 生成 commit message。
@@ -153,6 +167,20 @@ func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt 
 		return "", fmt.Errorf("invalid response: empty choices")
 	}
 
+	// 验证响应内容完整性
+	if chatResp.Choices[0].Message.Content == "" {
+		return "", fmt.Errorf("invalid response: empty message content")
+	}
+
+	// Log token usage information if available
+	if c.logger != nil {
+		c.logger.Debug("LLM API Usage",
+			zap.Int("prompt_tokens", chatResp.Usage.PromptTokens),
+			zap.Int("completion_tokens", chatResp.Usage.CompletionTokens),
+			zap.Int("total_tokens", chatResp.Usage.TotalTokens),
+			zap.String("finish_reason", chatResp.Choices[0].FinishReason))
+	}
+
 	return chatResp.Choices[0].Message.Content, nil
 }
 
@@ -231,6 +259,20 @@ func (c *Client) GetCommitMessageLegacy(ctx context.Context, prompt string) (str
 
 	if len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("invalid response: empty choices")
+	}
+
+	// 验证响应内容完整性
+	if chatResp.Choices[0].Message.Content == "" {
+		return "", fmt.Errorf("invalid response: empty message content")
+	}
+
+	// Log token usage information if available
+	if c.logger != nil {
+		c.logger.Debug("LLM API Usage (Legacy)",
+			zap.Int("prompt_tokens", chatResp.Usage.PromptTokens),
+			zap.Int("completion_tokens", chatResp.Usage.CompletionTokens),
+			zap.Int("total_tokens", chatResp.Usage.TotalTokens),
+			zap.String("finish_reason", chatResp.Choices[0].FinishReason))
 	}
 
 	return chatResp.Choices[0].Message.Content, nil

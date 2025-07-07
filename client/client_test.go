@@ -34,12 +34,35 @@ func Test_GetCommitMessage(t *testing.T) {
 				// 验证请求体结构（旧版本使用单个 user 消息）
 				body, _ := io.ReadAll(r.Body)
 				var req chatRequest
-				json.Unmarshal(body, &req)
+				_ = json.Unmarshal(body, &req)
 				require.Len(t, req.Messages, 1)
 				require.Equal(t, "user", req.Messages[0].Role)
 				
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat: test commit"}}]}`))
+				response := `{
+					"id": "04ddb5eb-9727-4e59-af37-7cde0a2c9830",
+					"object": "chat.completion",
+					"created": 1751859666,
+					"model": "deepseek-chat",
+					"choices": [
+						{
+							"index": 0,
+							"message": {
+								"role": "assistant",
+								"content": "feat: test commit"
+							},
+							"logprobs": null,
+							"finish_reason": "stop"
+						}
+					],
+					"usage": {
+						"prompt_tokens": 45,
+						"completion_tokens": 4,
+						"total_tokens": 49
+					},
+					"system_fingerprint": "fp_8802369eaa_prod0623_fp8_kvcache"
+				}`
+				_, _ = w.Write([]byte(response))
 			},
 			expectedMsg:          "feat: test commit",
 			expectedErrSubstring: "",
@@ -62,7 +85,30 @@ func Test_GetCommitMessage(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				// 故意延迟以触发超时
 				time.Sleep(20 * time.Millisecond)
-				_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat: should timeout"}}]}`))
+				response := `{
+					"id": "timeout-test-id",
+					"object": "chat.completion",
+					"created": 1751859666,
+					"model": "deepseek-chat",
+					"choices": [
+						{
+							"index": 0,
+							"message": {
+								"role": "assistant",
+								"content": "feat: should timeout"
+							},
+							"logprobs": null,
+							"finish_reason": "stop"
+						}
+					],
+					"usage": {
+						"prompt_tokens": 20,
+						"completion_tokens": 5,
+						"total_tokens": 25
+					},
+					"system_fingerprint": "fp_8802369eaa_prod0623_fp8_kvcache"
+				}`
+				_, _ = w.Write([]byte(response))
 			},
 			expectedMsg:          "",
 			expectedErrSubstring: "context deadline exceeded",
@@ -123,7 +169,7 @@ func Test_GetCommitMessage_SystemUserPrompts(t *testing.T) {
 				// 验证请求体结构（新版本使用 system + user 消息）
 				body, _ := io.ReadAll(r.Body)
 				var req chatRequest
-				json.Unmarshal(body, &req)
+				_ = json.Unmarshal(body, &req)
 				
 				// 验证消息结构
 				require.Len(t, req.Messages, 2)
@@ -139,7 +185,30 @@ func Test_GetCommitMessage_SystemUserPrompts(t *testing.T) {
 				require.Contains(t, req.Messages[1].Content, "test.go")
 				
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat: add new feature"}}]}`))
+				response := `{
+					"id": "system-user-test-id",
+					"object": "chat.completion",
+					"created": 1751859666,
+					"model": "deepseek-chat",
+					"choices": [
+						{
+							"index": 0,
+							"message": {
+								"role": "assistant",
+								"content": "feat: add new feature"
+							},
+							"logprobs": null,
+							"finish_reason": "stop"
+						}
+					],
+					"usage": {
+						"prompt_tokens": 120,
+						"completion_tokens": 8,
+						"total_tokens": 128
+					},
+					"system_fingerprint": "fp_8802369eaa_prod0623_fp8_kvcache"
+				}`
+				_, _ = w.Write([]byte(response))
 			},
 			expectedMsg:          "feat: add new feature",
 			expectedErrSubstring: "",
@@ -192,14 +261,37 @@ func Test_GetCommitMessageLegacy_BackwardCompatibility(t *testing.T) {
 		// 验证旧版本使用单个 user 消息
 		body, _ := io.ReadAll(r.Body)
 		var req chatRequest
-		json.Unmarshal(body, &req)
+		_ = json.Unmarshal(body, &req)
 		
 		require.Len(t, req.Messages, 1)
 		require.Equal(t, "user", req.Messages[0].Role)
 		require.Equal(t, "legacy test prompt", req.Messages[0].Content)
 		
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat: legacy test"}}]}`))
+		response := `{
+			"id": "legacy-test-id",
+			"object": "chat.completion",
+			"created": 1751859666,
+			"model": "deepseek-chat",
+			"choices": [
+				{
+					"index": 0,
+					"message": {
+						"role": "assistant",
+						"content": "feat: legacy test"
+					},
+					"logprobs": null,
+					"finish_reason": "stop"
+				}
+			],
+			"usage": {
+				"prompt_tokens": 35,
+				"completion_tokens": 3,
+				"total_tokens": 38
+			},
+			"system_fingerprint": "fp_8802369eaa_prod0623_fp8_kvcache"
+		}`
+		_, _ = w.Write([]byte(response))
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(handler))
