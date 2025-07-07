@@ -215,6 +215,12 @@ func (c *Collector) runWithCache(ctx context.Context, name string, args ...strin
 	
 	// Execute command and cache result
 	result, err := c.runner.Run(ctx, name, args...)
+	
+	// Check if error indicates not being in a git repository
+	if err != nil && isNotGitRepositoryError(err) {
+		err = ErrNotGitRepository
+	}
+	
 	c.cache.Set(cacheKey, result, err)
 	
 	return result, err
@@ -319,6 +325,7 @@ var ErrNoDiff = fmt.Errorf("nothing to commit")
 var (
 	ErrGitCommandFailed  = fmt.Errorf("git command failed")      // Generic git command failure
 	ErrInvalidRepository = fmt.Errorf("not a valid git repository") // Not in a git repo
+	ErrNotGitRepository  = fmt.Errorf("not a git repository")   // Current directory is not a git repository
 	ErrNetworkTimeout    = fmt.Errorf("network timeout")         // Network-related timeouts
 	ErrPermissionDenied  = fmt.Errorf("permission denied")      // Permission/access issues
 )
@@ -404,6 +411,11 @@ func (c *Collector) runWithRetry(ctx context.Context, config *RetryConfig, name 
 		
 		lastErr = err
 		
+		// Check if error indicates not being in a git repository
+		if isNotGitRepositoryError(err) {
+			return nil, ErrNotGitRepository
+		}
+		
 		// Check if error is retryable
 		if !isRetryableError(err) {
 			break
@@ -451,6 +463,38 @@ func isRetryableError(err error) bool {
 	if strings.Contains(errStr, "permission denied") ||
 	   strings.Contains(errStr, "access denied") {
 		return false
+	}
+	
+	return false
+}
+
+// isNotGitRepositoryError determines if an error indicates we're not in a git repository
+// This helps provide user-friendly error messages for non-git directories
+func isNotGitRepositoryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := err.Error()
+	
+	// Common patterns that indicate not being in a git repository
+	patterns := []string{
+		"not a git repository",
+		"Not a git repository",
+		"fatal: not a git repository",
+		"fatal: Not a git repository",
+		// Exit code 129 with these specific git commands often indicates non-git directory
+		"git diff --cached failed: exit status 129",
+		"git status --porcelain failed: exit status 129",
+		"git rev-parse --abbrev-ref HEAD failed: exit status 129",
+		// Another common pattern
+		"fatal: not a git repository (or any of the parent directories): .git",
+	}
+	
+	for _, pattern := range patterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
 	}
 	
 	return false

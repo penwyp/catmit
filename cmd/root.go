@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -120,6 +121,35 @@ func (defaultCommitter) Push(ctx context.Context) error {
 	return cmd.Run()
 }
 
+// checkGitRepository performs a quick check to see if we're in a git repository
+// Returns a user-friendly error if not
+func checkGitRepository(ctx context.Context) error {
+	// Quick test: try to run a simple git command that would fail in non-git directories
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	
+	if err := cmd.Run(); err != nil {
+		return collector.ErrNotGitRepository
+	}
+	
+	return nil
+}
+
+// getGitRepositoryErrorMessage returns a user-friendly error message for non-git directories
+// based on the language setting
+func getGitRepositoryErrorMessage(lang string) string {
+	if lang == "zh" || lang == "zh-CN" || lang == "zh-TW" {
+		return `catmit 需要在 Git 仓库中运行。
+
+请确保您在 Git 仓库目录中，或运行 'git init' 创建一个新仓库。`
+	}
+	
+	return `catmit requires a Git repository to work.
+
+Please make sure you're in a Git repository, or run 'git init' to create one.`
+}
+
 // -------------------------------------------------
 
 var rootCmd = &cobra.Command{
@@ -178,6 +208,22 @@ func run(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(flagTimeout)*time.Second)
 	defer cancel()
 
+	// Early check: ensure we're in a git repository
+	if err := checkGitRepository(ctx); err != nil {
+		if errors.Is(err, collector.ErrNotGitRepository) {
+			// Set both SilenceUsage and SilenceErrors to prevent Cobra's error output
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			// Print user-friendly error message directly
+			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
+			return fmt.Errorf("git repository required") // Simple error for exit code
+		}
+		// For other errors, let the normal error handling proceed
+		if flagDebug {
+			appLogger.Debug("Git repository check failed", zap.Error(err))
+		}
+	}
+
 	// Dry-run 与 -y 快速路径，保留同步逻辑
 	if flagDryRun || flagYes {
 		// 执行同步流程
@@ -193,6 +239,12 @@ func run(cmd *cobra.Command, args []string) error {
 				}
 				return nil
 			}
+			if errors.Is(err, collector.ErrNotGitRepository) {
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
+				return fmt.Errorf("git repository required")
+			}
 			if flagDebug {
 				appLogger.Debug("Comprehensive diff collection failed, trying fallback", zap.Error(err))
 			}
@@ -203,11 +255,23 @@ func run(cmd *cobra.Command, args []string) error {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 					return nil
 				}
+				if errors.Is(err, collector.ErrNotGitRepository) {
+					cmd.SilenceUsage = true
+					cmd.SilenceErrors = true
+					_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
+					return fmt.Errorf("git repository required")
+				}
 				return fmt.Errorf("failed to collect git diff: %w", err)
 			}
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
+			if errors.Is(err, collector.ErrNotGitRepository) {
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
+				return fmt.Errorf("git repository required")
+			}
 			return err
 		}
 		builder := promptProvider(flagLang)
@@ -269,6 +333,13 @@ func run(cmd *cobra.Command, args []string) error {
 		if err == collector.ErrNoDiff {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 			return nil
+		}
+		// Check if it's a git repository error
+		if errors.Is(err, collector.ErrNotGitRepository) {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
+			return fmt.Errorf("git repository required")
 		}
 		// 如果用户在加载时按 Ctrl+C 取消，则静默退出
 		if err == context.Canceled {
