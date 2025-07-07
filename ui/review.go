@@ -39,6 +39,9 @@ type ReviewModel struct {
 	decision       Decision
 	done           bool
 	selectedButton buttonState
+	// 响应式终端尺寸支持
+	terminalWidth  int // 终端宽度
+	terminalHeight int // 终端高度
 }
 
 // NewReviewModel 创建初始模型。
@@ -57,6 +60,8 @@ func NewReviewModel(msg, lang string) *ReviewModel {
 		editing:        false,
 		textInput:      ti,
 		selectedButton: buttonAccept, // 默认选中 Accept
+		terminalWidth:  80,           // 默认宽度，会通过 WindowSizeMsg 更新
+		terminalHeight: 24,           // 默认高度，会通过 WindowSizeMsg 更新
 	}
 }
 
@@ -66,6 +71,11 @@ func (m *ReviewModel) Init() tea.Cmd { return nil }
 // Update 处理按键事件
 func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// 更新终端尺寸
+		m.terminalWidth = msg.Width
+		m.terminalHeight = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		// 统一处理 Ctrl+C，无论在哪种模式下都直接取消并退出
 		if msg.String() == "ctrl+c" {
@@ -134,36 +144,54 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// calculateContentWidth 计算基于终端宽度的动态内容宽度
+func (m *ReviewModel) calculateContentWidth() int {
+	const (
+		minWidth = 60  // 最小宽度
+		maxWidth = 120 // 最大宽度
+		margin   = 4   // 左右边距
+	)
+	
+	// 计算可用宽度（去除边距）
+	availableWidth := m.terminalWidth - margin
+	
+	// 应用最小和最大宽度约束
+	if availableWidth < minWidth {
+		return minWidth
+	}
+	if availableWidth > maxWidth {
+		return maxWidth
+	}
+	
+	return availableWidth
+}
+
 // wordWrap wraps a string to a given line width, preserving paragraph breaks.
+// Enhanced with better CJK support and content-aware wrapping.
 func wordWrap(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	
+	if s == "" {
+		return ""
+	}
+	
 	var finalResult strings.Builder
 	paragraphs := strings.Split(s, "\n")
 
 	for i, paragraph := range paragraphs {
 		if strings.TrimSpace(paragraph) == "" {
-			finalResult.WriteString("\n")
+			if i > 0 {
+				finalResult.WriteString("\n")
+			}
 			continue
 		}
-		var paraBuilder strings.Builder
-		var line strings.Builder
-		words := strings.Fields(paragraph)
-
-		for _, word := range words {
-			if line.Len() == 0 {
-				line.WriteString(word)
-			} else if lipgloss.Width(line.String()+" "+word) <= width {
-				line.WriteString(" ")
-				line.WriteString(word)
-			} else {
-				paraBuilder.WriteString(line.String() + "\n")
-				line.Reset()
-				line.WriteString(word)
-			}
-		}
-		if line.Len() > 0 {
-			paraBuilder.WriteString(line.String())
-		}
-		finalResult.WriteString(paraBuilder.String())
+		
+		// 使用 Lipgloss 的文本包装能力，支持 CJK 字符
+		wrappedParagraph := wrapParagraph(paragraph, width)
+		finalResult.WriteString(wrappedParagraph)
+		
 		if i < len(paragraphs)-1 {
 			finalResult.WriteString("\n")
 		}
@@ -171,21 +199,87 @@ func wordWrap(s string, width int) string {
 	return finalResult.String()
 }
 
+// truncateContent 智能截断内容，保留重要信息
+func truncateContent(content string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	
+	// 如果内容长度在限制内，直接返回
+	if lipgloss.Width(content) <= maxWidth {
+		return content
+	}
+	
+	// 逐个字符检查，确保截断后的宽度不超过限制
+	var result strings.Builder
+	for _, r := range content {
+		testStr := result.String() + string(r)
+		if lipgloss.Width(testStr) > maxWidth {
+			break
+		}
+		result.WriteRune(r)
+	}
+	
+	return result.String()
+}
+
+// wrapParagraph 包装单个段落，支持 CJK 字符和智能换行
+func wrapParagraph(paragraph string, width int) string {
+	var result strings.Builder
+	var line strings.Builder
+	words := strings.Fields(paragraph)
+
+	for _, word := range words {
+		// 检查当前行是否为空
+		if line.Len() == 0 {
+			line.WriteString(word)
+		} else {
+			// 计算添加空格和新词后的宽度
+			testLine := line.String() + " " + word
+			testWidth := lipgloss.Width(testLine)
+			
+			if testWidth <= width {
+				line.WriteString(" ")
+				line.WriteString(word)
+			} else {
+				// 当前行满了，换行
+				result.WriteString(line.String() + "\n")
+				line.Reset()
+				line.WriteString(word)
+			}
+		}
+		
+		// 如果单个词太长，需要强制换行
+		if lipgloss.Width(line.String()) > width {
+			result.WriteString(line.String() + "\n")
+			line.Reset()
+		}
+	}
+	
+	// 添加最后一行
+	if line.Len() > 0 {
+		result.WriteString(line.String())
+	}
+	
+	return result.String()
+}
+
 // View 渲染
 func (m *ReviewModel) View() string {
 	// --- 调色板 ---
 	const (
-		cGray          = lipgloss.Color("245")
-		cBlue          = lipgloss.Color("39")
-		cGreen         = lipgloss.Color("42")
-		cYellow        = lipgloss.Color("220")
-		cRed           = lipgloss.Color("196")
-		cWhite         = lipgloss.Color("255")
-		cBlack         = lipgloss.Color("0")
-		contentWidth   = 100
-		padding        = 1
-		effectiveWidth = contentWidth - (padding * 2)
+		cGray   = lipgloss.Color("245")
+		cBlue   = lipgloss.Color("39")
+		cGreen  = lipgloss.Color("42")
+		cYellow = lipgloss.Color("220")
+		cRed    = lipgloss.Color("196")
+		cWhite  = lipgloss.Color("255")
+		cBlack  = lipgloss.Color("0")
+		padding = 1
 	)
+	
+	// 动态计算内容宽度
+	contentWidth := m.calculateContentWidth()
 
 	// --- 编辑模式 ---
 	if m.editing {
@@ -204,7 +298,16 @@ func (m *ReviewModel) View() string {
 
 	// --- 辅助函数：行渲染器 ---
 	renderLine := func(content string) string {
-		linePadding := contentWidth - lipgloss.Width(content)
+		contentDisplayWidth := lipgloss.Width(content)
+		// 处理溢出情况：如果内容太长，进行截断
+		if contentDisplayWidth > contentWidth {
+			// 使用智能截断，保留重要信息
+			truncated := truncateContent(content, contentWidth-3) + "..."
+			content = truncated
+			contentDisplayWidth = lipgloss.Width(content)
+		}
+		
+		linePadding := contentWidth - contentDisplayWidth
 		if linePadding < 0 {
 			linePadding = 0
 		}
@@ -276,6 +379,18 @@ func (m *ReviewModel) View() string {
 	btnEdit := renderButton("[E]", "Edit", m.selectedButton == buttonEdit, cGray, cYellow, cYellow)
 	btnCancel := renderButton("[C]", "Cancel", m.selectedButton == buttonCancel, cGray, cRed, cRed)
 	buttons := lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, "  ", btnEdit, "  ", btnCancel)
+	
+	// 检查按钮是否超出内容宽度，如果超出则调整布局
+	buttonsWidth := lipgloss.Width(buttons)
+	if buttonsWidth > contentWidth-2 { // -2 for padding
+		// 使用紧凑布局
+		buttons = lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, " ", btnEdit, " ", btnCancel)
+		buttonsWidth = lipgloss.Width(buttons)
+		if buttonsWidth > contentWidth-2 {
+			// 如果仍然太长，使用最紧凑的布局
+			buttons = btnAccept + " " + btnEdit + " " + btnCancel
+		}
+	}
 
 	// --- 组装 Footer ---
 	blankLine := renderLine("")
