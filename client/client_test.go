@@ -77,7 +77,7 @@ func Test_GetCommitMessage(t *testing.T) {
 			server := httptest.NewServer(tc.handler)
 			defer server.Close()
 
-			c := NewClient(server.URL, tc.apiKey, tc.timeout)
+			c := NewClient(server.URL, tc.apiKey, tc.timeout, nil)
 
 			msg, err := c.GetCommitMessageLegacy(context.Background(), "test prompt")
 
@@ -157,7 +157,7 @@ func Test_GetCommitMessage_SystemUserPrompts(t *testing.T) {
 			server := httptest.NewServer(tc.handler)
 			defer server.Close()
 
-			c := NewClient(server.URL, tc.apiKey, tc.timeout)
+			c := NewClient(server.URL, tc.apiKey, tc.timeout, nil)
 
 			// 使用新的系统+用户消息方法
 			systemPrompt := "You are an expert software engineer and a master of writing concise, high-quality Git commit messages. You adhere strictly to the Conventional Commits specification."
@@ -197,7 +197,7 @@ func Test_GetCommitMessageLegacy_BackwardCompatibility(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(handler))
 	defer server.Close()
 
-	c := NewClient(server.URL, "test_key", 2*time.Second)
+	c := NewClient(server.URL, "test_key", 2*time.Second, nil)
 	msg, err := c.GetCommitMessageLegacy(context.Background(), "legacy test prompt")
 
 	require.NoError(t, err)

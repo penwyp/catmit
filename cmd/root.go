@@ -154,7 +154,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer appLogger.Sync()
+	defer func() { _ = appLogger.Sync() }()
 
 	seedText := ""
 	if len(args) > 0 {

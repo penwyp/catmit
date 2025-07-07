@@ -121,7 +121,7 @@ func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt 
 		// 如果是 context 取消或超时，直接返回原始错误以便调用方区分。
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 读取响应体以便错误处理和解析。
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -201,7 +201,7 @@ func (c *Client) GetCommitMessageLegacy(ctx context.Context, prompt string) (str
 		// 如果是 context 取消或超时，直接返回原始错误以便调用方区分。
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 读取响应体以便错误处理和解析。
 	bodyBytes, err := io.ReadAll(resp.Body)
