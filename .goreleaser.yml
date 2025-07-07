@@ -1,4 +1,7 @@
+version: 2
+
 project_name: catmit
+
 builds:
   - id: catmit
     main: .
@@ -6,31 +9,35 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
+      - -X github.com/penwyp/catmit/cmd.version={{.Version}}
     goos:
       - darwin
       - linux
     goarch:
       - amd64
       - arm64
+
 archives:
   - id: default
     builds:
       - catmit
     format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
 brews:
-  - tap:
+  - repository:
       owner: penwyp
       name: homebrew-catmit
     commit_author:
       name: penwyp bot
       email: bot@example.com
-    folder: Formula
+    directory: Formula
     homepage: "https://github.com/penwyp/catmit"
     description: "AI powered commit message generator"
-    test: |-
+    test: |
       system "#{bin}/catmit", "--help"
+
 release:
   github:
     owner: penwyp
-    name: catmit 
+    name: catmit

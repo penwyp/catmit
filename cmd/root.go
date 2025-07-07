@@ -19,6 +19,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// version holds the current version of catmit
+// This will be set at build time via ldflags
+var version = "dev"
+
+// GetVersionString returns a formatted version string
+func GetVersionString() string {
+	return fmt.Sprintf("catmit version %s", version)
+}
+
 // 将关键依赖抽象为接口以便测试时注入 Mock。
 // 若在运行时未被替换，则使用默认实现。
 var (
@@ -175,6 +184,7 @@ var (
 	flagDebug    bool
 	flagPush     bool
 	flagStageAll bool
+	flagVersion  bool
 )
 
 func init() {
@@ -185,6 +195,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
+	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -192,6 +203,12 @@ func Execute() error { return rootCmd.Execute() }
 func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
 
 func run(cmd *cobra.Command, args []string) error {
+	// Handle version flag
+	if flagVersion {
+		fmt.Println(GetVersionString())
+		return nil
+	}
+
 	// Initialize logger
 	var err error
 	appLogger, err = logger.New(flagDebug)
