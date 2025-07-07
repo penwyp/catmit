@@ -39,6 +39,19 @@ func (m mockCollector) FileStatusSummary(ctx context.Context) (*collector.FileSt
 	}, m.err
 }
 
+func (m mockCollector) ComprehensiveDiff(_ context.Context) (string, error) {
+	return m.diff, m.err
+}
+
+func (m mockCollector) AnalyzeChanges(_ context.Context) (*collector.ChangesSummary, error) {
+	return &collector.ChangesSummary{
+		HasStagedChanges: true,
+		TotalFiles: 1,
+		ChangeTypes: map[string]int{"modified": 1},
+		PrimaryChangeType: "fix",
+	}, m.err
+}
+
 type mockPrompt struct{}
 
 func (mockPrompt) Build(seed, diff string, commits []string, branch string, files []string) string {

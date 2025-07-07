@@ -34,6 +34,9 @@ type collectorInterface interface {
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
+	// Enhanced methods for comprehensive diff support
+	ComprehensiveDiff(ctx context.Context) (string, error)
+	AnalyzeChanges(ctx context.Context) (*collector.ChangesSummary, error)
 }
 
 type promptInterface interface {
@@ -121,7 +124,16 @@ func (defaultCommitter) Push(ctx context.Context) error {
 
 var rootCmd = &cobra.Command{
 	Use:   "catmit [SEED_TEXT]",
-	Short: "AI-powered commit message generator",
+	Short: "AI-powered commit message generator with comprehensive change analysis",
+	Long: `catmit is an AI-powered tool that generates high-quality Git commit messages 
+by analyzing your staged changes, unstaged modifications, and untracked files.
+
+Features:
+- Analyzes all types of changes including untracked files
+- Follows Conventional Commits specification
+- Smart token budgeting for large changesets
+- Interactive review and editing capabilities
+- Multiple language support (English/Chinese)`,
 	RunE:  run,
 }
 
@@ -142,7 +154,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
 	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "automatically push after successful commit")
-	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes if none are staged")
+	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -170,19 +182,29 @@ func run(cmd *cobra.Command, args []string) error {
 	if flagDryRun || flagYes {
 		// 执行同步流程
 		col := collectorProvider()
-		diffText, err := col.Diff(ctx)
+		
+		// Use ComprehensiveDiff to include untracked files
+		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
 			if err == collector.ErrNoDiff {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 				if flagDebug {
-					appLogger.Debug("No staged or unstaged changes detected by git commands")
+					appLogger.Debug("No staged, unstaged, or untracked changes detected")
 				}
 				return nil
 			}
 			if flagDebug {
-				appLogger.Debug("Diff collection failed", zap.Error(err))
+				appLogger.Debug("Comprehensive diff collection failed, trying fallback", zap.Error(err))
 			}
-			return fmt.Errorf("failed to collect git diff: %w", err)
+			// Fallback to legacy diff for backward compatibility
+			diffText, err = col.Diff(ctx)
+			if err != nil {
+				if err == collector.ErrNoDiff {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
+					return nil
+				}
+				return fmt.Errorf("failed to collect git diff: %w", err)
+			}
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {

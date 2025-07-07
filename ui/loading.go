@@ -28,6 +28,9 @@ type collectorInterface interface {
 	ChangedFiles(ctx context.Context) ([]string, error)
 	// 新增：支持文件状态摘要
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
+	// Enhanced methods for comprehensive diff support
+	ComprehensiveDiff(ctx context.Context) (string, error)
+	AnalyzeChanges(ctx context.Context) (*collector.ChangesSummary, error)
 }
 
 type promptInterface interface {
@@ -192,9 +195,14 @@ type errorMsg struct{ err error }
 
 func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		diff, err := col.Diff(ctx)
+		// Use ComprehensiveDiff to include untracked files
+		diff, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
-			return errorMsg{err}
+			// Fallback to legacy diff for backward compatibility
+			diff, err = col.Diff(ctx)
+			if err != nil {
+				return errorMsg{err}
+			}
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
