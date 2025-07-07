@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Stage 表示进度阶段
@@ -108,14 +109,26 @@ func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View 根据阶段显示文字
 func (m LoadingModel) View() string {
-	status := "Collecting diff…"
+	// Define colors for different stages
+	var statusStyle lipgloss.Style
+	var status string
+	
 	switch m.stage {
+	case StageCollect:
+		status = "Collecting diff…"
+		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // Orange
 	case StagePrompt:
 		status = "Crafting prompt…"
+		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")) // Blue
 	case StageQuery:
-		status = "Querying DeepSeek…"
+		status = "Generating commit message…"
+		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42")) // Green
+	default:
+		status = "Processing…"
+		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")) // Gray
 	}
-	return m.spinner.View() + " " + status
+	
+	return m.spinner.View() + " " + statusStyle.Render(status)
 }
 
 // IsDone 返回结果

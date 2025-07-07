@@ -11,9 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/penwyp/catmit/client"
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/logger"
 	"github.com/penwyp/catmit/prompt"
 	"github.com/penwyp/catmit/ui"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // 将关键依赖抽象为接口以便测试时注入 Mock。
@@ -23,6 +25,7 @@ var (
 	promptProvider    func(lang string) promptInterface           = defaultPromptProvider
 	clientProvider    func(timeout time.Duration) clientInterface = defaultClientProvider
 	committer         commitInterface                             = defaultCommitter{}
+	appLogger         *zap.Logger                                 // 全局日志记录器
 )
 
 type collectorInterface interface {
@@ -64,7 +67,7 @@ func defaultClientProvider(timeout time.Duration) clientInterface {
 		baseURL = "https://api.deepseek.com"
 	}
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
-	return client.NewClient(baseURL, apiKey, timeout)
+	return client.NewClient(baseURL, apiKey, timeout, appLogger)
 }
 
 // realRunner 实际执行系统命令；仅在生产模式使用。
@@ -74,18 +77,22 @@ type realRunner struct {
 
 func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	if r.debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Running: %s %v\n", name, args)
+	if r.debug && appLogger != nil {
+		appLogger.Debug("Running command",
+			zap.String("command", name),
+			zap.Strings("args", args))
 	}
 	output, err := cmd.CombinedOutput()
-	if r.debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Output length: %d bytes\n", len(output))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Error: %v\n", err)
-		}
-		if len(output) > 0 && len(output) < 1000 {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Output: %q\n", string(output))
-		}
+	if r.debug && appLogger != nil {
+		appLogger.Debug("Command output",
+			zap.Int("output_length", len(output)),
+			zap.Error(err),
+			zap.String("output", func() string {
+				if len(output) > 0 && len(output) < 1000 {
+					return string(output)
+				}
+				return fmt.Sprintf("<%d bytes>", len(output))
+			}()))
 	}
 	return output, err
 }
@@ -138,7 +145,17 @@ func init() {
 
 func Execute() error { return rootCmd.Execute() }
 
+func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
+
 func run(cmd *cobra.Command, args []string) error {
+	// Initialize logger
+	var err error
+	appLogger, err = logger.New(flagDebug)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer appLogger.Sync()
+
 	seedText := ""
 	if len(args) > 0 {
 		seedText = args[0]
@@ -155,13 +172,13 @@ func run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			if err == collector.ErrNoDiff {
 				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
-				if flagDebug {
-					fmt.Fprintln(cmd.ErrOrStderr(), "[DEBUG] No staged or unstaged changes detected by git commands")
+				if flagDebug && appLogger != nil {
+					appLogger.Debug("No staged or unstaged changes detected by git commands")
 				}
 				return nil
 			}
-			if flagDebug {
-				fmt.Fprintf(cmd.ErrOrStderr(), "[DEBUG] Diff collection failed: %v\n", err)
+			if flagDebug && appLogger != nil {
+				appLogger.Debug("Diff collection failed", zap.Error(err))
 			}
 			return fmt.Errorf("failed to collect git diff: %w", err)
 		}

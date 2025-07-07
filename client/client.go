@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Client 负责与 DeepSeek Chat API 进行交互。
@@ -31,17 +33,19 @@ type Client struct {
 	baseURL    string       // DeepSeek API 基础地址，例如 https://api.deepseek.com
 	apiKey     string       // 鉴权所需的 API Key
 	httpClient *http.Client // 可注入自定义 http.Client，用于超时与测试
+	logger     *zap.Logger  // 结构化日志记录器
 }
 
 // NewClient 创建一个 DeepSeek Client。
 // timeout 用于设置 http.Client 的全局超时，以防请求阻塞。
-func NewClient(baseURL, apiKey string, timeout time.Duration) *Client {
+func NewClient(baseURL, apiKey string, timeout time.Duration, logger *zap.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
+		logger: logger,
 	}
 }
 
@@ -89,6 +93,17 @@ func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt 
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Log request details
+	if c.logger != nil {
+		c.logger.Debug("LLM API Request",
+			zap.String("url", c.baseURL+"/v1/chat/completions"),
+			zap.String("model", reqBody.Model),
+			zap.Int("max_tokens", reqBody.MaxTokens),
+			zap.Float64("temperature", reqBody.Temperature),
+			zap.Int("message_count", len(reqBody.Messages)),
+			zap.String("request_body", string(data)))
+	}
+
 	// 构建 HTTP 请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(data))
 	if err != nil {
@@ -112,6 +127,14 @@ func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Log response details
+	if c.logger != nil {
+		c.logger.Debug("LLM API Response",
+			zap.Int("status_code", resp.StatusCode),
+			zap.Int("response_size", len(bodyBytes)),
+			zap.String("response_body", string(bodyBytes)))
 	}
 
 	// 非 200 统一处理为错误输出，包含状态码但不包含响应体以防泄露敏感信息。
@@ -150,6 +173,17 @@ func (c *Client) GetCommitMessageLegacy(ctx context.Context, prompt string) (str
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Log request details
+	if c.logger != nil {
+		c.logger.Debug("LLM API Request (Legacy)",
+			zap.String("url", c.baseURL+"/v1/chat/completions"),
+			zap.String("model", reqBody.Model),
+			zap.Int("max_tokens", reqBody.MaxTokens),
+			zap.Float64("temperature", reqBody.Temperature),
+			zap.Int("message_count", len(reqBody.Messages)),
+			zap.String("request_body", string(data)))
+	}
+
 	// 构建 HTTP 请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(data))
 	if err != nil {
@@ -173,6 +207,14 @@ func (c *Client) GetCommitMessageLegacy(ctx context.Context, prompt string) (str
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Log response details
+	if c.logger != nil {
+		c.logger.Debug("LLM API Response (Legacy)",
+			zap.Int("status_code", resp.StatusCode),
+			zap.Int("response_size", len(bodyBytes)),
+			zap.String("response_body", string(bodyBytes)))
 	}
 
 	// 非 200 统一处理为错误输出，包含状态码但不包含响应体以防泄露敏感信息。
