@@ -136,67 +136,109 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View 渲染
 func (m *ReviewModel) View() string {
+	// --- 调色板 ---
+	const (
+		cGray          = lipgloss.Color("245")
+		cBlue          = lipgloss.Color("39")
+		cGreen         = lipgloss.Color("42")
+		cYellow        = lipgloss.Color("220")
+		cRed           = lipgloss.Color("196")
+		cWhite         = lipgloss.Color("255")
+		cBlack         = lipgloss.Color("0")
+		contentWidth   = 60
+		padding        = 1
+		effectiveWidth = contentWidth - (padding * 2)
+	)
+
+	// --- 编辑模式 ---
 	if m.editing {
-		return fmt.Sprintf("\nEditing commit message (enter to save, esc to cancel):\n%s\n", m.textInput.View())
+		promptStyle := lipgloss.NewStyle().Foreground(cYellow).Bold(true)
+		prompt := promptStyle.Render("Editing commit message (enter to save, esc to cancel):")
+		return fmt.Sprintf("\n%s\n%s\n", prompt, m.textInput.View())
 	}
 
 	// --- 样式定义 ---
-	selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("240")).Foreground(lipgloss.Color("255")).Padding(0, 1)
-	normalStyle := lipgloss.NewStyle().Padding(0, 1)
-	boxStyle := lipgloss.NewStyle().PaddingLeft(2) // 统一 Box 内的左边距
+	borderStyle := lipgloss.NewStyle().Foreground(cBlue)
+	titleStyle := lipgloss.NewStyle().Foreground(cWhite).Bold(true)
+	langStyle := lipgloss.NewStyle().Foreground(cGray)
+	commitTypeStyle := lipgloss.NewStyle().Foreground(cYellow)
+	commitDescStyle := lipgloss.NewStyle().Foreground(cWhite)
+	commitBodyStyle := lipgloss.NewStyle().Foreground(cGray)
 
-	// --- 动态构建标题 ---
-	titleText := fmt.Sprintf("Commit Preview (%s)", m.lang)
-	padding := strings.Repeat("─", 56-1-len(titleText))
-	header := fmt.Sprintf("┌ %s %s┐\n", titleText, padding)
+	// --- 辅助函数：行渲染器 ---
+	// renderLine 是核心，确保所有内容行都有统一的宽度和边框
+	renderLine := func(content string) string {
+		linePadding := contentWidth - lipgloss.Width(content)
+		if linePadding < 0 {
+			linePadding = 0
+		}
+		return borderStyle.Render("│") + content + strings.Repeat(" ", linePadding) + borderStyle.Render("│")
+	}
+
+	// --- 辅助函数：按钮渲染器 ---
+	renderButton := func(hint, text string, isSelected bool, hintStyle, textStyle, selectedBg lipgloss.Color) string {
+		hStyle := lipgloss.NewStyle().Foreground(hintStyle)
+		tStyle := lipgloss.NewStyle().Foreground(textStyle)
+
+		if isSelected {
+			hStyle = hStyle.Copy().Background(selectedBg)
+			tStyle = tStyle.Copy().Background(selectedBg)
+		}
+
+		return lipgloss.JoinHorizontal(lipgloss.Top,
+			hStyle.Padding(0, 1).Render(hint),
+			tStyle.Padding(0, 1).Render(text),
+		)
+	}
+
+	// --- 构建标题 ---
+	titleText := titleStyle.Render("Commit Preview") + langStyle.Render(fmt.Sprintf(" (%s)", m.lang))
+	titlePadding := contentWidth - lipgloss.Width(titleText)
+	if titlePadding < 0 {
+		titlePadding = 0
+	}
+	header := borderStyle.Render("┌") + strings.Repeat(borderStyle.Render("─"), titlePadding/2) +
+		titleText + strings.Repeat(borderStyle.Render("─"), titlePadding-titlePadding/2) +
+		borderStyle.Render("┐")
 
 	// --- 构建消息 Body ---
-	var bodyLines []string
-	for _, l := range strings.Split(m.message, "\n") {
-		l = strings.ReplaceAll(l, "\r", "")
-		// 使用 boxStyle 来确保与按钮行的对齐
-		bodyLines = append(bodyLines, boxStyle.Render(fmt.Sprintf("%-56s", l)))
+	var bodyBuilder strings.Builder
+	lines := strings.Split(m.message, "\n")
+
+	// 渲染第一行 (Subject)
+	if len(lines) > 0 {
+		parts := strings.SplitN(lines[0], ":", 2)
+		var subject string
+		if len(parts) == 2 {
+			subject = commitTypeStyle.Render(parts[0]+":") + commitDescStyle.Render(parts[1])
+		} else {
+			subject = commitDescStyle.Render(lines[0])
+		}
+		bodyBuilder.WriteString(renderLine(" "+subject) + "\n")
 	}
-	body := "│" + strings.Join(bodyLines, "│\n│") + "│\n"
+
+	// 渲染后续行 (Body)
+	if len(lines) > 1 {
+		bodyBuilder.WriteString(renderLine("") + "\n") // 空行
+		for _, l := range lines[1:] {
+			lineContent := " " + commitBodyStyle.Render(l)
+			bodyBuilder.WriteString(renderLine(lineContent) + "\n")
+		}
+	}
 
 	// --- 构建可交互按钮 ---
-	btnAccept := "[A] Accept"
-	btnEdit := "[E] Edit"
-	btnCancel := "[C] Cancel"
-
-	if m.selectedButton == buttonAccept {
-		btnAccept = selectedStyle.Render(btnAccept)
-	} else {
-		btnAccept = normalStyle.Render(btnAccept)
-	}
-
-	if m.selectedButton == buttonEdit {
-		btnEdit = selectedStyle.Render(btnEdit)
-	} else {
-		btnEdit = normalStyle.Render(btnEdit)
-	}
-
-	if m.selectedButton == buttonCancel {
-		btnCancel = selectedStyle.Render(btnCancel)
-	} else {
-		btnCancel = normalStyle.Render(btnCancel)
-	}
-
-	buttons := lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, btnEdit, btnCancel)
-	// 使用 boxStyle 来对齐
-	buttonRow := "│" + boxStyle.Render(buttons)
-	// 计算右侧填充
-	rightPadding := 58 - lipgloss.Width(buttonRow)
-	if rightPadding < 0 {
-		rightPadding = 0
-	}
-	buttonRow = buttonRow + strings.Repeat(" ", rightPadding) + "│\n"
+	btnAccept := renderButton("[A]", "Accept", m.selectedButton == buttonAccept, cGray, cGreen, cGreen)
+	btnEdit := renderButton("[E]", "Edit", m.selectedButton == buttonEdit, cGray, cYellow, cYellow)
+	btnCancel := renderButton("[C]", "Cancel", m.selectedButton == buttonCancel, cGray, cRed, cRed)
+	buttons := lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, "  ", btnEdit, "  ", btnCancel)
 
 	// --- 组装 Footer ---
-	blankLine := fmt.Sprintf("│ %-56s │\n", "")
-	footer := blankLine + buttonRow + "└──────────────────────────────────────────────────────────┘"
+	blankLine := renderLine("")
+	buttonRow := renderLine(" " + buttons)
+	bottomBorder := borderStyle.Render("└" + strings.Repeat("─", contentWidth) + "┘")
+	footer := strings.Join([]string{blankLine, buttonRow, bottomBorder}, "\n")
 
-	return header + body + footer
+	return strings.Join([]string{header, bodyBuilder.String(), footer}, "\n")
 }
 
 // IsDone 返回模型是否结束，以及决策和最终消息。
