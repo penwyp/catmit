@@ -67,9 +67,76 @@ type chatResponse struct {
 }
 
 // GetCommitMessage 调用 DeepSeek API 生成 commit message。
+// systemPrompt 包含角色定义、任务说明和格式规则。
+// userPrompt 包含上下文数据（分支、文件、提交历史、diff）。
+// 成功返回 message 字符串，失败返回错误。
+func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	// 构建请求体，使用 system 和 user 消息分离
+	messages := []chatMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+	
+	reqBody := chatRequest{
+		Model:       "deepseek-chat",
+		Messages:    messages,
+		MaxTokens:   128,
+		Temperature: 0.7,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// 构建 HTTP 请求
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	// 发送请求
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		// 如果是 context 取消或超时，直接返回原始错误以便调用方区分。
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// 读取响应体以便错误处理和解析。
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// 非 200 统一处理为错误输出，包含状态码但不包含响应体以防泄露敏感信息。
+	if resp.StatusCode != http.StatusOK {
+		// 只记录状态码，不记录响应体内容以防泄露 API 密钥等敏感信息
+		return "", fmt.Errorf("API error: status %d", resp.StatusCode)
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("invalid response: empty choices")
+	}
+
+	return chatResp.Choices[0].Message.Content, nil
+}
+
+// GetCommitMessageLegacy 调用 DeepSeek API 生成 commit message（旧版本兼容）。
 // prompt 为经过模板渲染后的完整提示文本。
 // 成功返回 message 字符串，失败返回错误。
-func (c *Client) GetCommitMessage(ctx context.Context, prompt string) (string, error) {
+// 已废弃：建议使用 GetCommitMessage(systemPrompt, userPrompt) 替代。
+func (c *Client) GetCommitMessageLegacy(ctx context.Context, prompt string) (string, error) {
 	// 构建请求体
 	reqBody := chatRequest{
 		Model:       "deepseek-chat",

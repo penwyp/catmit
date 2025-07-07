@@ -34,10 +34,13 @@ type collectorInterface interface {
 
 type promptInterface interface {
 	Build(seed, diff string, commits []string, branch string, files []string) string
+	BuildSystemPrompt() string
+	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
 }
 
 type clientInterface interface {
-	GetCommitMessage(ctx context.Context, prompt string) (string, error)
+	GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	GetCommitMessageLegacy(ctx context.Context, prompt string) (string, error)
 }
 
 type commitInterface interface {
@@ -167,9 +170,10 @@ func run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		builder := promptProvider(flagLang)
-		promptTxt := builder.Build(seedText, diffText, commits, "", []string{})
+		systemPrompt := builder.BuildSystemPrompt()
+		userPrompt := builder.BuildUserPrompt(seedText, diffText, commits, "", []string{})
 		cli := clientProvider(time.Duration(flagTimeout) * time.Second)
-		message, err := cli.GetCommitMessage(ctx, promptTxt)
+		message, err := cli.GetCommitMessage(ctx, systemPrompt, userPrompt)
 		if err != nil {
 			return err
 		}

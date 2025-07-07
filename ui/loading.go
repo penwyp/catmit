@@ -27,10 +27,13 @@ type collectorInterface interface {
 
 type promptInterface interface {
 	Build(seed, diff string, commits []string, branch string, files []string) string
+	BuildSystemPrompt() string
+	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
 }
 
 type clientInterface interface {
-	GetCommitMessage(ctx context.Context, prompt string) (string, error)
+	GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	GetCommitMessageLegacy(ctx context.Context, prompt string) (string, error)
 }
 
 // LoadingModel 在执行耗时步骤时展示 Spinner
@@ -87,7 +90,7 @@ func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case promptBuiltMsg:
 		// 进入 Query 阶段
 		m.stage = StageQuery
-		return m, queryCmd(m.client, m.ctx, msg.prompt)
+		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt)
 	case queryDoneMsg:
 		m.stage = StageDone
 		m.message = msg.message
@@ -130,7 +133,10 @@ type diffCollectedMsg struct {
 	files   []string
 }
 
-type promptBuiltMsg struct{ prompt string }
+type promptBuiltMsg struct{ 
+	systemPrompt string
+	userPrompt string
+}
 
 type queryDoneMsg struct{ message string }
 
@@ -156,14 +162,15 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 
 func buildPromptCmd(pb promptInterface, seed, diff string, commits []string, branch string, files []string) tea.Cmd {
 	return func() tea.Msg {
-		prompt := pb.Build(seed, diff, commits, branch, files)
-		return promptBuiltMsg{prompt: prompt}
+		systemPrompt := pb.BuildSystemPrompt()
+		userPrompt := pb.BuildUserPrompt(seed, diff, commits, branch, files)
+		return promptBuiltMsg{systemPrompt: systemPrompt, userPrompt: userPrompt}
 	}
 }
 
-func queryCmd(cli clientInterface, ctx context.Context, prompt string) tea.Cmd {
+func queryCmd(cli clientInterface, ctx context.Context, systemPrompt, userPrompt string) tea.Cmd {
 	return func() tea.Msg {
-		msg, err := cli.GetCommitMessage(ctx, prompt)
+		msg, err := cli.GetCommitMessage(ctx, systemPrompt, userPrompt)
 		if err != nil {
 			return errorMsg{err}
 		}

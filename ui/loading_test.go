@@ -35,12 +35,24 @@ func (mockPrompt) Build(seed, diff string, commits []string, branch string, file
 	return "prompt"
 }
 
+func (mockPrompt) BuildSystemPrompt() string {
+	return "system prompt"
+}
+
+func (mockPrompt) BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string {
+	return "user prompt"
+}
+
 type mockClient struct {
 	msg string
 	err error
 }
 
-func (m mockClient) GetCommitMessage(ctx context.Context, prompt string) (string, error) {
+func (m mockClient) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return m.msg, m.err
+}
+
+func (m mockClient) GetCommitMessageLegacy(ctx context.Context, prompt string) (string, error) {
 	return m.msg, m.err
 }
 
