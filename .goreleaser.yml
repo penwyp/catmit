@@ -6,6 +6,7 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
+      - -X github.com/penwyp/catmit/cmd.version={{.Version}}
     goos:
       - darwin
       - linux
