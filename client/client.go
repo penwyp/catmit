@@ -37,13 +37,14 @@ type Client struct {
 }
 
 // NewClient 创建一个 DeepSeek Client。
-// timeout 用于设置 http.Client 的全局超时，以防请求阻塞。
+// timeout 参数保留用于向后兼容，但不再使用。
+// 所有超时控制通过传入的 context.Context 实现，确保信号处理的即时响应。
 func NewClient(baseURL, apiKey string, timeout time.Duration, logger *zap.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: timeout,
+			// 不设置 Timeout，完全依赖 context 控制超时和取消
 		},
 		logger: logger,
 	}

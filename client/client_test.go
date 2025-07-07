@@ -58,7 +58,7 @@ func Test_GetCommitMessage(t *testing.T) {
 		{
 			name:    "request_timeout",
 			apiKey:  "valid_key",
-			timeout: 10 * time.Millisecond,
+			timeout: 2 * time.Second, // 不再使用此超时，但保留用于向后兼容
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				// 故意延迟以触发超时
 				time.Sleep(20 * time.Millisecond)
@@ -79,7 +79,15 @@ func Test_GetCommitMessage(t *testing.T) {
 
 			c := NewClient(server.URL, tc.apiKey, tc.timeout, nil)
 
-			msg, err := c.GetCommitMessageLegacy(context.Background(), "test prompt")
+			// 对于超时测试，使用带超时的 context
+			ctx := context.Background()
+			if tc.name == "request_timeout" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, 10*time.Millisecond)
+				defer cancel()
+			}
+
+			msg, err := c.GetCommitMessageLegacy(ctx, "test prompt")
 
 			if tc.expectedErrSubstring == "" {
 				require.NoError(t, err)
