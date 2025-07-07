@@ -42,6 +42,7 @@ type clientInterface interface {
 
 type commitInterface interface {
 	Commit(message string) error
+	Push() error
 }
 
 // ---------------- 默认实现 ------------------
@@ -97,6 +98,13 @@ func (defaultCommitter) Commit(message string) error {
 	return cmd.Run()
 }
 
+func (defaultCommitter) Push() error {
+	cmd := exec.Command("git", "push")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // -------------------------------------------------
 
 var rootCmd = &cobra.Command{
@@ -106,11 +114,13 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagLang    string
-	flagTimeout int
-	flagYes     bool
-	flagDryRun  bool
-	flagDebug   bool
+	flagLang     string
+	flagTimeout  int
+	flagYes      bool
+	flagDryRun   bool
+	flagDebug    bool
+	flagPush     bool
+	flagStageAll bool
 )
 
 func init() {
@@ -119,6 +129,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
 	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
 	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
+	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "automatically push after successful commit")
+	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes if none are staged")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -169,10 +181,22 @@ func run(cmd *cobra.Command, args []string) error {
 
 		// yes = commit
 		fmt.Fprintln(cmd.OutOrStdout(), "Committing...")
-		if err := stageAll(); err != nil {
+		// Only stage all if there are no staged changes and flagStageAll is true
+		if flagStageAll && !hasStagedChanges() {
+			if err := stageAll(); err != nil {
+				return err
+			}
+		}
+		if err := committer.Commit(message); err != nil {
 			return err
 		}
-		return committer.Commit(message)
+		if flagPush {
+			fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
+			if err := committer.Push(); err != nil {
+				return fmt.Errorf("push failed: %w", err)
+			}
+		}
+		return nil
 	}
 
 	// 交互模式：显示进度 Spinner，然后进入 Review TUI
@@ -209,10 +233,22 @@ func run(cmd *cobra.Command, args []string) error {
 		_, decision, finalMsg := m.IsDone()
 		switch decision {
 		case ui.DecisionAccept:
-			if err := stageAll(); err != nil {
+			// Only stage all if there are no staged changes and flagStageAll is true
+			if flagStageAll && !hasStagedChanges() {
+				if err := stageAll(); err != nil {
+					return err
+				}
+			}
+			if err := committer.Commit(finalMsg); err != nil {
 				return err
 			}
-			return committer.Commit(finalMsg)
+			if flagPush {
+				fmt.Fprintln(cmd.OutOrStdout(), "Pushing...")
+				if err := committer.Push(); err != nil {
+					return fmt.Errorf("push failed: %w", err)
+				}
+			}
+			return nil
 		case ui.DecisionCancel:
 			fmt.Fprintln(cmd.OutOrStdout(), "Canceled.")
 		}
@@ -226,4 +262,12 @@ func stageAll() error {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run()
+}
+
+// hasStagedChanges checks if there are any staged changes
+func hasStagedChanges() bool {
+	cmd := exec.Command("git", "diff", "--cached", "--quiet")
+	err := cmd.Run()
+	// git diff --cached --quiet returns exit code 1 if there are staged changes
+	return err != nil
 }
