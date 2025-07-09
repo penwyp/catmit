@@ -48,7 +48,7 @@ Download the latest release from [GitHub Releases](https://github.com/penwyp/cat
 
 2. **Set environment variable:**
    ```bash
-   export DEEPSEEK_API_KEY="sk-your-api-key-here"
+   export CATMIT_LLM_API_KEY="sk-your-api-key-here"
    ```
 
 3. **Make some changes and stage them:**
@@ -87,7 +87,7 @@ catmit "fix user authentication"
 ### Advanced Usage
 ```bash
 # Custom API endpoint
-export DEEPSEEK_API_BASE_URL="https://your-api-endpoint.com"
+export CATMIT_LLM_API_URL="https://your-api-endpoint.com"
 
 # Silent mode (no TUI, direct output)
 catmit --dry-run -y
@@ -173,8 +173,8 @@ catmit/
 ### Environment Variables
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DEEPSEEK_API_KEY` | DeepSeek API key (required) | - |
-| `DEEPSEEK_API_BASE_URL` | Custom API endpoint | `https://api.deepseek.com` |
+| `CATMIT_LLM_API_KEY` | DeepSeek API key (required) | - |
+| `CATMIT_LLM_API_URL` | Custom API endpoint | `https://api.deepseek.com` |
 
 ### Exit Codes
 | Code | Meaning |
@@ -202,7 +202,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 **API Key Issues:**
 ```bash
 # Verify your API key is set
-echo $DEEPSEEK_API_KEY
+echo $CATMIT_LLM_API_KEY
 
 # Test API connectivity
 catmit --dry-run

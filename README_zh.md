@@ -50,7 +50,7 @@ go install github.com/penwyp/catmit@latest
 
 2. **设置环境变量：**
    ```bash
-   export DEEPSEEK_API_KEY="sk-your-api-key-here"
+   export CATMIT_LLM_API_KEY="sk-your-api-key-here"
    ```
 
 3. **做一些修改并暂存：**
@@ -89,7 +89,7 @@ catmit "修复用户认证"
 ### 高级用法
 ```bash
 # 自定义 API 端点
-export DEEPSEEK_API_BASE_URL="https://your-api-endpoint.com"
+export CATMIT_LLM_API_URL="https://your-api-endpoint.com"
 
 # 静默模式（无 TUI，直接输出）
 catmit --dry-run -y
@@ -175,8 +175,8 @@ catmit/
 ### 环境变量
 | 变量 | 描述 | 默认值 |
 |------|------|--------|
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥（必需） | - |
-| `DEEPSEEK_API_BASE_URL` | 自定义 API 端点 | `https://api.deepseek.com` |
+| `CATMIT_LLM_API_KEY` | DeepSeek API 密钥（必需） | - |
+| `CATMIT_LLM_API_URL` | 自定义 API 端点 | `https://api.deepseek.com` |
 
 ### 退出代码
 | 代码 | 含义 |
@@ -204,7 +204,7 @@ catmit/
 **API 密钥问题：**
 ```bash
 # 验证 API 密钥是否设置
-echo $DEEPSEEK_API_KEY
+echo $CATMIT_LLM_API_KEY
 
 # 测试 API 连接
 catmit --dry-run

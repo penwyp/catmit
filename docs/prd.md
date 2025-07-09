@@ -53,7 +53,7 @@ It analyzes recent repository history and pending changes, crafts a rich prompt,
 | F-2  | Collect staged **and** unstaged diffs, including untracked files.                             |
 | F-3  | Accept optional seed text (`catmit "feat: seed"`).                                        |
 | F-4  | Compose a single prompt containing: seed text, diff digest, log digest, language instruction. |
-| F-5  | Read API key from `DEEPSEEK_API_KEY`; invoke DeepSeek chat API.                               |
+| F-5  | Read API key from `CATMIT_LLM_API_KEY`; invoke DeepSeek chat API.                               |
 | F-6  | Support `--lang/-l` (ISO 639-1), default `en`.                                                |
 | F-7  | Support `--timeout/-t` (int s), default `20`.                                                 |
 | F-8  | Display progress stages with Charmbracelet spinner/progress.                                  |
@@ -142,7 +142,7 @@ Editing opens an in-place textarea (Charmbracelet Textinput).
 
 ```http
 POST /v1/chat/completions
-Headers: Authorization: Bearer $DEEPSEEK_API_KEY
+Headers: Authorization: Bearer $CATMIT_LLM_API_KEY
 Body: {
   "model": "deepseek-chat",
   "messages": [{"role":"user","content": "<prompt>"}],

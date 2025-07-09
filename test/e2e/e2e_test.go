@@ -72,8 +72,8 @@ func TestE2E_HappyPathYes(t *testing.T) {
 	cmd := exec.Command(bin, "-y", "--push=false")
 	cmd.Dir = repo
 	cmd.Env = append(os.Environ(),
-		"DEEPSEEK_API_KEY=dummy",
-		"DEEPSEEK_API_BASE_URL="+server.URL,
+		"CATMIT_LLM_API_KEY=dummy",
+		"CATMIT_LLM_API_URL="+server.URL,
 	)
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -102,7 +102,7 @@ func TestE2E_DryRun(t *testing.T) {
 
 	cmd := exec.Command(bin, "--dry-run")
 	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy", "DEEPSEEK_API_BASE_URL="+server.URL)
+	cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy", "CATMIT_LLM_API_URL="+server.URL)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -132,7 +132,7 @@ func TestE2E_Timeout(t *testing.T) {
 
 	cmd := exec.Command(bin, "-y", "-t", "1", "--push=false")
 	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy", "DEEPSEEK_API_BASE_URL="+server.URL)
+	cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy", "CATMIT_LLM_API_URL="+server.URL)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -155,7 +155,7 @@ func TestE2E_NothingToCommit(t *testing.T) {
 	t.Run("yes_mode", func(t *testing.T) {
 		cmd := exec.Command(bin, "-y", "--push=false")
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy")
+		cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy")
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &out
@@ -169,7 +169,7 @@ func TestE2E_NothingToCommit(t *testing.T) {
 	t.Run("dry_run_mode", func(t *testing.T) {
 		cmd := exec.Command(bin, "--dry-run")
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "DEEPSEEK_API_KEY=dummy")
+		cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy")
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &out
