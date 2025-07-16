@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"os/exec"
@@ -27,6 +29,15 @@ var version = "dev"
 // GetVersionString returns a formatted version string
 func GetVersionString() string {
 	return fmt.Sprintf("catmit version %s", version)
+}
+
+// ErrPRAlreadyExists is returned when a PR already exists for the branch
+type ErrPRAlreadyExists struct {
+	URL string
+}
+
+func (e *ErrPRAlreadyExists) Error() string {
+	return fmt.Sprintf("pull request already exists: %s", e.URL)
 }
 
 // 将关键依赖抽象为接口以便测试时注入 Mock。
@@ -66,6 +77,8 @@ type commitInterface interface {
 	Push(ctx context.Context) error
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) bool
+	CreatePullRequest(ctx context.Context) (string, error)
+	NeedsPush(ctx context.Context) (bool, error)
 }
 
 // ---------------- 默认实现 ------------------
@@ -160,6 +173,95 @@ func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 	return err != nil
 }
 
+func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
+	if appLogger != nil {
+		appLogger.Debug("Creating GitHub pull request")
+	}
+	
+	// Check if gh CLI is available
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
+	}
+	
+	// Execute gh pr create command
+	cmd := exec.CommandContext(ctx, "gh", "pr", "create", "--fill", "--base", "main", "--draft=false")
+	output, err := cmd.CombinedOutput()
+	
+	if appLogger != nil {
+		if err != nil {
+			appLogger.Debug("GitHub PR creation failed", 
+				zap.Error(err),
+				zap.String("output", string(output)))
+		} else {
+			appLogger.Debug("GitHub PR created successfully", 
+				zap.String("output", string(output)))
+		}
+	}
+	
+	if err != nil {
+		// Check if PR already exists
+		outputStr := string(output)
+		if strings.Contains(outputStr, "already exists") {
+			// Extract the existing PR URL
+			existingPRURL := extractPRURL(outputStr)
+			if existingPRURL != "" {
+				return "", &ErrPRAlreadyExists{URL: existingPRURL}
+			}
+		}
+		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, outputStr)
+	}
+	
+	// Extract PR URL from output
+	prURL := extractPRURL(string(output))
+	
+	return prURL, nil
+}
+
+// extractPRURL extracts the PR URL from gh command output
+func extractPRURL(output string) string {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Look for GitHub PR URLs in the output
+		if strings.Contains(line, "github.com") && strings.Contains(line, "/pull/") {
+			return line
+		}
+		// Also check for just the URL part if it's at the end of a line
+		if strings.HasPrefix(line, "https://github.com/") && strings.Contains(line, "/pull/") {
+			return line
+		}
+	}
+	return ""
+}
+
+func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
+	// Check if the current branch has unpushed commits
+	// First, check if we have an upstream branch
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		// No upstream branch set, so we need to push
+		return true, nil
+	}
+	
+	// Check if there are commits to push
+	// git rev-list --count @{u}..HEAD
+	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", "@{u}..HEAD")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
+	}
+	
+	// Parse the count
+	countStr := strings.TrimSpace(string(output))
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse commit count: %w", err)
+	}
+	
+	return count > 0, nil
+}
+
 // renderStatusBar 渲染带样式的状态条
 func renderStatusBar(message string, isSuccess bool) string {
 	var style lipgloss.Style
@@ -242,6 +344,7 @@ var (
 	flagPush     bool
 	flagStageAll bool
 	flagVersion  bool
+	flagCreatePR bool
 )
 
 func init() {
@@ -253,6 +356,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
+	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -306,6 +410,43 @@ func run(cmd *cobra.Command, args []string) error {
 		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
 			if err == collector.ErrNoDiff {
+				if flagCreatePR {
+					// Check if we need to push first
+					needsPush, err := committer.NeedsPush(ctx)
+					if err != nil {
+						if flagDebug {
+							appLogger.Debug("Failed to check if push is needed", zap.Error(err))
+						}
+						// Continue anyway, let the PR creation fail if needed
+						needsPush = false
+					}
+					
+					if needsPush {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch...", false))
+						if err := committer.Push(ctx); err != nil {
+							return fmt.Errorf("failed to push branch: %w", err)
+						}
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
+					}
+					
+					// Even with no changes, allow creating a PR if explicitly requested
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+					prURL, err := committer.CreatePullRequest(ctx)
+					if err != nil {
+						var prExists *ErrPRAlreadyExists
+						if errors.As(err, &prExists) {
+							_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
+							return nil
+						}
+						return fmt.Errorf("failed to create pull request: %w", err)
+					}
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+					if prURL != "" {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
+					}
+					return nil
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 				if flagDebug {
 					appLogger.Debug("No staged, unstaged, or untracked changes detected")
@@ -394,6 +535,25 @@ func run(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("push failed: %w", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushed successfully", true))
+			
+			// Create pull request if requested
+			if flagCreatePR {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+				prURL, err := committer.CreatePullRequest(ctx)
+				if err != nil {
+					var prExists *ErrPRAlreadyExists
+					if errors.As(err, &prExists) {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
+						return nil
+					}
+					return fmt.Errorf("failed to create pull request: %w", err)
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+				if prURL != "" {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
+				}
+			}
 		}
 		return nil
 	}
@@ -410,6 +570,7 @@ func run(cmd *cobra.Command, args []string) error {
 		time.Duration(flagTimeout)*time.Second,
 		flagPush,
 		flagStageAll,
+		flagCreatePR,
 	)
 	
 	finalModel, err := tea.NewProgram(mainModel).Run()

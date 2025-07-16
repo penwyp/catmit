@@ -119,6 +119,16 @@ func (m *MockCommitter) HasStagedChanges(ctx context.Context) bool {
 	return args.Bool(0)
 }
 
+func (m *MockCommitter) CreatePullRequest(ctx context.Context) (string, error) {
+	args := m.Called(ctx)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCommitter) NeedsPush(ctx context.Context) (bool, error) {
+	args := m.Called(ctx)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestMainModel_NewMainModel(t *testing.T) {
 	ctx := context.Background()
 	mockCollector := new(MockCollector)
@@ -137,6 +147,7 @@ func TestMainModel_NewMainModel(t *testing.T) {
 		30*time.Second,
 		true,
 		true,
+		false,
 	)
 
 	assert.NotNil(t, model)
@@ -166,6 +177,7 @@ func TestMainModel_Init(t *testing.T) {
 		30*time.Second,
 		false,
 		false,
+		false,
 	)
 
 	cmd := model.Init()
@@ -188,6 +200,7 @@ func TestMainModel_Update_WindowSizeMsg(t *testing.T) {
 		"",
 		"en",
 		30*time.Second,
+		false,
 		false,
 		false,
 	)
@@ -216,6 +229,7 @@ func TestMainModel_Update_CtrlC(t *testing.T) {
 		"",
 		"en",
 		30*time.Second,
+		false,
 		false,
 		false,
 	)
@@ -247,6 +261,7 @@ func TestMainModel_View_LoadingPhase(t *testing.T) {
 		30*time.Second,
 		false,
 		false,
+		false,
 	)
 
 	view := model.View()
@@ -270,6 +285,7 @@ func TestMainModel_View_ReviewPhase(t *testing.T) {
 		"",
 		"en",
 		30*time.Second,
+		false,
 		false,
 		false,
 	)
@@ -303,6 +319,7 @@ func TestMainModel_View_CommitPhase(t *testing.T) {
 		30*time.Second,
 		false,
 		false,
+		false,
 	)
 
 	model.phase = PhaseCommit
@@ -331,6 +348,7 @@ func TestMainModel_GetPhaseTitle(t *testing.T) {
 		"",
 		"en",
 		30*time.Second,
+		false,
 		false,
 		false,
 	)
@@ -370,6 +388,7 @@ func TestMainModel_ErrorHandling(t *testing.T) {
 		"",
 		"en",
 		30*time.Second,
+		false,
 		false,
 		false,
 	)

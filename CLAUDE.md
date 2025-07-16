@@ -57,26 +57,40 @@ Set the three environment variables accordingly.
 The codebase follows a modular design with clear separation of concerns:
 
 ### Core Modules
-- **`collector/`** - Git operations (log, diff, branch info) with Runner interface abstraction
+- **`collector/`** - Git operations (log, diff, branch info) with Runner interface abstraction and comprehensive change analysis
 - **`client/`** - LLM API client with Provider abstraction supporting multiple OpenAI-compatible APIs
-- **`prompt/`** - Prompt template builder with language support and diff truncation
-- **`ui/`** - Bubble Tea TUI models for loading, progress, and review screens
-- **`cmd/`** - Cobra CLI with dependency injection interfaces for testability
+- **`prompt/`** - Prompt template builder with language support, diff truncation, and token budgeting
+- **`ui/`** - Bubble Tea TUI models for loading, progress, commit workflow, and review screens
+- **`cmd/`** - Cobra CLI with dependency injection interfaces for testability and GitHub integration
 
 ### Dependency Injection Pattern
 The `cmd/root.go` uses interface-based dependency injection to enable testing:
-- `collectorInterface` - Git data collection
-- `promptInterface` - Prompt building
-- `clientInterface` - LLM API calls (simplified, removed Legacy methods)
-- `commitInterface` - Git commit execution
+- `collectorInterface` - Git data collection with comprehensive diff analysis
+- `promptInterface` - Prompt building with token budgeting
+- `clientInterface` - LLM API calls 
+- `commitInterface` - Git commit execution and GitHub PR creation
 
 Mock implementations can be injected by setting the provider functions (`collectorProvider`, `promptProvider`, etc.).
+
+### UI Architecture
+The TUI uses a unified `MainModel` that manages the entire lifecycle:
+- **Phase Management**: Loading → Review → Commit → Done
+- **State Transitions**: Handles user input, API calls, and commit operations
+- **Error Handling**: Graceful error display and recovery
+- **Real-time Updates**: Spinner animations and progress indicators
 
 ### LLM Provider Architecture
 The client now uses a Provider pattern for maximum flexibility:
 - `LLMProvider` interface abstracts different LLM APIs
 - `OpenAICompatibleProvider` implements OpenAI-style APIs (DeepSeek, Volcengine, etc.)
 - Future non-OpenAI providers can implement the same interface
+
+### GitHub Integration
+The tool includes GitHub CLI integration for PR creation:
+- **PR Creation**: Uses `gh pr create --fill --base main --draft=false`
+- **URL Extraction**: Parses command output to extract PR URLs
+- **Error Handling**: Gracefully handles existing PRs by showing URL instead of error
+- **No-Changes PR**: Supports creating PRs even when no changes are present
 
 ### Key Interfaces
 ```go
@@ -85,6 +99,16 @@ type collectorInterface interface {
     Diff(ctx context.Context) (string, error)
     BranchName(ctx context.Context) (string, error)
     ChangedFiles(ctx context.Context) ([]string, error)
+    ComprehensiveDiff(ctx context.Context) (string, error)
+    AnalyzeChanges(ctx context.Context) (*ChangesSummary, error)
+}
+
+type commitInterface interface {
+    Commit(ctx context.Context, message string) error
+    Push(ctx context.Context) error
+    StageAll(ctx context.Context) error
+    HasStagedChanges(ctx context.Context) bool
+    CreatePullRequest(ctx context.Context) (string, error)
 }
 ```
 
@@ -98,6 +122,8 @@ catmit --dry-run     # Preview message only
 catmit -l zh         # Chinese output
 catmit -t 30         # 30 second timeout
 catmit "feat: seed"  # Seed text for generation
+catmit --create-pr   # Create GitHub pull request after push
+catmit --create-pr -y  # Create PR even with no changes
 ```
 
 ### Exit codes
@@ -132,8 +158,9 @@ catmit "feat: seed"  # Seed text for generation
 
 ### Error Handling
 - Context-aware operations with timeout support
-- Specific error types (e.g., `collector.ErrNoDiff`)
+- Specific error types (e.g., `collector.ErrNoDiff`, `ErrPRAlreadyExists`)
 - Graceful degradation on API failures
+- GitHub integration errors handled with user-friendly messages
 
 ### Testing Conventions
 - Interface mocking for external dependencies
@@ -146,6 +173,27 @@ catmit "feat: seed"  # Seed text for generation
 2. **Interface-First** - Define interfaces before concrete implementations
 3. **Context Propagation** - All operations accept `context.Context`
 4. **Dependency Injection** - Use provider functions for testability
+
+## Enhanced Features
+
+### Comprehensive Change Analysis
+The collector now provides enhanced change analysis:
+- **File Prioritization**: Sorts files by change importance and type
+- **Untracked File Support**: Includes untracked files in diff analysis
+- **Token Budgeting**: Intelligently truncates large diffs to fit LLM token limits
+- **Batch Operations**: Concurrent git operations for better performance
+
+### UI/UX Improvements
+- **Unified Model**: Single `MainModel` handles entire workflow
+- **Real-time Progress**: Visual feedback for all operations
+- **Error Recovery**: Graceful handling of various failure scenarios
+- **Responsive Design**: Adapts to different terminal sizes
+
+### GitHub Workflow Integration
+- **PR Creation**: Seamless GitHub CLI integration
+- **Existing PR Detection**: Intelligent handling of duplicate PRs
+- **URL Display**: Shows PR URLs for easy access
+- **No-Changes Support**: Creates PRs even without local changes
 
 ## Documentation
 

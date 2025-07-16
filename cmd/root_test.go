@@ -90,6 +90,8 @@ func (r *recordCommitter) Commit(ctx context.Context, message string) error {
 func (r *recordCommitter) Push(ctx context.Context) error { return nil }
 func (r *recordCommitter) StageAll(ctx context.Context) error { return nil }
 func (r *recordCommitter) HasStagedChanges(ctx context.Context) bool { return true }
+func (r *recordCommitter) CreatePullRequest(ctx context.Context) (string, error) { return "", nil }
+func (r *recordCommitter) NeedsPush(ctx context.Context) (bool, error) { return false, nil }
 
 // ------------------------------------------------
 

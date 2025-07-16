@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -53,14 +54,16 @@ type MainModel struct {
 	enablePush bool
 	stageAll   bool
 	apiTimeout time.Duration
+	createPR   bool
 
 	// 响应式设计
 	terminalWidth  int
 	terminalHeight int
 
 	// 错误和结果
-	err  error
-	done bool
+	err   error
+	done  bool
+	prURL string
 
 	// 内部状态
 	finalStartTime time.Time
@@ -79,7 +82,7 @@ func NewMainModel(
 	com commitInterface,
 	seed, lang string,
 	apiTimeout time.Duration,
-	enablePush, stageAll bool,
+	enablePush, stageAll, createPR bool,
 ) *MainModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
@@ -105,6 +108,7 @@ func NewMainModel(
 		apiTimeout:     apiTimeout,
 		enablePush:     enablePush,
 		stageAll:       stageAll,
+		createPR:       createPR,
 		terminalWidth:  80,
 		terminalHeight: 24,
 		showDuration:   1500 * time.Millisecond,
@@ -179,11 +183,18 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return delayedPushMsg{}
 			})
 		} else {
-			m.commitStage = CommitStageDone
-			m.finalStartTime = time.Now()
-			return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
-				return finalTimeoutMsg{}
-			})
+			if m.createPR {
+				// Add delay before creating PR
+				return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+					return delayedCreatePRMsg{}
+				})
+			} else {
+				m.commitStage = CommitStageDone
+				m.finalStartTime = time.Now()
+				return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
+					return finalTimeoutMsg{}
+				})
+			}
 		}
 
 	case pushDoneMsg:
@@ -209,6 +220,39 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case delayedPushMsg:
 		m.commitStage = CommitStagePushing
 		return m, m.startPush()
+
+	case delayedCreatePRMsg:
+		m.commitStage = CommitStageCreatingPR
+		return m, m.startCreatePR()
+
+	case createPRDoneMsg:
+		if msg.err != nil {
+			// Check if PR already exists
+			var prExists *ErrPRAlreadyExists
+			if errors.As(msg.err, &prExists) {
+				// Treat existing PR as success
+				m.commitStage = CommitStagePRCreated
+				m.prURL = prExists.URL
+				m.finalStartTime = time.Now()
+				return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
+					return finalTimeoutMsg{}
+				})
+			}
+			// Other errors
+			m.commitStage = CommitStagePRFailed
+			m.err = msg.err
+			m.finalStartTime = time.Now()
+			// Show PR creation error for a longer duration before exit
+			return m, tea.Tick(m.showDuration*2, func(time.Time) tea.Msg {
+				return finalTimeoutMsg{}
+			})
+		}
+		m.commitStage = CommitStagePRCreated
+		m.prURL = msg.prURL
+		m.finalStartTime = time.Now()
+		return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
+			return finalTimeoutMsg{}
+		})
 
 	case startCommitPhaseMsg:
 		m.phase = PhaseCommit
@@ -496,10 +540,47 @@ func (m *MainModel) renderCommitContent() string {
 			}
 			content.WriteString("\n ✗ " + m.styles.Error.Render(errorText))
 		}
-	case CommitStagePushed, CommitStageDone:
+	case CommitStagePushed:
 		content.WriteString(" ✓ " + m.styles.Success.Render("Committed successfully"))
 		if m.enablePush {
 			content.WriteString("\n ✓ " + m.styles.Success.Render("Pushed successfully"))
+		}
+		if m.createPR {
+			content.WriteString("\n " + m.spinner.View() + " " + m.styles.Progress.Render("Preparing to create PR..."))
+		}
+	case CommitStageCreatingPR:
+		content.WriteString(" ✓ " + m.styles.Success.Render("Committed successfully"))
+		if m.enablePush {
+			content.WriteString("\n ✓ " + m.styles.Success.Render("Pushed successfully"))
+		}
+		content.WriteString("\n " + m.spinner.View() + " " + m.styles.Progress.Render("Creating pull request..."))
+	case CommitStagePRFailed:
+		content.WriteString(" ✓ " + m.styles.Success.Render("Committed successfully"))
+		if m.enablePush {
+			content.WriteString("\n ✓ " + m.styles.Success.Render("Pushed successfully"))
+		}
+		if m.createPR {
+			errorText := "Pull request creation failed"
+			if m.err != nil {
+				// Extract meaningful error message, limit length for display
+				errStr := m.err.Error()
+				if len(errStr) > 80 {
+					errStr = errStr[:80] + "..."
+				}
+				errorText = fmt.Sprintf("Pull request creation failed: %s", errStr)
+			}
+			content.WriteString("\n ✗ " + m.styles.Error.Render(errorText))
+		}
+	case CommitStagePRCreated, CommitStageDone:
+		content.WriteString(" ✓ " + m.styles.Success.Render("Committed successfully"))
+		if m.enablePush {
+			content.WriteString("\n ✓ " + m.styles.Success.Render("Pushed successfully"))
+		}
+		if m.createPR {
+			content.WriteString("\n ✓ " + m.styles.Success.Render("Pull request created successfully"))
+			if m.prURL != "" {
+				content.WriteString("\n   " + m.styles.CommitDesc.Render(m.prURL))
+			}
 		}
 	}
 
@@ -583,6 +664,14 @@ func (m *MainModel) startPush() tea.Cmd {
 	}
 }
 
+// startCreatePR 开始创建PR
+func (m *MainModel) startCreatePR() tea.Cmd {
+	return func() tea.Msg {
+		prURL, err := m.committer.CreatePullRequest(m.ctx)
+		return createPRDoneMsg{err: err, prURL: prURL}
+	}
+}
+
 // IsDone 返回操作是否完成及相关信息
 func (m *MainModel) IsDone() (bool, Decision, string, error) {
 	return m.done, m.reviewDecision, m.message, m.err
@@ -606,4 +695,19 @@ func (m *MainModel) GetError() error {
 
 // 消息类型定义
 type delayedPushMsg struct{}
+type delayedCreatePRMsg struct{}
 type startCommitPhaseMsg struct{}
+
+type createPRDoneMsg struct {
+	err   error
+	prURL string
+}
+
+// ErrPRAlreadyExists is returned when a PR already exists for the branch
+type ErrPRAlreadyExists struct {
+	URL string
+}
+
+func (e *ErrPRAlreadyExists) Error() string {
+	return fmt.Sprintf("pull request already exists: %s", e.URL)
+}
