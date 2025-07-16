@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -226,6 +227,18 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createPRDoneMsg:
 		if msg.err != nil {
+			// Check if PR already exists
+			var prExists *ErrPRAlreadyExists
+			if errors.As(msg.err, &prExists) {
+				// Treat existing PR as success
+				m.commitStage = CommitStagePRCreated
+				m.prURL = prExists.URL
+				m.finalStartTime = time.Now()
+				return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
+					return finalTimeoutMsg{}
+				})
+			}
+			// Other errors
 			m.commitStage = CommitStagePRFailed
 			m.err = msg.err
 			m.finalStartTime = time.Now()
@@ -688,4 +701,13 @@ type startCommitPhaseMsg struct{}
 type createPRDoneMsg struct {
 	err   error
 	prURL string
+}
+
+// ErrPRAlreadyExists is returned when a PR already exists for the branch
+type ErrPRAlreadyExists struct {
+	URL string
+}
+
+func (e *ErrPRAlreadyExists) Error() string {
+	return fmt.Sprintf("pull request already exists: %s", e.URL)
 }

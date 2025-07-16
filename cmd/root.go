@@ -30,6 +30,15 @@ func GetVersionString() string {
 	return fmt.Sprintf("catmit version %s", version)
 }
 
+// ErrPRAlreadyExists is returned when a PR already exists for the branch
+type ErrPRAlreadyExists struct {
+	URL string
+}
+
+func (e *ErrPRAlreadyExists) Error() string {
+	return fmt.Sprintf("pull request already exists: %s", e.URL)
+}
+
 // 将关键依赖抽象为接口以便测试时注入 Mock。
 // 若在运行时未被替换，则使用默认实现。
 var (
@@ -188,7 +197,16 @@ func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error)
 	}
 	
 	if err != nil {
-		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, string(output))
+		// Check if PR already exists
+		outputStr := string(output)
+		if strings.Contains(outputStr, "already exists") {
+			// Extract the existing PR URL
+			existingPRURL := extractPRURL(outputStr)
+			if existingPRURL != "" {
+				return "", &ErrPRAlreadyExists{URL: existingPRURL}
+			}
+		}
+		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, outputStr)
 	}
 	
 	// Extract PR URL from output
@@ -362,6 +380,25 @@ func run(cmd *cobra.Command, args []string) error {
 		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
 			if err == collector.ErrNoDiff {
+				if flagCreatePR {
+					// Even with no changes, allow creating a PR if explicitly requested
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+					prURL, err := committer.CreatePullRequest(ctx)
+					if err != nil {
+						var prExists *ErrPRAlreadyExists
+						if errors.As(err, &prExists) {
+							_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+							_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prExists.URL))
+							return nil
+						}
+						return fmt.Errorf("failed to create pull request: %w", err)
+					}
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+					if prURL != "" {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prURL))
+					}
+					return nil
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 				if flagDebug {
 					appLogger.Debug("No staged, unstaged, or untracked changes detected")
@@ -456,6 +493,12 @@ func run(cmd *cobra.Command, args []string) error {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
 				prURL, err := committer.CreatePullRequest(ctx)
 				if err != nil {
+					var prExists *ErrPRAlreadyExists
+					if errors.As(err, &prExists) {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prExists.URL))
+						return nil
+					}
 					return fmt.Errorf("failed to create pull request: %w", err)
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
