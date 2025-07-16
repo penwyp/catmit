@@ -122,9 +122,22 @@ catmit --dry-run     # Preview message only
 catmit -l zh         # Chinese output
 catmit -t 30         # 30 second timeout
 catmit "feat: seed"  # Seed text for generation
-catmit --create-pr   # Create GitHub pull request after push
-catmit --create-pr -y  # Create PR even with no changes
 ```
+
+### Pull Request workflow
+```bash
+catmit --create-pr   # Commit, push, and create GitHub PR
+catmit -y --create-pr  # Auto-commit and create PR
+catmit -p=false --create-pr  # Create PR without pushing (for existing branches)
+catmit auth status   # Check authentication status for all remotes
+```
+
+### PR Feature Details
+- **GitHub Support**: Full support via `gh` CLI integration
+- **Auto Push**: Automatically pushes if needed before PR creation
+- **Error Handling**: Shows existing PR URL if PR already exists
+- **Auth Check**: Validates CLI installation and authentication
+- **Future Support**: GitLab and Gitea support planned
 
 ### Exit codes
 - `0` - Success

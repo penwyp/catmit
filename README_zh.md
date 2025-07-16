@@ -168,6 +168,31 @@ catmit --help
 catmit --version
 ```
 
+### 🚀 Pull Request 创建
+```bash
+# 提交并创建 GitHub pull request
+catmit --create-pr
+
+# 自动提交并创建 PR，无需确认
+catmit -y --create-pr
+
+# 创建 PR 但不推送（适用于已存在的分支）
+catmit -p=false --create-pr
+
+# 检查所有 git 远程仓库的认证状态
+catmit auth status
+```
+
+**支持的 PR 平台：**
+- ✅ GitHub（通过 `gh` CLI）
+- 🚧 GitLab（即将推出）
+- 🚧 Gitea（即将推出）
+
+**要求：**
+- 必须安装并认证 GitHub CLI (`gh`)
+- 安装：`brew install gh` 或访问 [cli.github.com](https://cli.github.com)
+- 认证：`gh auth login`
+
 ### 🎮 交互式演示
 ```
 $ catmit

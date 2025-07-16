@@ -168,6 +168,31 @@ catmit --help
 catmit --version
 ```
 
+### 🚀 Pull Request Creation
+```bash
+# Commit and create a GitHub pull request
+catmit --create-pr
+
+# Auto-commit and create PR without confirmation
+catmit -y --create-pr
+
+# Create PR without pushing (useful for existing branches)
+catmit -p=false --create-pr
+
+# Check authentication status for all git remotes
+catmit auth status
+```
+
+**Supported PR Platforms:**
+- ✅ GitHub (via `gh` CLI)
+- 🚧 GitLab (coming soon)
+- 🚧 Gitea (coming soon)
+
+**Requirements:**
+- GitHub CLI (`gh`) must be installed and authenticated
+- Install: `brew install gh` or visit [cli.github.com](https://cli.github.com)
+- Authenticate: `gh auth login`
+
 ### 🎮 Interactive Demo
 ```
 $ catmit
