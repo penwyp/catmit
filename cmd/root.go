@@ -15,7 +15,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/client"
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/cli"
 	"github.com/penwyp/catmit/internal/logger"
+	"github.com/penwyp/catmit/internal/provider"
 	"github.com/penwyp/catmit/prompt"
 	"github.com/penwyp/catmit/ui"
 	"github.com/spf13/cobra"
@@ -175,7 +177,7 @@ func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 
 func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	if appLogger != nil {
-		appLogger.Debug("Creating GitHub pull request")
+		appLogger.Debug("Creating pull request")
 	}
 	
 	// Check if gh CLI is available
@@ -189,11 +191,11 @@ func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error)
 	
 	if appLogger != nil {
 		if err != nil {
-			appLogger.Debug("GitHub PR creation failed", 
+			appLogger.Debug("PR creation failed", 
 				zap.Error(err),
 				zap.String("output", string(output)))
 		} else {
-			appLogger.Debug("GitHub PR created successfully", 
+			appLogger.Debug("PR created successfully", 
 				zap.String("output", string(output)))
 		}
 	}
@@ -357,11 +359,173 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
 	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push")
+	
+	// Add auth subcommand
+	authCmd := &cobra.Command{
+		Use:   "auth",
+		Short: "Authentication related commands",
+		Long:  `Manage authentication for PR creation with various git hosting providers`,
+	}
+	
+	// Create auth status command with default implementations
+	authStatusCmd := NewAuthStatusCommand(
+		&defaultGitRunner{},
+		&defaultProviderDetector{},
+		&defaultCLIDetector{},
+	)
+	
+	authCmd.AddCommand(authStatusCmd)
+	rootCmd.AddCommand(authCmd)
 }
 
 func Execute() error { return rootCmd.Execute() }
 
 func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
+
+// defaultGitRunner implements GitRunner for auth command
+type defaultGitRunner struct{}
+
+func (d *defaultGitRunner) GetRemotes(ctx context.Context) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var remotes []string
+	for _, line := range lines {
+		if line = strings.TrimSpace(line); line != "" {
+			remotes = append(remotes, line)
+		}
+	}
+	return remotes, nil
+}
+
+func (d *defaultGitRunner) GetRemoteURL(ctx context.Context, remote string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", remote)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// defaultProviderDetector implements ProviderDetector for auth command
+type defaultProviderDetector struct{}
+
+func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error) {
+	// Parse the URL first
+	info, err := provider.ParseGitRemoteURL(remoteURL)
+	if err != nil {
+		return provider.RemoteInfo{}, err
+	}
+	
+	// Detect provider from host
+	detectProviderFromHost(&info)
+	
+	// If it's potentially Gitea, probe it
+	if info.Provider == "unknown" || info.Provider == "" {
+		prober := provider.NewHTTPProber()
+		probeResult := prober.ProbeGitea(ctx, info.GetHTTPURL())
+		if probeResult.IsGitea {
+			info.Provider = "gitea"
+		}
+	}
+	
+	return info, nil
+}
+
+// detectProviderFromHost detects provider based on hostname
+func detectProviderFromHost(info *provider.RemoteInfo) {
+	host := strings.ToLower(info.Host)
+	
+	switch {
+	case strings.Contains(host, "github.com"):
+		info.Provider = "github"
+	case strings.Contains(host, "gitlab.com"):
+		info.Provider = "gitlab"
+	case strings.Contains(host, "gitea"):
+		info.Provider = "gitea"
+	default:
+		info.Provider = "unknown"
+	}
+}
+
+// defaultCLIDetector implements CLIDetector for auth command
+type defaultCLIDetector struct{}
+
+func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string) (cli.CLIStatus, error) {
+	var cliName string
+	switch providerName {
+	case "github":
+		cliName = "gh"
+	case "gitea":
+		cliName = "tea"
+	case "gitlab":
+		cliName = "glab"
+	default:
+		return cli.CLIStatus{}, fmt.Errorf("unsupported provider: %s", providerName)
+	}
+	
+	// Check if CLI is installed
+	_, err := exec.LookPath(cliName)
+	if err != nil {
+		return cli.CLIStatus{
+			Name:      cliName,
+			Installed: false,
+		}, nil
+	}
+	
+	status := cli.CLIStatus{
+		Name:      cliName,
+		Installed: true,
+	}
+	
+	// Get version
+	cmd := exec.CommandContext(ctx, cliName, "version")
+	if output, err := cmd.Output(); err == nil {
+		status.Version = strings.TrimSpace(string(output))
+	}
+	
+	// Check auth status
+	switch cliName {
+	case "gh":
+		cmd = exec.CommandContext(ctx, "gh", "auth", "status")
+		if err := cmd.Run(); err == nil {
+			status.Authenticated = true
+		}
+	case "tea":
+		cmd = exec.CommandContext(ctx, "tea", "login", "list")
+		if output, err := cmd.Output(); err == nil && len(output) > 0 {
+			status.Authenticated = true
+		}
+	}
+	
+	return status, nil
+}
+
+func (d *defaultCLIDetector) SuggestInstallCommand(cliName string) []string {
+	switch cliName {
+	case "gh":
+		return []string{
+			"brew install gh",
+			"https://cli.github.com/",
+		}
+	case "tea":
+		return []string{
+			"brew install gitea/tap/tea",
+			"https://gitea.com/gitea/tea",
+		}
+	case "glab":
+		return []string{
+			"brew install glab",
+			"https://gitlab.com/gitlab-org/cli",
+		}
+	default:
+		return []string{}
+	}
+}
 
 func run(cmd *cobra.Command, args []string) error {
 	// Handle version flag
@@ -535,24 +699,44 @@ func run(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("push failed: %w", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushed successfully", true))
-			
-			// Create pull request if requested
-			if flagCreatePR {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
-				prURL, err := committer.CreatePullRequest(ctx)
+		}
+		
+		// Create pull request if requested (after push or commit)
+		if flagCreatePR {
+			// Check if we need to push first
+			if !flagPush {
+				needsPush, err := committer.NeedsPush(ctx)
 				if err != nil {
-					var prExists *ErrPRAlreadyExists
-					if errors.As(err, &prExists) {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
-						return nil
+					if flagDebug {
+						appLogger.Debug("Failed to check if push is needed", zap.Error(err))
 					}
-					return fmt.Errorf("failed to create pull request: %w", err)
+					// Continue anyway, let the PR creation fail if needed
+					needsPush = false
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
-				if prURL != "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
+				
+				if needsPush {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch for PR...", false))
+					if err := committer.Push(ctx); err != nil {
+						return fmt.Errorf("failed to push branch: %w", err)
+					}
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
 				}
+			}
+			
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+			prURL, err := committer.CreatePullRequest(ctx)
+			if err != nil {
+				var prExists *ErrPRAlreadyExists
+				if errors.As(err, &prExists) {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
+					return nil
+				}
+				return fmt.Errorf("failed to create pull request: %w", err)
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+			if prURL != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
 			}
 		}
 		return nil
