@@ -1,0 +1,209 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"regexp"
+	"strings"
+)
+
+// Detector CLI工具检测器
+type Detector struct {
+	runner CommandRunner
+}
+
+// NewDetector 创建新的CLI检测器
+func NewDetector(runner CommandRunner) *Detector {
+	if runner == nil {
+		runner = &defaultCommandRunner{}
+	}
+	return &Detector{runner: runner}
+}
+
+// defaultCommandRunner 默认命令执行器
+type defaultCommandRunner struct{}
+
+func (r *defaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	return cmd.CombinedOutput()
+}
+
+// CheckInstalled 检查CLI工具是否已安装
+func (d *Detector) CheckInstalled(ctx context.Context, cliName, checkCommand string) (bool, error) {
+	_, err := d.runner.Run(ctx, cliName, checkCommand)
+	if err != nil {
+		// 如果命令不存在，通常会包含 "command not found" 或 "not found"
+		errStr := err.Error()
+		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "command not found") {
+			return false, nil
+		}
+		// 命令存在但执行失败（如未认证）
+		return true, nil
+	}
+	return true, nil
+}
+
+// GetVersion 获取CLI工具版本
+func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand string, args ...string) (string, error) {
+	cmdArgs := append([]string{versionCommand}, args...)
+	output, err := d.runner.Run(ctx, cliName, cmdArgs...)
+	if err != nil {
+		return "", fmt.Errorf("failed to get version: %w", err)
+	}
+
+	// 提取版本号的正则表达式
+	versionPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`version\s+v?(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
+		regexp.MustCompile(`(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
+		regexp.MustCompile(`Version:\s*v?(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
+	}
+
+	outputStr := string(output)
+	for _, pattern := range versionPatterns {
+		matches := pattern.FindStringSubmatch(outputStr)
+		if len(matches) > 1 {
+			return matches[1], nil
+		}
+	}
+
+	return "", fmt.Errorf("version not found in output")
+}
+
+// CheckAuthStatus 检查认证状态
+func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand string, args ...string) (bool, string, error) {
+	cmdArgs := append([]string{authCommand}, args...)
+	output, err := d.runner.Run(ctx, cliName, cmdArgs...)
+	
+	outputStr := string(output)
+	
+	// GitHub CLI 认证检查
+	if cliName == "gh" {
+		if err != nil && strings.Contains(outputStr, "not logged") {
+			return false, "", nil
+		}
+		// 提取用户名
+		userPattern := regexp.MustCompile(`Logged in to .+ as (\w+)`)
+		matches := userPattern.FindStringSubmatch(outputStr)
+		if len(matches) > 1 {
+			return true, matches[1], nil
+		}
+		if strings.Contains(outputStr, "✓") && strings.Contains(outputStr, "Logged in") {
+			// 尝试另一种模式
+			userPattern2 := regexp.MustCompile(`as (\w+)`)
+			matches2 := userPattern2.FindStringSubmatch(outputStr)
+			if len(matches2) > 1 {
+				return true, matches2[1], nil
+			}
+		}
+	}
+	
+	// tea CLI 认证检查
+	if cliName == "tea" {
+		if err != nil && strings.Contains(outputStr, "No logins") {
+			return false, "", nil
+		}
+		// 解析tea的表格输出
+		lines := strings.Split(outputStr, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "|") && strings.Contains(line, "true") {
+				parts := strings.Split(line, "|")
+				if len(parts) >= 4 {
+					username := strings.TrimSpace(parts[3])
+					if username != "" && username != "USER" {
+						return true, username, nil
+					}
+				}
+			}
+		}
+	}
+	
+	if err != nil {
+		return false, "", fmt.Errorf("failed to check auth status: %w", err)
+	}
+	
+	return false, "", nil
+}
+
+// DetectCLI 综合检测CLI工具状态
+func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, error) {
+	// 根据provider确定CLI工具
+	cliConfig := map[string]struct {
+		name        string
+		versionCmd  string
+		authCmd     string
+		authArgs    []string
+	}{
+		"github": {
+			name:       "gh",
+			versionCmd: "version",
+			authCmd:    "auth",
+			authArgs:   []string{"status"},
+		},
+		"gitea": {
+			name:       "tea",
+			versionCmd: "version",
+			authCmd:    "login",
+			authArgs:   []string{"list"},
+		},
+	}
+
+	config, exists := cliConfig[provider]
+	if !exists {
+		return CLIStatus{}, fmt.Errorf("unsupported provider: %s", provider)
+	}
+
+	status := CLIStatus{
+		Name: config.name,
+	}
+
+	// 检查是否安装
+	installed, err := d.CheckInstalled(ctx, config.name, config.versionCmd)
+	if err != nil {
+		return status, err
+	}
+	status.Installed = installed
+
+	if !installed {
+		return status, nil
+	}
+
+	// 获取版本
+	version, err := d.GetVersion(ctx, config.name, config.versionCmd)
+	if err == nil {
+		status.Version = version
+	}
+
+	// 检查认证状态
+	authenticated, username, err := d.CheckAuthStatus(ctx, config.name, config.authCmd, config.authArgs...)
+	if err == nil {
+		status.Authenticated = authenticated
+		status.Username = username
+	}
+
+	return status, nil
+}
+
+// SuggestInstallCommand 建议安装命令
+func (d *Detector) SuggestInstallCommand(cliName string) []string {
+	installCommands := map[string][]string{
+		"gh": {
+			"brew install gh",
+			"https://github.com/cli/cli#installation",
+		},
+		"tea": {
+			"go install gitea.com/gitea/tea@latest",
+			"https://gitea.com/gitea/tea",
+		},
+	}
+
+	if commands, exists := installCommands[cliName]; exists {
+		return commands
+	}
+	return []string{}
+}
+
+// CheckMinVersion 检查当前版本是否满足最低版本要求
+func (d *Detector) CheckMinVersion(current, minimum string) (bool, error) {
+	return CheckMinVersion(current, minimum)
+}
