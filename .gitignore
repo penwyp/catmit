@@ -62,3 +62,4 @@ coverage.out
 test_repo
 test-repo
 test-scenario
+.DS_Store
