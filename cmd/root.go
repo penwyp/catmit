@@ -238,7 +238,7 @@ func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	// Check if the current branch has unpushed commits
 	// First, check if we have an upstream branch
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
-	output, err := cmd.CombinedOutput()
+	_, err := cmd.CombinedOutput()
 	if err != nil {
 		// No upstream branch set, so we need to push
 		return true, nil
@@ -247,7 +247,7 @@ func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	// Check if there are commits to push
 	// git rev-list --count @{u}..HEAD
 	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", "@{u}..HEAD")
-	output, err = cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
 	}
@@ -436,14 +436,14 @@ func run(cmd *cobra.Command, args []string) error {
 						var prExists *ErrPRAlreadyExists
 						if errors.As(err, &prExists) {
 							_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
-							_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prExists.URL))
+							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 							return nil
 						}
 						return fmt.Errorf("failed to create pull request: %w", err)
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 					if prURL != "" {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prURL))
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
 					}
 					return nil
 				}
@@ -544,14 +544,14 @@ func run(cmd *cobra.Command, args []string) error {
 					var prExists *ErrPRAlreadyExists
 					if errors.As(err, &prExists) {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prExists.URL))
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 						return nil
 					}
 					return fmt.Errorf("failed to create pull request: %w", err)
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 				if prURL != "" {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prURL))
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
 				}
 			}
 		}
