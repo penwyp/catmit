@@ -66,6 +66,7 @@ type commitInterface interface {
 	Push(ctx context.Context) error
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) bool
+	CreatePullRequest(ctx context.Context) error
 }
 
 // ---------------- 默认实现 ------------------
@@ -160,6 +161,38 @@ func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 	return err != nil
 }
 
+func (d defaultCommitter) CreatePullRequest(ctx context.Context) error {
+	if appLogger != nil {
+		appLogger.Debug("Creating GitHub pull request")
+	}
+	
+	// Check if gh CLI is available
+	if _, err := exec.LookPath("gh"); err != nil {
+		return fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
+	}
+	
+	// Execute gh pr create command
+	cmd := exec.CommandContext(ctx, "gh", "pr", "create", "--fill", "--base", "main", "--draft=false")
+	output, err := cmd.CombinedOutput()
+	
+	if appLogger != nil {
+		if err != nil {
+			appLogger.Debug("GitHub PR creation failed", 
+				zap.Error(err),
+				zap.String("output", string(output)))
+		} else {
+			appLogger.Debug("GitHub PR created successfully", 
+				zap.String("output", string(output)))
+		}
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, string(output))
+	}
+	
+	return nil
+}
+
 // renderStatusBar 渲染带样式的状态条
 func renderStatusBar(message string, isSuccess bool) string {
 	var style lipgloss.Style
@@ -242,6 +275,7 @@ var (
 	flagPush     bool
 	flagStageAll bool
 	flagVersion  bool
+	flagCreatePR bool
 )
 
 func init() {
@@ -253,6 +287,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
+	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push")
 }
 
 func Execute() error { return rootCmd.Execute() }
@@ -394,6 +429,15 @@ func run(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("push failed: %w", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushed successfully", true))
+			
+			// Create pull request if requested
+			if flagCreatePR {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+				if err := committer.CreatePullRequest(ctx); err != nil {
+					return fmt.Errorf("failed to create pull request: %w", err)
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+			}
 		}
 		return nil
 	}
@@ -410,6 +454,7 @@ func run(cmd *cobra.Command, args []string) error {
 		time.Duration(flagTimeout)*time.Second,
 		flagPush,
 		flagStageAll,
+		flagCreatePR,
 	)
 	
 	finalModel, err := tea.NewProgram(mainModel).Run()

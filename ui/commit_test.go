@@ -35,6 +35,11 @@ func (m *mockCommitter) HasStagedChanges(ctx context.Context) bool {
 	return args.Bool(0)
 }
 
+func (m *mockCommitter) CreatePullRequest(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func TestNewCommitModel(t *testing.T) {
 	ctx := context.Background()
 	committer := &mockCommitter{}
