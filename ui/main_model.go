@@ -60,8 +60,9 @@ type MainModel struct {
 	terminalHeight int
 
 	// 错误和结果
-	err  error
-	done bool
+	err   error
+	done  bool
+	prURL string
 
 	// 内部状态
 	finalStartTime time.Time
@@ -234,6 +235,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 		m.commitStage = CommitStagePRCreated
+		m.prURL = msg.prURL
 		m.finalStartTime = time.Now()
 		return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
 			return finalTimeoutMsg{}
@@ -563,6 +565,9 @@ func (m *MainModel) renderCommitContent() string {
 		}
 		if m.createPR {
 			content.WriteString("\n ✓ " + m.styles.Success.Render("Pull request created successfully"))
+			if m.prURL != "" {
+				content.WriteString("\n   " + m.styles.CommitDesc.Render(m.prURL))
+			}
 		}
 	}
 
@@ -649,8 +654,8 @@ func (m *MainModel) startPush() tea.Cmd {
 // startCreatePR 开始创建PR
 func (m *MainModel) startCreatePR() tea.Cmd {
 	return func() tea.Msg {
-		err := m.committer.CreatePullRequest(m.ctx)
-		return createPRDoneMsg{err: err}
+		prURL, err := m.committer.CreatePullRequest(m.ctx)
+		return createPRDoneMsg{err: err, prURL: prURL}
 	}
 }
 
@@ -681,5 +686,6 @@ type delayedCreatePRMsg struct{}
 type startCommitPhaseMsg struct{}
 
 type createPRDoneMsg struct {
-	err error
+	err   error
+	prURL string
 }

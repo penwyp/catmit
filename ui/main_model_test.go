@@ -119,9 +119,9 @@ func (m *MockCommitter) HasStagedChanges(ctx context.Context) bool {
 	return args.Bool(0)
 }
 
-func (m *MockCommitter) CreatePullRequest(ctx context.Context) error {
+func (m *MockCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	args := m.Called(ctx)
-	return args.Error(0)
+	return args.String(0), args.Error(1)
 }
 
 func TestMainModel_NewMainModel(t *testing.T) {

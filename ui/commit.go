@@ -59,7 +59,7 @@ type commitInterface interface {
 	Push(ctx context.Context) error
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) bool
-	CreatePullRequest(ctx context.Context) error
+	CreatePullRequest(ctx context.Context) (string, error)
 }
 
 // NewCommitModel 创建新的CommitModel

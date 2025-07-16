@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"os/exec"
@@ -66,7 +67,7 @@ type commitInterface interface {
 	Push(ctx context.Context) error
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) bool
-	CreatePullRequest(ctx context.Context) error
+	CreatePullRequest(ctx context.Context) (string, error)
 }
 
 // ---------------- 默认实现 ------------------
@@ -161,14 +162,14 @@ func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 	return err != nil
 }
 
-func (d defaultCommitter) CreatePullRequest(ctx context.Context) error {
+func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	if appLogger != nil {
 		appLogger.Debug("Creating GitHub pull request")
 	}
 	
 	// Check if gh CLI is available
 	if _, err := exec.LookPath("gh"); err != nil {
-		return fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
+		return "", fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
 	}
 	
 	// Execute gh pr create command
@@ -187,10 +188,30 @@ func (d defaultCommitter) CreatePullRequest(ctx context.Context) error {
 	}
 	
 	if err != nil {
-		return fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, string(output))
 	}
 	
-	return nil
+	// Extract PR URL from output
+	prURL := extractPRURL(string(output))
+	
+	return prURL, nil
+}
+
+// extractPRURL extracts the PR URL from gh command output
+func extractPRURL(output string) string {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Look for GitHub PR URLs in the output
+		if strings.Contains(line, "github.com") && strings.Contains(line, "/pull/") {
+			return line
+		}
+		// Also check for just the URL part if it's at the end of a line
+		if strings.HasPrefix(line, "https://github.com/") && strings.Contains(line, "/pull/") {
+			return line
+		}
+	}
+	return ""
 }
 
 // renderStatusBar 渲染带样式的状态条
@@ -433,10 +454,14 @@ func run(cmd *cobra.Command, args []string) error {
 			// Create pull request if requested
 			if flagCreatePR {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
-				if err := committer.CreatePullRequest(ctx); err != nil {
+				prURL, err := committer.CreatePullRequest(ctx)
+				if err != nil {
 					return fmt.Errorf("failed to create pull request: %w", err)
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+				if prURL != "" {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), fmt.Sprintf("PR URL: %s", prURL))
+				}
 			}
 		}
 		return nil
