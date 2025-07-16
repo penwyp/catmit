@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,7 @@ type commitInterface interface {
 	StageAll(ctx context.Context) error
 	HasStagedChanges(ctx context.Context) bool
 	CreatePullRequest(ctx context.Context) (string, error)
+	NeedsPush(ctx context.Context) (bool, error)
 }
 
 // ---------------- 默认实现 ------------------
@@ -232,6 +234,34 @@ func extractPRURL(output string) string {
 	return ""
 }
 
+func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
+	// Check if the current branch has unpushed commits
+	// First, check if we have an upstream branch
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// No upstream branch set, so we need to push
+		return true, nil
+	}
+	
+	// Check if there are commits to push
+	// git rev-list --count @{u}..HEAD
+	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", "@{u}..HEAD")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
+	}
+	
+	// Parse the count
+	countStr := strings.TrimSpace(string(output))
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse commit count: %w", err)
+	}
+	
+	return count > 0, nil
+}
+
 // renderStatusBar 渲染带样式的状态条
 func renderStatusBar(message string, isSuccess bool) string {
 	var style lipgloss.Style
@@ -381,6 +411,24 @@ func run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			if err == collector.ErrNoDiff {
 				if flagCreatePR {
+					// Check if we need to push first
+					needsPush, err := committer.NeedsPush(ctx)
+					if err != nil {
+						if flagDebug {
+							appLogger.Debug("Failed to check if push is needed", zap.Error(err))
+						}
+						// Continue anyway, let the PR creation fail if needed
+						needsPush = false
+					}
+					
+					if needsPush {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch...", false))
+						if err := committer.Push(ctx); err != nil {
+							return fmt.Errorf("failed to push branch: %w", err)
+						}
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
+					}
+					
 					// Even with no changes, allow creating a PR if explicitly requested
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
 					prURL, err := committer.CreatePullRequest(ctx)

@@ -124,6 +124,11 @@ func (m *MockCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockCommitter) NeedsPush(ctx context.Context) (bool, error) {
+	args := m.Called(ctx)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestMainModel_NewMainModel(t *testing.T) {
 	ctx := context.Background()
 	mockCollector := new(MockCollector)

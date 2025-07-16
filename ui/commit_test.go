@@ -40,6 +40,11 @@ func (m *mockCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockCommitter) NeedsPush(ctx context.Context) (bool, error) {
+	args := m.Called(ctx)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestNewCommitModel(t *testing.T) {
 	ctx := context.Background()
 	committer := &mockCommitter{}
