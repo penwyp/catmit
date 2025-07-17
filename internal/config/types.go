@@ -2,17 +2,17 @@ package config
 
 // Config 配置文件结构
 type Config struct {
-	Version string                   `json:"version"`
-	Remotes map[string]RemoteConfig `json:"remotes"`
+	Version string                   `json:"version" yaml:"version"`
+	Remotes map[string]RemoteConfig `json:"remotes" yaml:"remotes"`
 }
 
 // RemoteConfig 远程仓库配置
 type RemoteConfig struct {
-	Provider     string   `json:"provider"`      // github, gitlab, gitea等
-	CLITool      string   `json:"cli_tool"`      // gh, glab, tea等
-	MinVersion   string   `json:"min_version"`   // CLI工具最低版本要求
-	AuthCommand  string   `json:"auth_command"`  // 认证命令
-	CreatePRArgs []string `json:"create_pr_args"` // 创建PR的参数
+	Provider     string   `json:"provider" yaml:"provider"`           // github, gitlab, gitea等
+	CLITool      string   `json:"cli_tool" yaml:"cli_tool"`           // gh, glab, tea等
+	MinVersion   string   `json:"min_version" yaml:"min_version"`     // CLI工具最低版本要求
+	AuthCommand  string   `json:"auth_command" yaml:"auth_command"`   // 认证命令
+	CreatePRArgs []string `json:"create_pr_args" yaml:"create_pr_args"` // 创建PR的参数
 }
 
 // Manager 配置管理器接口

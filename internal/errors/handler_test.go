@@ -1,253 +1,275 @@
 package errors
 
 import (
+	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// TestErrorHandler_HandlePRError 测试PR错误处理
-func TestErrorHandler_HandlePRError(t *testing.T) {
+func TestDefaultHandler_Handle(t *testing.T) {
 	tests := []struct {
-		name               string
-		err                error
-		expectedMessage    string
-		expectedSuggestion string
-		expectedExitCode   int
+		name        string
+		err         error
+		verbose     bool
+		expectNil   bool
+		expectType  ErrorType
 	}{
 		{
-			name:               "CLI not installed",
-			err:                fmt.Errorf("gh is not installed"),
-			expectedMessage:    "GitHub CLI (gh) is not installed",
-			expectedSuggestion: "brew install gh",
-			expectedExitCode:   ExitCodeCLINotInstalled,
+			name:      "nil error",
+			err:       nil,
+			verbose:   false,
+			expectNil: true,
 		},
 		{
-			name:               "CLI not authenticated",
-			err:                fmt.Errorf("gh is not authenticated"),
-			expectedMessage:    "GitHub CLI (gh) is not authenticated",
-			expectedSuggestion: "gh auth login",
-			expectedExitCode:   ExitCodeCLINotAuthenticated,
+			name:       "CatmitError",
+			err:        New(ErrTypeGit, "git error"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeGit,
 		},
 		{
-			name:               "tea not installed",
-			err:                fmt.Errorf("tea is not installed"),
-			expectedMessage:    "Gitea CLI (tea) is not installed",
-			expectedSuggestion: "go install gitea.com/gitea/tea@latest",
-			expectedExitCode:   ExitCodeCLINotInstalled,
+			name:       "standard error - git",
+			err:        errors.New("not a git repository"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeGit,
 		},
 		{
-			name:               "tea not authenticated",
-			err:                fmt.Errorf("tea is not authenticated"),
-			expectedMessage:    "Gitea CLI (tea) is not authenticated",
-			expectedSuggestion: "tea login add",
-			expectedExitCode:   ExitCodeCLINotAuthenticated,
+			name:       "standard error - network",
+			err:        errors.New("connection timeout"),
+			verbose:    true,
+			expectNil:  false,
+			expectType: ErrTypeTimeout,
 		},
 		{
-			name:               "PR already exists",
-			err:                fmt.Errorf("a pull request for branch \"feature\" into branch \"main\" already exists"),
-			expectedMessage:    "A pull request already exists for this branch",
-			expectedSuggestion: "View existing PRs",
-			expectedExitCode:   ExitCodePRAlreadyExists,
-		},
-		{
-			name:               "Network error",
-			err:                fmt.Errorf("Post \"https://api.github.com/repos/owner/repo/pulls\": dial tcp: lookup api.github.com: no such host"),
-			expectedMessage:    "Network error occurred",
-			expectedSuggestion: "Check your internet connection",
-			expectedExitCode:   ExitCodeNetworkError,
-		},
-		{
-			name:               "Permission denied",
-			err:                fmt.Errorf("HTTP 403: Resource not accessible by integration"),
-			expectedMessage:    "Permission denied",
-			expectedSuggestion: "Check repository permissions",
-			expectedExitCode:   ExitCodePermissionDenied,
-		},
-		{
-			name:               "Generic error",
-			err:                fmt.Errorf("something went wrong"),
-			expectedMessage:    "Error: something went wrong",
-			expectedSuggestion: "",
-			expectedExitCode:   ExitCodeGenericError,
-		},
-		{
-			name:               "Unsupported provider",
-			err:                fmt.Errorf("unsupported provider: gitlab"),
-			expectedMessage:    "GitLab is not supported yet",
-			expectedSuggestion: "Supported providers: GitHub, Gitea",
-			expectedExitCode:   ExitCodeUnsupportedProvider,
-		},
-		{
-			name:               "No remote",
-			err:                fmt.Errorf("failed to get remote URL: remote 'origin' not found"),
-			expectedMessage:    "Git remote 'origin' not found",
-			expectedSuggestion: "git remote add origin <url>",
-			expectedExitCode:   ExitCodeGitError,
+			name:       "standard error - auth",
+			err:        errors.New("unauthorized access"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeAuth,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewErrorHandler()
-			prError := handler.HandlePRError(tt.err)
+			handler := NewHandler(tt.verbose)
+			result := handler.Handle(tt.err)
 			
-			assert.Equal(t, tt.expectedMessage, prError.Message)
-			assert.Contains(t, prError.Suggestion, tt.expectedSuggestion)
-			assert.Equal(t, tt.expectedExitCode, prError.ExitCode)
-		})
-	}
-}
-
-// TestErrorHandler_FormatError 测试错误格式化
-func TestErrorHandler_FormatError(t *testing.T) {
-	tests := []struct {
-		name           string
-		prError        PRError
-		expectedOutput []string
-	}{
-		{
-			name: "Error with suggestion",
-			prError: PRError{
-				Message:    "GitHub CLI (gh) is not installed",
-				Suggestion: "Install with:\n  brew install gh\n  https://github.com/cli/cli#installation",
-				ExitCode:   ExitCodeCLINotInstalled,
-			},
-			expectedOutput: []string{
-				"Error: GitHub CLI (gh) is not installed",
-				"Install with:",
-				"brew install gh",
-			},
-		},
-		{
-			name: "Error without suggestion",
-			prError: PRError{
-				Message:  "Something went wrong",
-				ExitCode: ExitCodeGenericError,
-			},
-			expectedOutput: []string{
-				"Error: Something went wrong",
-			},
-		},
-		{
-			name: "Error with details",
-			prError: PRError{
-				Message:    "Failed to create PR",
-				Details:    "HTTP 403: Forbidden",
-				Suggestion: "Check your authentication status with: gh auth status",
-				ExitCode:   ExitCodePermissionDenied,
-			},
-			expectedOutput: []string{
-				"Error: Failed to create PR",
-				"Details: HTTP 403: Forbidden",
-				"Check your authentication status with:",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler := NewErrorHandler()
-			output := handler.FormatError(tt.prError)
-			
-			for _, expected := range tt.expectedOutput {
-				assert.Contains(t, output, expected)
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				var catmitErr *CatmitError
+				assert.True(t, As(result, &catmitErr))
+				assert.Equal(t, tt.expectType, catmitErr.Type)
 			}
 		})
 	}
 }
 
-// TestErrorHandler_IsRetryableError 测试可重试错误判断
-func TestErrorHandler_IsRetryableError(t *testing.T) {
+func TestDefaultHandler_HandleWithRetry(t *testing.T) {
+	t.Run("non-retryable error", func(t *testing.T) {
+		handler := NewHandler(false)
+		err := New(ErrTypeGit, "git error")
+		callCount := 0
+		
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			return err
+		})
+		
+		assert.NotNil(t, result)
+		assert.Equal(t, 0, callCount) // 不应该调用操作函数
+	})
+	
+	t.Run("retryable error - success on retry", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    3,
+			RetryInterval: time.Millisecond,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		callCount := 0
+		
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			if callCount == 2 {
+				return nil // 第二次成功
+			}
+			return err
+		})
+		
+		assert.Nil(t, result)
+		assert.Equal(t, 2, callCount)
+	})
+	
+	t.Run("retryable error - all retries fail", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    2,
+			RetryInterval: time.Millisecond,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		callCount := 0
+		
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			return err
+		})
+		
+		assert.NotNil(t, result)
+		assert.Equal(t, 2, callCount) // 初始尝试 + 1次重试
+		
+		var catmitErr *CatmitError
+		assert.True(t, As(result, &catmitErr))
+		assert.Contains(t, catmitErr.Message, "2 次重试后失败")
+	})
+	
+	t.Run("context cancelled", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    3,
+			RetryInterval: time.Second,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // 立即取消
+		
+		result := handler.HandleWithRetry(ctx, err, func() error {
+			return err
+		})
+		
+		assert.NotNil(t, result)
+	})
+	
+	t.Run("nil operation", func(t *testing.T) {
+		handler := NewHandler(false)
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		
+		result := handler.HandleWithRetry(context.Background(), err, nil)
+		
+		assert.NotNil(t, result)
+	})
+}
+
+func TestDefaultHandler_inferErrorType(t *testing.T) {
 	tests := []struct {
 		name         string
 		err          error
-		expectedRetry bool
+		expectedType ErrorType
+		expectedMsg  string
+		hassSuggestion bool
 	}{
 		{
-			name:         "Network timeout",
-			err:          fmt.Errorf("request timeout"),
-			expectedRetry: true,
+			name:         "git repository error",
+			err:          errors.New("fatal: not a git repository"),
+			expectedType: ErrTypeGit,
+			expectedMsg:  "不是 Git 仓库",
+			hassSuggestion: true,
 		},
 		{
-			name:         "Connection refused",
-			err:          fmt.Errorf("connection refused"),
-			expectedRetry: true,
+			name:         "no changes error",
+			err:          errors.New("nothing to commit, working tree clean"),
+			expectedType: ErrTypeGit,
+			expectedMsg:  "没有需要提交的更改",
+			hassSuggestion: true,
 		},
 		{
-			name:         "DNS error",
-			err:          fmt.Errorf("no such host"),
-			expectedRetry: true,
+			name:         "timeout error",
+			err:          errors.New("context deadline exceeded"),
+			expectedType: ErrTypeTimeout,
+			expectedMsg:  "操作超时",
+			hassSuggestion: true,
 		},
 		{
-			name:         "Authentication error",
-			err:          fmt.Errorf("401 Unauthorized"),
-			expectedRetry: false,
+			name:         "network error",
+			err:          errors.New("connection refused"),
+			expectedType: ErrTypeNetwork,
+			expectedMsg:  "网络错误",
+			hassSuggestion: true,
 		},
 		{
-			name:         "Permission error",
-			err:          fmt.Errorf("403 Forbidden"),
-			expectedRetry: false,
+			name:         "auth error",
+			err:          errors.New("authentication failed"),
+			expectedType: ErrTypeAuth,
+			expectedMsg:  "认证失败",
+			hassSuggestion: true,
 		},
 		{
-			name:         "PR already exists",
-			err:          fmt.Errorf("pull request already exists"),
-			expectedRetry: false,
+			name:         "rate limit error",
+			err:          errors.New("API rate limit exceeded"),
+			expectedType: ErrTypeLLM,
+			expectedMsg:  "API 速率限制",
+			hassSuggestion: true,
+		},
+		{
+			name:         "unknown error",
+			err:          errors.New("something went wrong"),
+			expectedType: ErrTypeUnknown,
+			expectedMsg:  "something went wrong",
+			hassSuggestion: false,
 		},
 	}
-
+	
+	handler := &DefaultHandler{}
+	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewErrorHandler()
-			isRetryable := handler.IsRetryableError(tt.err)
-			assert.Equal(t, tt.expectedRetry, isRetryable)
+			result := handler.inferErrorType(tt.err)
+			
+			assert.Equal(t, tt.expectedType, result.Type)
+			assert.Equal(t, tt.expectedMsg, result.Message)
+			assert.Equal(t, tt.err, result.Cause)
+			
+			if tt.hassSuggestion {
+				assert.NotEmpty(t, result.Suggestion)
+			} else {
+				assert.Empty(t, result.Suggestion)
+			}
 		})
 	}
 }
 
-// TestErrorHandler_WrapError 测试错误包装
-func TestErrorHandler_WrapError(t *testing.T) {
+func TestDefaultHandler_getErrorIcon(t *testing.T) {
 	tests := []struct {
-		name           string
-		err            error
-		context        string
-		expectedPrefix string
+		errType ErrorType
+		icon    string
 	}{
-		{
-			name:           "Wrap simple error",
-			err:            errors.New("file not found"),
-			context:        "reading config",
-			expectedPrefix: "reading config:",
-		},
-		{
-			name:           "Wrap nil error",
-			err:            nil,
-			context:        "some operation",
-			expectedPrefix: "",
-		},
-		{
-			name:           "Wrap formatted error",
-			err:            fmt.Errorf("failed to connect to %s", "github.com"),
-			context:        "creating PR",
-			expectedPrefix: "creating PR:",
-		},
+		{ErrTypeGit, "🔧"},
+		{ErrTypeProvider, "🔗"},
+		{ErrTypePR, "📝"},
+		{ErrTypeConfig, "⚙️"},
+		{ErrTypeNetwork, "🌐"},
+		{ErrTypeAuth, "🔐"},
+		{ErrTypeTimeout, "⏱️"},
+		{ErrTypeValidation, "✅"},
+		{ErrTypeLLM, "🤖"},
+		{ErrTypeUnknown, "❌"},
+		{ErrorType(999), "❌"}, // 未知类型
 	}
-
+	
+	handler := &DefaultHandler{}
+	
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler := NewErrorHandler()
-			wrapped := handler.WrapError(tt.err, tt.context)
-			
-			if tt.err == nil {
-				assert.Nil(t, wrapped)
-			} else {
-				assert.NotNil(t, wrapped)
-				assert.True(t, strings.HasPrefix(wrapped.Error(), tt.expectedPrefix))
-				assert.Contains(t, wrapped.Error(), tt.err.Error())
-			}
+		t.Run(tt.errType.String(), func(t *testing.T) {
+			icon := handler.getErrorIcon(tt.errType)
+			assert.Equal(t, tt.icon, icon)
 		})
 	}
+}
+
+// 为 ErrorType 添加 String 方法以便测试输出
+func (e ErrorType) String() string {
+	names := []string{
+		"Unknown", "Git", "Provider", "PR", "Config",
+		"Network", "Auth", "Timeout", "Validation", "LLM",
+	}
+	if int(e) < len(names) {
+		return names[e]
+	}
+	return "Invalid"
 }

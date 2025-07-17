@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +17,9 @@ import (
 	"github.com/penwyp/catmit/client"
 	"github.com/penwyp/catmit/collector"
 	"github.com/penwyp/catmit/internal/cli"
+	"github.com/penwyp/catmit/internal/config"
 	"github.com/penwyp/catmit/internal/logger"
+	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/internal/provider"
 	"github.com/penwyp/catmit/prompt"
 	"github.com/penwyp/catmit/ui"
@@ -48,7 +51,7 @@ var (
 	collectorProvider func() collectorInterface                   = defaultCollectorProvider
 	promptProvider    func(lang string) promptInterface           = defaultPromptProvider
 	clientProvider    func() clientInterface                      = defaultClientProvider
-	committer         commitInterface                             = defaultCommitter{}
+	committer         commitInterface                             // Will be initialized in init()
 	appLogger         *zap.Logger                                 // 全局日志记录器
 )
 
@@ -126,17 +129,63 @@ func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 // defaultCommitter 使用 git commit -m 执行提交。
+type defaultCommitter struct {
+	prCreator *pr.Creator
+}
 
-type defaultCommitter struct{}
+// newDefaultCommitter creates a new defaultCommitter with PR support
+func newDefaultCommitter() *defaultCommitter {
+	// Initialize PR creator with default implementations
+	gitRunner := &defaultGitRunner{}
+	providerDetector := newDefaultProviderDetector()
+	cliDetector := &defaultCLIDetector{}
+	
+	// Create command builder and runner
+	commandBuilder := pr.NewCommandBuilder()
+	commandRunner := &defaultCommandRunner{debug: flagDebug}
+	
+	prCreator := pr.NewCreator(
+		gitRunner,
+		providerDetector,
+		cliDetector,
+		commandBuilder,
+		commandRunner,
+	)
+	
+	return &defaultCommitter{
+		prCreator: prCreator,
+	}
+}
 
-func (defaultCommitter) Commit(ctx context.Context, message string) error {
+// defaultCommandRunner implements pr.CommandRunner
+type defaultCommandRunner struct {
+	debug bool
+}
+
+func (r *defaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if r.debug {
+		appLogger.Debug("Running command for PR",
+			zap.String("command", name),
+			zap.Strings("args", args))
+	}
+	output, err := cmd.CombinedOutput()
+	if r.debug {
+		appLogger.Debug("PR command output",
+			zap.Int("output_length", len(output)),
+			zap.Error(err))
+	}
+	return output, err
+}
+
+func (d *defaultCommitter) Commit(ctx context.Context, message string) error {
 	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func (d defaultCommitter) Push(ctx context.Context) error {
+func (d *defaultCommitter) Push(ctx context.Context) error {
 	if appLogger != nil {
 		appLogger.Debug("Executing git push command")
 	}
@@ -161,60 +210,49 @@ func (d defaultCommitter) Push(ctx context.Context) error {
 	return nil
 }
 
-func (defaultCommitter) StageAll(ctx context.Context) error {
+func (d *defaultCommitter) StageAll(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "git", "add", "-A")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run()
 }
 
-func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
+func (d *defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--quiet")
 	err := cmd.Run()
 	// git diff --cached --quiet returns exit code 1 if there are staged changes
 	return err != nil
 }
 
-func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
+func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	if appLogger != nil {
-		appLogger.Debug("Creating pull request")
+		appLogger.Debug("Creating pull request with new PR creator")
 	}
 	
-	// Check if gh CLI is available
-	if _, err := exec.LookPath("gh"); err != nil {
-		return "", fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
+	if d.prCreator == nil {
+		return "", fmt.Errorf("PR creator not initialized")
 	}
 	
-	// Execute gh pr create command
-	cmd := exec.CommandContext(ctx, "gh", "pr", "create", "--fill", "--base", "main", "--draft=false")
-	output, err := cmd.CombinedOutput()
-	
-	if appLogger != nil {
-		if err != nil {
-			appLogger.Debug("PR creation failed", 
-				zap.Error(err),
-				zap.String("output", string(output)))
-		} else {
-			appLogger.Debug("PR created successfully", 
-				zap.String("output", string(output)))
-		}
+	// Build PR options from flags
+	options := pr.CreateOptions{
+		Remote:     flagPRRemote,
+		BaseBranch: flagPRBase,
+		Draft:      flagPRDraft,
+		Fill:       true, // Always use fill for now
 	}
 	
+	// Create the PR
+	prURL, err := d.prCreator.Create(ctx, options)
 	if err != nil {
-		// Check if PR already exists
-		outputStr := string(output)
-		if strings.Contains(outputStr, "already exists") {
-			// Extract the existing PR URL
-			existingPRURL := extractPRURL(outputStr)
-			if existingPRURL != "" {
-				return "", &ErrPRAlreadyExists{URL: existingPRURL}
+		// Check if it's a PR already exists error and extract URL
+		if strings.Contains(err.Error(), "already exists") {
+			// Try to extract URL from error message
+			if url := extractPRURL(err.Error()); url != "" {
+				return "", &ErrPRAlreadyExists{URL: url}
 			}
 		}
-		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, outputStr)
+		return "", err
 	}
-	
-	// Extract PR URL from output
-	prURL := extractPRURL(string(output))
 	
 	return prURL, nil
 }
@@ -236,7 +274,7 @@ func extractPRURL(output string) string {
 	return ""
 }
 
-func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
+func (d *defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	// Check if the current branch has unpushed commits
 	// First, check if we have an upstream branch
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
@@ -346,7 +384,14 @@ var (
 	flagPush     bool
 	flagStageAll bool
 	flagVersion  bool
-	flagCreatePR bool
+	flagCreatePR bool  // Deprecated: use flagPR instead
+	flagPR       bool  // New PR flag
+	
+	// PR-specific flags
+	flagPRRemote   string
+	flagPRBase     string
+	flagPRDraft    bool
+	flagPRProvider string
 )
 
 func init() {
@@ -358,7 +403,17 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
-	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push")
+	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push (deprecated, use --pr)")
+	rootCmd.Flags().BoolVarP(&flagPR, "pr", "c", false, "create pull request after successful push")
+	
+	// PR-specific flags
+	rootCmd.Flags().StringVar(&flagPRRemote, "pr-remote", "origin", "remote to use for pull request")
+	rootCmd.Flags().StringVar(&flagPRBase, "pr-base", "", "base branch for pull request (defaults to provider's default branch)")
+	rootCmd.Flags().BoolVar(&flagPRDraft, "pr-draft", false, "create pull request as draft")
+	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
+	
+	// Mark create-pr as deprecated
+	rootCmd.Flags().MarkDeprecated("create-pr", "use --pr instead")
 	
 	// Add auth subcommand
 	authCmd := &cobra.Command{
@@ -370,7 +425,7 @@ func init() {
 	// Create auth status command with default implementations
 	authStatusCmd := NewAuthStatusCommand(
 		&defaultGitRunner{},
-		&defaultProviderDetector{},
+		newDefaultProviderDetector(),
 		&defaultCLIDetector{},
 	)
 	
@@ -411,11 +466,88 @@ func (d *defaultGitRunner) GetRemoteURL(ctx context.Context, remote string) (str
 	return strings.TrimSpace(string(output)), nil
 }
 
+func (d *defaultGitRunner) GetCurrentBranch(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (d *defaultGitRunner) GetCommitMessage(ctx context.Context, ref string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--pretty=%B", ref)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (d *defaultGitRunner) GetDefaultBranch(ctx context.Context, remote string) (string, error) {
+	// Try to get the default branch from the remote
+	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", fmt.Sprintf("refs/remotes/%s/HEAD", remote))
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback to main/master
+		return "main", nil
+	}
+	// Extract branch name from refs/remotes/origin/HEAD -> refs/remotes/origin/main
+	parts := strings.Split(strings.TrimSpace(string(output)), "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1], nil
+	}
+	return "main", nil
+}
+
 // defaultProviderDetector implements ProviderDetector for auth command
-type defaultProviderDetector struct{}
+type defaultProviderDetector struct {
+	configDetector *provider.ConfigDetector
+}
+
+// newDefaultProviderDetector creates a provider detector with config support
+func newDefaultProviderDetector() *defaultProviderDetector {
+	// Initialize config manager with proper path
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		// Fallback to home directory
+		configDir = os.Getenv("HOME")
+		if configDir == "" {
+			configDir = "."
+		}
+		configDir = filepath.Join(configDir, ".config")
+	}
+	
+	// Use YAML format for better readability
+	configPath := filepath.Join(configDir, "catmit", "providers.yaml")
+	
+	// Create YAML config manager
+	configManager, err := config.NewYAMLConfigManager(configPath)
+	if err != nil {
+		// If we can't create the manager, work without config
+		configManager = nil
+	} else {
+		// Check if config file exists, create default if not
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			// Create default config for user convenience
+			if createErr := configManager.CreateDefaultConfig(); createErr != nil {
+				// If creation fails, just work without config
+				configManager = nil
+			}
+		}
+	}
+	
+	return &defaultProviderDetector{
+		configDetector: provider.NewConfigDetector(configManager),
+	}
+}
 
 func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error) {
-	// Parse the URL first
+	if d.configDetector != nil {
+		return d.configDetector.DetectFromRemote(ctx, remoteURL)
+	}
+	
+	// Fallback to old implementation if config detector is not available
 	info, err := provider.ParseGitRemoteURL(remoteURL)
 	if err != nil {
 		return provider.RemoteInfo{}, err
@@ -440,13 +572,31 @@ func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteUR
 func detectProviderFromHost(info *provider.RemoteInfo) {
 	host := strings.ToLower(info.Host)
 	
-	switch {
-	case strings.Contains(host, "github.com"):
+	// Check for exact domain matches first
+	switch host {
+	case "github.com", "www.github.com":
 		info.Provider = "github"
-	case strings.Contains(host, "gitlab.com"):
+		return
+	case "gitlab.com", "www.gitlab.com":
 		info.Provider = "gitlab"
+		return
+	case "bitbucket.org", "www.bitbucket.org":
+		info.Provider = "bitbucket"
+		return
+	}
+	
+	// Then check for common patterns
+	switch {
+	case strings.Contains(host, "github"):
+		info.Provider = "github"
+	case strings.Contains(host, "gitlab"):
+		info.Provider = "gitlab"
+	case strings.Contains(host, "bitbucket"):
+		info.Provider = "bitbucket"
 	case strings.Contains(host, "gitea"):
 		info.Provider = "gitea"
+	case strings.Contains(host, "gogs"):
+		info.Provider = "gogs"
 	default:
 		info.Provider = "unknown"
 	}
@@ -464,6 +614,14 @@ func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string)
 		cliName = "tea"
 	case "gitlab":
 		cliName = "glab"
+	case "bitbucket":
+		cliName = "bb"
+	case "gogs":
+		// Gogs doesn't have an official CLI tool
+		return cli.CLIStatus{
+			Name:      "",
+			Installed: false,
+		}, fmt.Errorf("Gogs provider does not have a CLI tool")
 	default:
 		return cli.CLIStatus{}, fmt.Errorf("unsupported provider: %s", providerName)
 	}
@@ -505,6 +663,18 @@ func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string)
 	return status, nil
 }
 
+func (d *defaultCLIDetector) CheckMinVersion(current, minimum string) (bool, error) {
+	// Simple version comparison - this is a basic implementation
+	// In a real implementation, you'd want to use a proper version comparison library
+	if current == "" || minimum == "" {
+		return false, nil
+	}
+	
+	// For now, just do a simple string comparison
+	// This works for versions like "2.0.0" vs "1.9.0"
+	return current >= minimum, nil
+}
+
 func (d *defaultCLIDetector) SuggestInstallCommand(cliName string) []string {
 	switch cliName {
 	case "gh":
@@ -522,9 +692,19 @@ func (d *defaultCLIDetector) SuggestInstallCommand(cliName string) []string {
 			"brew install glab",
 			"https://gitlab.com/gitlab-org/cli",
 		}
+	case "bb":
+		return []string{
+			"pip install atlassian-python-api",
+			"https://developer.atlassian.com/server/bitbucket/",
+		}
 	default:
 		return []string{}
 	}
+}
+
+// isPRRequested returns true if user requested PR creation via either flag
+func isPRRequested() bool {
+	return flagPR || flagCreatePR
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -541,6 +721,11 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
+	
+	// Initialize committer with PR support after logger is available
+	if committer == nil {
+		committer = newDefaultCommitter()
+	}
 
 	seedText := ""
 	if len(args) > 0 {
@@ -574,7 +759,7 @@ func run(cmd *cobra.Command, args []string) error {
 		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
 			if err == collector.ErrNoDiff {
-				if flagCreatePR {
+				if isPRRequested() {
 					// Check if we need to push first
 					needsPush, err := committer.NeedsPush(ctx)
 					if err != nil {
@@ -702,7 +887,7 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		
 		// Create pull request if requested (after push or commit)
-		if flagCreatePR {
+		if isPRRequested() {
 			// Check if we need to push first
 			if !flagPush {
 				needsPush, err := committer.NeedsPush(ctx)
@@ -743,7 +928,15 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// 交互模式：使用统一的MainModel
-	mainModel := ui.NewMainModel(
+	prConfig := ui.PRConfig{
+		CreatePR: isPRRequested(),
+		Remote:   flagPRRemote,
+		Base:     flagPRBase,
+		Draft:    flagPRDraft,
+		Provider: flagPRProvider,
+	}
+	
+	mainModel := ui.NewMainModelWithPRConfig(
 		ctx, 
 		collectorProvider(), 
 		promptProvider(flagLang), 
@@ -754,7 +947,7 @@ func run(cmd *cobra.Command, args []string) error {
 		time.Duration(flagTimeout)*time.Second,
 		flagPush,
 		flagStageAll,
-		flagCreatePR,
+		prConfig,
 	)
 	
 	finalModel, err := tea.NewProgram(mainModel).Run()

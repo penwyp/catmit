@@ -63,3 +63,6 @@ test_repo
 test-repo
 test-scenario
 .DS_Store
+docs/.claude-trace
+catmit
+pr_coverage.out

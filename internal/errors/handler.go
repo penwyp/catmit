@@ -1,225 +1,213 @@
 package errors
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
-	"github.com/fatih/color"
+	"github.com/charmbracelet/lipgloss"
 )
 
-// ErrorHandler 错误处理器
-type ErrorHandler struct {
-	// 可以添加配置选项
+// Handler 错误处理器接口
+type Handler interface {
+	Handle(err error) error
+	HandleWithRetry(ctx context.Context, err error, operation func() error) error
 }
 
-// NewErrorHandler 创建新的错误处理器
-func NewErrorHandler() *ErrorHandler {
-	return &ErrorHandler{}
+// DefaultHandler 默认错误处理器
+type DefaultHandler struct {
+	MaxRetries    int
+	RetryInterval time.Duration
+	Verbose       bool
 }
 
-// HandlePRError 处理PR相关错误，返回结构化的错误信息
-func (h *ErrorHandler) HandlePRError(err error) PRError {
-	if err == nil {
-		return PRError{ExitCode: ExitCodeSuccess}
-	}
-
-	errStr := err.Error()
-
-	// CLI未安装
-	if strings.Contains(errStr, "gh is not installed") {
-		return PRError{
-			Message:    "GitHub CLI (gh) is not installed",
-			Suggestion: "Install with:\n  brew install gh\n  https://github.com/cli/cli#installation",
-			ExitCode:   ExitCodeCLINotInstalled,
-		}
-	}
-	if strings.Contains(errStr, "tea is not installed") {
-		return PRError{
-			Message:    "Gitea CLI (tea) is not installed",
-			Suggestion: "Install with:\n  go install gitea.com/gitea/tea@latest\n  https://gitea.com/gitea/tea",
-			ExitCode:   ExitCodeCLINotInstalled,
-		}
-	}
-
-	// CLI未认证
-	if strings.Contains(errStr, "gh is not authenticated") {
-		return PRError{
-			Message:    "GitHub CLI (gh) is not authenticated",
-			Suggestion: "Run: gh auth login",
-			ExitCode:   ExitCodeCLINotAuthenticated,
-		}
-	}
-	if strings.Contains(errStr, "tea is not authenticated") {
-		return PRError{
-			Message:    "Gitea CLI (tea) is not authenticated",
-			Suggestion: "Run: tea login add",
-			ExitCode:   ExitCodeCLINotAuthenticated,
-		}
-	}
-
-	// PR已存在
-	if strings.Contains(errStr, "already exists") {
-		return PRError{
-			Message:    "A pull request already exists for this branch",
-			Suggestion: "View existing PRs with:\n  gh pr list (GitHub)\n  tea pr list (Gitea)",
-			ExitCode:   ExitCodePRAlreadyExists,
-		}
-	}
-
-	// 网络错误
-	if strings.Contains(errStr, "no such host") || 
-	   strings.Contains(errStr, "connection refused") ||
-	   strings.Contains(errStr, "timeout") ||
-	   strings.Contains(errStr, "dial tcp") {
-		return PRError{
-			Message:     "Network error occurred",
-			Details:     errStr,
-			Suggestion:  "Check your internet connection and try again",
-			ExitCode:    ExitCodeNetworkError,
-			IsRetryable: true,
-		}
-	}
-
-	// 权限错误
-	if strings.Contains(errStr, "403") || strings.Contains(errStr, "Permission denied") {
-		return PRError{
-			Message:    "Permission denied",
-			Details:    errStr,
-			Suggestion: "Check repository permissions and authentication status",
-			ExitCode:   ExitCodePermissionDenied,
-		}
-	}
-
-	// 不支持的Provider
-	if strings.Contains(errStr, "unsupported provider") {
-		provider := extractProvider(errStr)
-		// 特殊处理一些provider的大小写
-		providerTitle := provider
-		switch strings.ToLower(provider) {
-		case "github":
-			providerTitle = "GitHub"
-		case "gitlab":
-			providerTitle = "GitLab"
-		case "gitea":
-			providerTitle = "Gitea"
-		default:
-			providerTitle = strings.Title(provider)
-		}
-		return PRError{
-			Message:    fmt.Sprintf("%s is not supported yet", providerTitle),
-			Suggestion: "Supported providers: GitHub, Gitea",
-			ExitCode:   ExitCodeUnsupportedProvider,
-		}
-	}
-
-	// Git错误
-	if strings.Contains(errStr, "remote") && strings.Contains(errStr, "not found") {
-		remoteName := extractRemoteName(errStr)
-		return PRError{
-			Message:    fmt.Sprintf("Git remote '%s' not found", remoteName),
-			Suggestion: fmt.Sprintf("Run: git remote add %s <url>", remoteName),
-			ExitCode:   ExitCodeGitError,
-		}
-	}
-
-	// 默认错误
-	return PRError{
-		Message:  fmt.Sprintf("Error: %s", errStr),
-		ExitCode: ExitCodeGenericError,
+// NewHandler 创建新的错误处理器
+func NewHandler(verbose bool) Handler {
+	return &DefaultHandler{
+		MaxRetries:    3,
+		RetryInterval: time.Second,
+		Verbose:       verbose,
 	}
 }
 
-// FormatError 格式化错误信息为用户友好的输出
-func (h *ErrorHandler) FormatError(prError PRError) string {
-	var sb strings.Builder
-
-	// 错误消息（红色）
-	sb.WriteString(color.RedString("Error: %s\n", prError.Message))
-
-	// 详细信息（如果有）
-	if prError.Details != "" {
-		sb.WriteString(color.YellowString("Details: %s\n", prError.Details))
-	}
-
-	// 建议（如果有）
-	if prError.Suggestion != "" {
-		sb.WriteString("\n")
-		sb.WriteString(prError.Suggestion)
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
-}
-
-// IsRetryableError 判断错误是否可以重试
-func (h *ErrorHandler) IsRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	
-	// 网络相关错误可以重试
-	retryablePatterns := []string{
-		"timeout",
-		"connection refused",
-		"no such host",
-		"temporary failure",
-		"EOF",
-		"connection reset",
-	}
-
-	for _, pattern := range retryablePatterns {
-		if strings.Contains(errStr, pattern) {
-			return true
-		}
-	}
-
-	// 认证和权限错误不应重试
-	nonRetryablePatterns := []string{
-		"401",
-		"403",
-		"Unauthorized",
-		"Forbidden",
-		"already exists",
-		"not found",
-		"permission denied",
-	}
-
-	for _, pattern := range nonRetryablePatterns {
-		if strings.Contains(errStr, pattern) {
-			return false
-		}
-	}
-
-	return false
-}
-
-// WrapError 包装错误，添加上下文信息
-func (h *ErrorHandler) WrapError(err error, context string) error {
+// Handle 处理错误
+func (h *DefaultHandler) Handle(err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%s: %w", context, err)
+	
+	// 转换为 CatmitError 以获取更多信息
+	var catmitErr *CatmitError
+	if !As(err, &catmitErr) {
+		// 如果不是 CatmitError，尝试根据错误内容推断类型
+		catmitErr = h.inferErrorType(err)
+	}
+	
+	// 格式化并输出错误
+	h.printError(catmitErr)
+	
+	return catmitErr
 }
 
-// 辅助函数
-
-func extractProvider(errStr string) string {
-	// 从 "unsupported provider: gitlab" 中提取 "gitlab"
-	parts := strings.Split(errStr, ":")
-	if len(parts) >= 2 {
-		return strings.TrimSpace(parts[1])
+// HandleWithRetry 处理错误并支持重试
+func (h *DefaultHandler) HandleWithRetry(ctx context.Context, err error, operation func() error) error {
+	if err == nil || operation == nil {
+		return h.Handle(err)
 	}
-	return "unknown"
+	
+	// 检查是否可重试
+	if !IsRetryable(err) {
+		return h.Handle(err)
+	}
+	
+	// 执行重试逻辑
+	var lastErr error
+	for i := 0; i < h.MaxRetries; i++ {
+		if i > 0 {
+			// 等待后重试
+			select {
+			case <-ctx.Done():
+				return h.Handle(ctx.Err())
+			case <-time.After(h.RetryInterval * time.Duration(i)):
+				// 指数退避
+			}
+			
+			if h.Verbose {
+				fmt.Printf("🔄 重试 %d/%d...\n", i+1, h.MaxRetries)
+			}
+		}
+		
+		lastErr = operation()
+		if lastErr == nil {
+			return nil
+		}
+		
+		// 如果新错误不可重试，立即返回
+		if !IsRetryable(lastErr) {
+			return h.Handle(lastErr)
+		}
+	}
+	
+	// 所有重试都失败
+	return h.Handle(WrapRetryable(ErrTypeNetwork, fmt.Sprintf("操作在 %d 次重试后失败", h.MaxRetries), lastErr))
 }
 
-func extractRemoteName(errStr string) string {
-	// 从 "remote 'origin' not found" 中提取 "origin"
-	start := strings.Index(errStr, "'")
-	end := strings.LastIndex(errStr, "'")
-	if start != -1 && end != -1 && start < end {
-		return errStr[start+1 : end]
+// inferErrorType 根据错误内容推断错误类型
+func (h *DefaultHandler) inferErrorType(err error) *CatmitError {
+	errMsg := strings.ToLower(err.Error())
+	
+	// Git 相关错误
+	if strings.Contains(errMsg, "git") || strings.Contains(errMsg, "repository") || strings.Contains(errMsg, "nothing to commit") {
+		if strings.Contains(errMsg, "not a git repository") {
+			return Wrap(ErrTypeGit, "不是 Git 仓库", err).WithSuggestion("请在 Git 仓库中运行此命令")
+		}
+		if strings.Contains(errMsg, "no changes") || strings.Contains(errMsg, "nothing to commit") {
+			return Wrap(ErrTypeGit, "没有需要提交的更改", err).WithSuggestion("先进行一些更改再提交")
+		}
+		return Wrap(ErrTypeGit, "Git 操作失败", err)
 	}
-	return "origin"
+	
+	// 网络相关错误
+	if strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline exceeded") {
+		return WrapRetryable(ErrTypeTimeout, "操作超时", err).WithSuggestion("检查网络连接或增加超时时间")
+	}
+	if strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network") {
+		return WrapRetryable(ErrTypeNetwork, "网络错误", err).WithSuggestion("检查网络连接并重试")
+	}
+	
+	// 认证相关错误
+	if strings.Contains(errMsg, "auth") || strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "forbidden") {
+		return Wrap(ErrTypeAuth, "认证失败", err).WithSuggestion("检查您的凭据或重新登录")
+	}
+	
+	// API 相关错误
+	if strings.Contains(errMsg, "api") || strings.Contains(errMsg, "rate limit") {
+		if strings.Contains(errMsg, "rate limit") {
+			return WrapRetryable(ErrTypeLLM, "API 速率限制", err).WithSuggestion("稍后重试或升级您的 API 套餐")
+		}
+		return Wrap(ErrTypeLLM, "API 错误", err)
+	}
+	
+	// 默认错误
+	return Wrap(ErrTypeUnknown, err.Error(), err)
+}
+
+// printError 打印格式化的错误信息
+func (h *DefaultHandler) printError(err *CatmitError) {
+	// 定义样式
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("9")).
+		Bold(true)
+	
+	suggestionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("11"))
+	
+	// 构建错误消息
+	var parts []string
+	
+	// 错误图标和主消息
+	icon := h.getErrorIcon(err.Type)
+	parts = append(parts, fmt.Sprintf("%s %s", icon, errorStyle.Render(err.Error())))
+	
+	// 建议
+	if err.Suggestion != "" {
+		parts = append(parts, suggestionStyle.Render(fmt.Sprintf("💡 %s", err.Suggestion)))
+	}
+	
+	// 详细信息（仅在 verbose 模式下）
+	if h.Verbose && err.Cause != nil {
+		parts = append(parts, fmt.Sprintf("   原因: %v", err.Cause))
+		if err.Retryable {
+			parts = append(parts, "   ℹ️  此错误可重试")
+		}
+	}
+	
+	// 输出到 stderr
+	fmt.Fprintln(os.Stderr, strings.Join(parts, "\n"))
+}
+
+// getErrorIcon 根据错误类型返回图标
+func (h *DefaultHandler) getErrorIcon(errType ErrorType) string {
+	switch errType {
+	case ErrTypeGit:
+		return "🔧"
+	case ErrTypeProvider:
+		return "🔗"
+	case ErrTypePR:
+		return "📝"
+	case ErrTypeConfig:
+		return "⚙️"
+	case ErrTypeNetwork:
+		return "🌐"
+	case ErrTypeAuth:
+		return "🔐"
+	case ErrTypeTimeout:
+		return "⏱️"
+	case ErrTypeValidation:
+		return "✅"
+	case ErrTypeLLM:
+		return "🤖"
+	default:
+		return "❌"
+	}
+}
+
+// HandleFatal 处理致命错误并退出
+func HandleFatal(err error) {
+	if err == nil {
+		return
+	}
+	
+	handler := NewHandler(false)
+	handler.Handle(err)
+	
+	// 根据错误类型确定退出码
+	exitCode := 1
+	if IsRetryable(err) {
+		exitCode = 124 // 超时退出码
+	}
+	
+	os.Exit(exitCode)
 }
