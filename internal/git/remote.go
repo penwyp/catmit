@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -55,11 +56,16 @@ func (m *remoteManager) GetRemotes(ctx context.Context) ([]Remote, error) {
 		}
 	}
 
-	// 转换为切片
+	// 转换为切片并按名称排序以保证顺序一致性
 	result := make([]Remote, 0, len(remotes))
 	for _, remote := range remotes {
 		result = append(result, *remote)
 	}
+	
+	// 按名称排序
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
 
 	return result, nil
 }

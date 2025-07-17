@@ -2,6 +2,7 @@ package pr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -240,8 +241,8 @@ func TestPRCreator_Create(t *testing.T) {
 				
 				cmdBuilder.On("ParseGitHubPROutput", output).Return("https://github.com/owner/repo/pull/456", nil)
 			},
-			expectedURL:   "https://github.com/owner/repo/pull/456",
-			expectedError: "",
+			expectedURL:   "",
+			expectedError: "pull request already exists",
 		},
 		{
 			name: "Unknown provider error",
@@ -287,6 +288,13 @@ func TestPRCreator_Create(t *testing.T) {
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
+				
+				// Special check for PR already exists error
+				if tt.name == "PR already exists" {
+					var prExists *ErrPRAlreadyExists
+					assert.True(t, errors.As(err, &prExists))
+					assert.Equal(t, "https://github.com/owner/repo/pull/456", prExists.URL)
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedURL, url)

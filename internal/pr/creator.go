@@ -9,6 +9,15 @@ import (
 	"github.com/penwyp/catmit/internal/provider"
 )
 
+// ErrPRAlreadyExists is returned when a PR already exists for the branch
+type ErrPRAlreadyExists struct {
+	URL string
+}
+
+func (e *ErrPRAlreadyExists) Error() string {
+	return fmt.Sprintf("pull request already exists: %s", e.URL)
+}
+
 // Minimum version requirements for CLI tools
 var minVersionRequirements = map[string]string{
 	"github": "2.0.0",
@@ -124,6 +133,17 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		}
 	}
 
+	// 获取基础分支（如果未指定）
+	if options.BaseBranch == "" {
+		defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
+		if err != nil {
+			// 如果获取失败，使用常见的默认值
+			options.BaseBranch = "main"
+		} else {
+			options.BaseBranch = defaultBranch
+		}
+	}
+
 	// 获取当前分支（如果需要）
 	var headBranch string
 	if options.HeadBranch == "" && remoteInfo.Provider == "gitea" {
@@ -168,18 +188,22 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		prURL, parseErr = c.commandBuilder.ParseGiteaPROutput(outputStr)
 	}
 
-	// 如果解析成功，返回URL（即使命令执行失败，如PR已存在的情况）
-	if parseErr == nil && prURL != "" {
-		return prURL, nil
-	}
-
-	// 如果命令执行失败且没有解析到URL，返回错误
+	// 如果命令执行失败
 	if err != nil {
 		// 检查是否是PR已存在的情况
 		if strings.Contains(outputStr, "already exists") {
+			// 如果解析到了URL，返回特定的错误
+			if parseErr == nil && prURL != "" {
+				return "", &ErrPRAlreadyExists{URL: prURL}
+			}
 			return "", fmt.Errorf("PR already exists but failed to parse URL: %s", outputStr)
 		}
 		return "", fmt.Errorf("failed to create PR: %w\nOutput: %s", err, outputStr)
+	}
+
+	// 如果命令成功且解析到URL
+	if parseErr == nil && prURL != "" {
+		return prURL, nil
 	}
 
 	// 如果命令成功但解析失败

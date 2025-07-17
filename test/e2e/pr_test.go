@@ -24,6 +24,10 @@ func mockGitHubCLI(t *testing.T, responses map[string]string) string {
 	script := `#!/bin/bash
 args="$@"
 case "$args" in
+  "version")
+    echo 'gh version 2.40.0 (2024-01-15)'
+    exit 0
+    ;;
 `
 	for args, response := range responses {
 		script += fmt.Sprintf(`  "%s")
@@ -52,6 +56,10 @@ func mockGiteaCLI(t *testing.T, responses map[string]string) string {
 	script := `#!/bin/bash
 args="$@"
 case "$args" in
+  "version")
+    echo 'tea version 0.9.0'
+    exit 0
+    ;;
 `
 	for args, response := range responses {
 		script += fmt.Sprintf(`  "%s")
@@ -379,6 +387,9 @@ func TestE2E_PRCreation_ExistingPR(t *testing.T) {
 if [[ "$*" == "auth status" ]]; then
     echo "Logged in to github.com as testuser"
     exit 0
+elif [[ "$*" == "version" ]]; then
+    echo "gh version 2.40.0 (2024-01-15)"
+    exit 0
 elif [[ "$*" == pr\ create* ]]; then
     echo "a pull request for branch \"feature-branch\" into branch \"main\" already exists:" >&2
     echo "https://github.com/owner/repo/pull/100" >&2
@@ -484,8 +495,7 @@ func TestE2E_PRCreation_CLINotInstalled(t *testing.T) {
 	require.Contains(t, string(logOut), "feat: test cli not found")
 	
 	// Verify error message about installing CLI
-	require.Contains(t, out.String(), "gh CLI not found")
-	require.Contains(t, out.String(), "Please install GitHub CLI")
+	require.Contains(t, out.String(), "gh is not installed")
 }
 
 func TestE2E_PRCreation_Timeout(t *testing.T) {

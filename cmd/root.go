@@ -18,6 +18,7 @@ import (
 	"github.com/penwyp/catmit/collector"
 	"github.com/penwyp/catmit/internal/cli"
 	"github.com/penwyp/catmit/internal/config"
+	catmitErrors "github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/logger"
 	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/internal/provider"
@@ -36,14 +37,6 @@ func GetVersionString() string {
 	return fmt.Sprintf("catmit version %s", version)
 }
 
-// ErrPRAlreadyExists is returned when a PR already exists for the branch
-type ErrPRAlreadyExists struct {
-	URL string
-}
-
-func (e *ErrPRAlreadyExists) Error() string {
-	return fmt.Sprintf("pull request already exists: %s", e.URL)
-}
 
 // 将关键依赖抽象为接口以便测试时注入 Mock。
 // 若在运行时未被替换，则使用默认实现。
@@ -205,7 +198,7 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 	}
 	if err != nil {
 		// Include the git output in the error for better error reporting
-		return fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))
+		return catmitErrors.Wrap(catmitErrors.ErrTypeGit, "git push failed", fmt.Errorf("%w\nOutput: %s", err, string(output)))
 	}
 	return nil
 }
@@ -230,7 +223,7 @@ func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error
 	}
 	
 	if d.prCreator == nil {
-		return "", fmt.Errorf("PR creator not initialized")
+		return "", catmitErrors.Wrap(catmitErrors.ErrTypePR, "PR creator not initialized", nil)
 	}
 	
 	// Build PR options from flags
@@ -244,13 +237,6 @@ func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error
 	// Create the PR
 	prURL, err := d.prCreator.Create(ctx, options)
 	if err != nil {
-		// Check if it's a PR already exists error and extract URL
-		if strings.Contains(err.Error(), "already exists") {
-			// Try to extract URL from error message
-			if url := extractPRURL(err.Error()); url != "" {
-				return "", &ErrPRAlreadyExists{URL: url}
-			}
-		}
 		return "", err
 	}
 	
@@ -543,64 +529,9 @@ func newDefaultProviderDetector() *defaultProviderDetector {
 }
 
 func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error) {
-	if d.configDetector != nil {
-		return d.configDetector.DetectFromRemote(ctx, remoteURL)
-	}
-	
-	// Fallback to old implementation if config detector is not available
-	info, err := provider.ParseGitRemoteURL(remoteURL)
-	if err != nil {
-		return provider.RemoteInfo{}, err
-	}
-	
-	// Detect provider from host
-	detectProviderFromHost(&info)
-	
-	// If it's potentially Gitea, probe it
-	if info.Provider == "unknown" || info.Provider == "" {
-		prober := provider.NewHTTPProber()
-		probeResult := prober.ProbeGitea(ctx, info.GetHTTPURL())
-		if probeResult.IsGitea {
-			info.Provider = "gitea"
-		}
-	}
-	
-	return info, nil
+	return d.configDetector.DetectFromRemote(ctx, remoteURL)
 }
 
-// detectProviderFromHost detects provider based on hostname
-func detectProviderFromHost(info *provider.RemoteInfo) {
-	host := strings.ToLower(info.Host)
-	
-	// Check for exact domain matches first
-	switch host {
-	case "github.com", "www.github.com":
-		info.Provider = "github"
-		return
-	case "gitlab.com", "www.gitlab.com":
-		info.Provider = "gitlab"
-		return
-	case "bitbucket.org", "www.bitbucket.org":
-		info.Provider = "bitbucket"
-		return
-	}
-	
-	// Then check for common patterns
-	switch {
-	case strings.Contains(host, "github"):
-		info.Provider = "github"
-	case strings.Contains(host, "gitlab"):
-		info.Provider = "gitlab"
-	case strings.Contains(host, "bitbucket"):
-		info.Provider = "bitbucket"
-	case strings.Contains(host, "gitea"):
-		info.Provider = "gitea"
-	case strings.Contains(host, "gogs"):
-		info.Provider = "gogs"
-	default:
-		info.Provider = "unknown"
-	}
-}
 
 // defaultCLIDetector implements CLIDetector for auth command
 type defaultCLIDetector struct{}
@@ -623,7 +554,7 @@ func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string)
 			Installed: false,
 		}, fmt.Errorf("Gogs provider does not have a CLI tool")
 	default:
-		return cli.CLIStatus{}, fmt.Errorf("unsupported provider: %s", providerName)
+		return cli.CLIStatus{}, catmitErrors.Wrap(catmitErrors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", providerName), nil)
 	}
 	
 	// Check if CLI is installed
@@ -734,6 +665,11 @@ func run(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
+	// Show deprecation warning if --create-pr is used
+	if flagCreatePR {
+		_, _ = fmt.Fprintln(cmd.OutOrStderr(), "⚠️  Warning: --create-pr is deprecated, please use --pr instead")
+	}
+
 	// Early check: ensure we're in a git repository
 	if err := checkGitRepository(ctx); err != nil {
 		if errors.Is(err, collector.ErrNotGitRepository) {
@@ -782,13 +718,13 @@ func run(cmd *cobra.Command, args []string) error {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
 					prURL, err := committer.CreatePullRequest(ctx)
 					if err != nil {
-						var prExists *ErrPRAlreadyExists
+						var prExists *pr.ErrPRAlreadyExists
 						if errors.As(err, &prExists) {
 							_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
 							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 							return nil
 						}
-						return fmt.Errorf("failed to create pull request: %w", err)
+						return catmitErrors.Wrap(catmitErrors.ErrTypePR, "failed to create pull request", err)
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 					if prURL != "" {
@@ -822,7 +758,7 @@ func run(cmd *cobra.Command, args []string) error {
 					cmd.SilenceUsage = true
 					cmd.SilenceErrors = true
 					_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-					return fmt.Errorf("git repository required")
+					return catmitErrors.ErrNoGitRepo
 				}
 				return fmt.Errorf("failed to collect git diff: %w", err)
 			}
@@ -911,13 +847,13 @@ func run(cmd *cobra.Command, args []string) error {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
 			prURL, err := committer.CreatePullRequest(ctx)
 			if err != nil {
-				var prExists *ErrPRAlreadyExists
+				var prExists *pr.ErrPRAlreadyExists
 				if errors.As(err, &prExists) {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 					return nil
 				}
-				return fmt.Errorf("failed to create pull request: %w", err)
+				return catmitErrors.Wrap(catmitErrors.ErrTypePR, "failed to create pull request", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 			if prURL != "" {

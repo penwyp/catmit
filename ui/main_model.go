@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/pr"
 )
 
 // Phase 表示主模型所处的阶段
@@ -275,7 +276,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case createPRDoneMsg:
 		if msg.err != nil {
 			// Check if PR already exists
-			var prExists *ErrPRAlreadyExists
+			var prExists *pr.ErrPRAlreadyExists
 			if errors.As(msg.err, &prExists) {
 				// Treat existing PR as success
 				m.commitStage = CommitStagePRCreated
@@ -773,14 +774,6 @@ type createPRDoneMsg struct {
 	prURL string
 }
 
-// ErrPRAlreadyExists is returned when a PR already exists for the branch
-type ErrPRAlreadyExists struct {
-	URL string
-}
-
-func (e *ErrPRAlreadyExists) Error() string {
-	return fmt.Sprintf("pull request already exists: %s", e.URL)
-}
 
 // preparePRPreview 准备PR预览
 func (m *MainModel) preparePRPreview() tea.Cmd {

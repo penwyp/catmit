@@ -39,6 +39,11 @@ func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []stri
 	if options.Fill {
 		args = append(args, "--fill")
 		args = append(args, "--base", options.BaseBranch)
+		if options.Draft {
+			args = append(args, "--draft=true")
+		} else {
+			args = append(args, "--draft=false")
+		}
 		return "gh", args, nil
 	}
 

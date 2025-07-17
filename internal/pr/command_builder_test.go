@@ -99,6 +99,7 @@ func TestCommandBuilder_BuildGitHubPRCommand(t *testing.T) {
 				"pr", "create",
 				"--fill",
 				"--base", "main",
+				"--draft=false",
 			},
 			expectedError: false,
 		},
