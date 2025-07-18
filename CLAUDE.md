@@ -121,7 +121,8 @@ catmit -y            # Auto-commit without confirmation
 catmit --dry-run     # Preview message only
 catmit -l zh         # Chinese output
 catmit -t 30         # 30 second timeout
-catmit "feat: seed"  # Seed text for generation
+catmit "feat: auth"  # Seed text via positional argument
+catmit --seed "feat: auth"  # Seed text via flag (same effect)
 ```
 
 ### Pull Request workflow

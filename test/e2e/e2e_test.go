@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -114,6 +115,58 @@ func TestE2E_DryRun(t *testing.T) {
 	logCmd := exec.Command("git", "-C", repo, "log", "--pretty=%s")
 	logOut, _ := logCmd.Output()
 	require.NotContains(t, string(logOut), "feat(test): add file")
+}
+
+func TestE2E_WithSeedFlag(t *testing.T) {
+	bin := buildBinary(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"fix: authentication bug as requested"}}]}`))
+	}))
+	defer server.Close()
+
+	repo := initGitRepo(t)
+	_ = os.WriteFile(filepath.Join(repo, "auth.go"), []byte("package auth"), 0644)
+	_ = exec.Command("git", "-C", repo, "add", "auth.go").Run()
+
+	cmd := exec.Command(bin, "--seed", "fix authentication", "--dry-run")
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy", "CATMIT_LLM_API_URL="+server.URL)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	require.NoError(t, err, out.String())
+	require.Contains(t, out.String(), "fix: authentication bug as requested")
+}
+
+func TestE2E_SeedPriority(t *testing.T) {
+	bin := buildBinary(t)
+	
+	// Create a mock server that captures the request body to verify seed text
+	var capturedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat: testing seed priority"}}]}`))
+	}))
+	defer server.Close()
+
+	repo := initGitRepo(t)
+	_ = os.WriteFile(filepath.Join(repo, "feature.go"), []byte("package feature"), 0644)
+	_ = exec.Command("git", "-C", repo, "add", "feature.go").Run()
+
+	// Test 1: Only --seed flag
+	cmd := exec.Command(bin, "--seed", "fix: from flag", "--dry-run")
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), "CATMIT_LLM_API_KEY=dummy", "CATMIT_LLM_API_URL="+server.URL)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	require.NoError(t, err, out.String())
+	require.Contains(t, string(capturedBody), "fix: from flag")
 }
 
 func TestE2E_Timeout(t *testing.T) {

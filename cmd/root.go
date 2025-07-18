@@ -372,6 +372,7 @@ var (
 	flagVersion  bool
 	flagCreatePR bool  // Deprecated: use flagPR instead
 	flagPR       bool  // New PR flag
+	flagSeed     string  // Seed text for commit message generation
 	
 	// PR-specific flags
 	flagPRRemote   string
@@ -391,6 +392,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
 	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push (deprecated, use --pr)")
 	rootCmd.Flags().BoolVarP(&flagPR, "pr", "c", false, "create pull request after successful push")
+	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
 	
 	// PR-specific flags
 	rootCmd.Flags().StringVar(&flagPRRemote, "pr-remote", "origin", "remote to use for pull request")
@@ -658,8 +660,9 @@ func run(cmd *cobra.Command, args []string) error {
 		committer = newDefaultCommitter()
 	}
 
-	seedText := ""
-	if len(args) > 0 {
+	// Prioritize --seed flag over positional argument
+	seedText := flagSeed
+	if seedText == "" && len(args) > 0 {
 		seedText = args[0]
 	}
 

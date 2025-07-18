@@ -68,6 +68,35 @@ func (mockPrompt) BuildUserPromptWithBudget(ctx context.Context, collector inter
 	return "user prompt with budget", nil
 }
 
+type mockPromptWithCapture struct {
+	capturedSeed *string
+}
+
+func (m mockPromptWithCapture) Build(seed, diff string, commits []string, branch string, files []string) string {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
+	return "prompt"
+}
+
+func (m mockPromptWithCapture) BuildSystemPrompt() string {
+	return "system prompt"
+}
+
+func (m mockPromptWithCapture) BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
+	return "user prompt"
+}
+
+func (m mockPromptWithCapture) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
+	return "user prompt with budget", nil
+}
+
 type mockClient struct {
 	message string
 	err     error
@@ -362,6 +391,87 @@ func TestRun_WithSeedText(t *testing.T) {
 	err := run(cmd, []string{"seed"})
 	require.NoError(t, err)
 	require.Contains(t, output.String(), "feat: with seed")
+}
+
+func TestRun_WithSeedFlag(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalClientProvider := clientProvider
+	originalCommitter := committer
+	originalFlagDryRun := flagDryRun
+	originalFlagSeed := flagSeed
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		clientProvider = originalClientProvider
+		committer = originalCommitter
+		flagDryRun = originalFlagDryRun
+		flagSeed = originalFlagSeed
+	}()
+
+	flagDryRun = true
+	flagSeed = "seed from flag"
+	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
+	promptProvider = func(lang string) promptInterface { return mockPrompt{} }
+	clientProvider = func() clientInterface { return mockClient{message: "feat: with seed flag"} }
+	committer = &recordCommitter{}
+
+	cmd := &cobra.Command{}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(context.Background())
+	
+	// Call run function with no positional args to test flag
+	err := run(cmd, []string{})
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "feat: with seed flag")
+}
+
+func TestRun_SeedFlagPriority(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalClientProvider := clientProvider
+	originalCommitter := committer
+	originalFlagDryRun := flagDryRun
+	originalFlagSeed := flagSeed
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		clientProvider = originalClientProvider
+		committer = originalCommitter
+		flagDryRun = originalFlagDryRun
+		flagSeed = originalFlagSeed
+	}()
+
+	flagDryRun = true
+	flagSeed = "flag seed"
+	
+	var capturedSeed string
+	promptProvider = func(lang string) promptInterface { 
+		return mockPromptWithCapture{capturedSeed: &capturedSeed}
+	}
+	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
+	clientProvider = func() clientInterface { return mockClient{message: "feat: test"} }
+	committer = &recordCommitter{}
+
+	cmd := &cobra.Command{}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(context.Background())
+	
+	// Call run with both flag and positional arg
+	err := run(cmd, []string{"positional seed"})
+	require.NoError(t, err)
+	// Flag should take priority
+	require.Equal(t, "flag seed", capturedSeed)
 }
 
 func TestRoot_NoDiff_YesMode(t *testing.T) {

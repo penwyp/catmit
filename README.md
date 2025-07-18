@@ -146,8 +146,11 @@ catmit -l zh
 # Set custom timeout (default: 30s)
 catmit -t 60
 
-# Provide seed text for better context
+# Provide seed text for better context (via positional argument)
 catmit "fix user authentication"
+
+# Or use the --seed flag (same effect)
+catmit --seed "fix user authentication"
 ```
 
 ### Advanced Usage
@@ -365,7 +368,7 @@ A: Yes! catmit works with all git hooks. The generated commit message goes throu
 A: No. catmit only sends diffs and context to your chosen LLM provider. No data is stored locally beyond git's normal operation.
 
 **Q: Can I customize the commit message format?**
-A: catmit follows conventional commits strictly. You can provide seed text to influence the generation: `catmit "refactor database"`
+A: catmit follows conventional commits strictly. You can provide seed text to influence the generation: `catmit "refactor database"` or `catmit --seed "refactor database"`
 
 **Q: What if I don't like the generated message?**
 A: Simply decline in the interactive mode, or modify the message in your editor if using `-y` flag.
