@@ -11,7 +11,7 @@ import (
 // CollectorInterface 定义collector接口，用于获取Git数据
 type CollectorInterface interface {
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
-	Diff(ctx context.Context) (string, error)
+	ComprehensiveDiff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	RecentCommits(ctx context.Context, n int) ([]string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
@@ -249,7 +249,7 @@ func (b *Builder) buildBudgetedDiff(ctx context.Context, collector CollectorInte
 	}
 	
 	// 获取完整的diff
-	fullDiff, err := collector.Diff(ctx)
+	fullDiff, err := collector.ComprehensiveDiff(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get diff: %w", err)
 	}

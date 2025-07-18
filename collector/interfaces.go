@@ -148,22 +148,3 @@ type EnhancedDiffProvider interface {
 	// CombinedDiff returns staged and unstaged diffs combined (legacy behavior)
 	CombinedDiff(ctx context.Context) (string, error)
 }
-
-// LegacyCollectorInterface represents the current monolithic collector interface.
-// This interface is maintained for backward compatibility during the transition period.
-// 
-// DEPRECATED: Use the focused interfaces (GitReader, ChangeAnalyzer, FileContentProvider)
-// instead of this monolithic interface. This will be removed in a future version.
-//
-// Migration guide:
-// - For git operations: use GitReader
-// - For change analysis: use ChangeAnalyzer  
-// - For file content access: use FileContentProvider
-// - For comprehensive diff: use EnhancedDiffProvider
-type LegacyCollectorInterface interface {
-	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
-	BranchName(ctx context.Context) (string, error)
-	ChangedFiles(ctx context.Context) ([]string, error)
-	FileStatusSummary(ctx context.Context) (*FileStatusSummary, error)
-}

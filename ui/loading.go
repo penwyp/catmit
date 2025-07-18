@@ -24,7 +24,6 @@ const (
 // Interfaces duplicated to decouple from cmd package
 type collectorInterface interface {
 	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
 	// 新增：支持文件状态摘要
@@ -243,11 +242,7 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 		// Use ComprehensiveDiff to include untracked files
 		diff, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
-			// Fallback to legacy diff for backward compatibility
-			diff, err = col.Diff(ctx)
-			if err != nil {
-				return errorMsg{err}
-			}
+			return errorMsg{err}
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {

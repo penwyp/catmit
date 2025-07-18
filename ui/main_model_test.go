@@ -22,11 +22,6 @@ func (m *MockCollector) RecentCommits(ctx context.Context, n int) ([]string, err
 	return args.Get(0).([]string), args.Error(1)
 }
 
-func (m *MockCollector) Diff(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
-	return args.String(0), args.Error(1)
-}
-
 func (m *MockCollector) BranchName(ctx context.Context) (string, error) {
 	args := m.Called(ctx)
 	return args.String(0), args.Error(1)

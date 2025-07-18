@@ -8,7 +8,6 @@
 // - ChangeAnalyzer: High-level change analysis 
 // - FileContentProvider: File content access
 // - EnhancedDiffProvider: Comprehensive diff including untracked files
-// - LegacyCollectorInterface: Backward compatibility (deprecated)
 //
 // Performance Features (Phase 3):
 // - Command result caching with configurable TTL
@@ -165,7 +164,6 @@ func (pc *PerformanceCache) Clear() {
 // - GitReader: for pure git command execution
 // - ChangeAnalyzer: for high-level change analysis
 // - FileContentProvider: for file content access
-// - LegacyCollectorInterface: for backward compatibility (deprecated)
 //
 // Phase 3 Enhancement: Added performance optimizations including caching,
 // batched operations, memory optimizations, and enhanced error handling.
@@ -1436,5 +1434,4 @@ var (
 	_ ChangeAnalyzer          = (*Collector)(nil)
 	_ FileContentProvider     = (*Collector)(nil)
 	_ EnhancedDiffProvider    = (*Collector)(nil)
-	_ LegacyCollectorInterface = (*Collector)(nil)
 )

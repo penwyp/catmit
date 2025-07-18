@@ -21,9 +21,6 @@ type mockCollector struct {
 func (m mockCollector) RecentCommits(_ context.Context, n int) ([]string, error) {
 	return m.commits, m.err
 }
-func (m mockCollector) Diff(_ context.Context) (string, error) {
-	return m.diff, m.err
-}
 func (m mockCollector) BranchName(_ context.Context) (string, error) { return "test", nil }
 func (m mockCollector) ChangedFiles(_ context.Context) ([]string, error) {
 	return []string{"file.txt"}, nil

@@ -50,7 +50,6 @@ var (
 
 type collectorInterface interface {
 	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
@@ -747,24 +746,7 @@ func run(cmd *cobra.Command, args []string) error {
 				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
 				os.Exit(1)
 			}
-			if flagDebug {
-				appLogger.Debug("Comprehensive diff collection failed, trying fallback", zap.Error(err))
-			}
-			// Fallback to legacy diff for backward compatibility
-			diffText, err = col.Diff(ctx)
-			if err != nil {
-				if err == collector.ErrNoDiff {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
-					return nil
-				}
-				if errors.Is(err, collector.ErrNotGitRepository) {
-					cmd.SilenceUsage = true
-					cmd.SilenceErrors = true
-					_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-					return catmitErrors.ErrNoGitRepo
-				}
-				return fmt.Errorf("failed to collect git diff: %w", err)
-			}
+			return fmt.Errorf("failed to collect git diff: %w", err)
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {

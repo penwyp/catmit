@@ -18,7 +18,6 @@ type mockCollector struct {
 	err     error
 }
 
-func (m mockCollector) Diff(ctx context.Context) (string, error) { return m.diff, m.err }
 func (m mockCollector) RecentCommits(ctx context.Context, n int) ([]string, error) {
 	if m.err != nil {
 		return nil, m.err
