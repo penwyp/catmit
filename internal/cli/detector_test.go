@@ -45,8 +45,8 @@ func TestDetector_CheckInstalled(t *testing.T) {
 		{
 			name:         "tea CLI installed",
 			cliName:      "tea",
-			checkCommand: "version",
-			mockOutput:   []byte("tea version 0.9.2"),
+			checkCommand: "--version",
+			mockOutput:   []byte("Version: 0.9.2"),
 			mockError:    nil,
 			expectedInstalled: true,
 			expectedError: nil,
@@ -74,8 +74,14 @@ func TestDetector_CheckInstalled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRunner := new(MockCommandRunner)
-			mockRunner.On("Run", mock.Anything, tt.cliName, []string{tt.checkCommand}).
-				Return(tt.mockOutput, tt.mockError)
+			// Special handling for tea --version
+			if tt.cliName == "tea" && tt.checkCommand == "--version" {
+				mockRunner.On("Run", mock.Anything, tt.cliName, []string{"--version"}).
+					Return(tt.mockOutput, tt.mockError)
+			} else {
+				mockRunner.On("Run", mock.Anything, tt.cliName, []string{tt.checkCommand}).
+					Return(tt.mockOutput, tt.mockError)
+			}
 
 			detector := NewDetector(mockRunner)
 			installed, err := detector.CheckInstalled(context.Background(), tt.cliName, tt.checkCommand)
@@ -112,9 +118,9 @@ func TestDetector_GetVersion(t *testing.T) {
 		{
 			name:           "tea version with v prefix",
 			cliName:        "tea",
-			versionCommand: "version",
+			versionCommand: "--version",
 			versionArgs:    []string{},
-			mockOutput:     []byte("tea version v0.9.2\n"),
+			mockOutput:     []byte("Version: 0.9.2\n"),
 			mockError:      nil,
 			expectedVersion: "0.9.2",
 			expectedError:  false,
@@ -154,9 +160,15 @@ func TestDetector_GetVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRunner := new(MockCommandRunner)
-			args := append([]string{tt.versionCommand}, tt.versionArgs...)
-			mockRunner.On("Run", mock.Anything, tt.cliName, args).
-				Return(tt.mockOutput, tt.mockError)
+			// Special handling for tea --version
+			if tt.cliName == "tea" && tt.versionCommand == "--version" {
+				mockRunner.On("Run", mock.Anything, tt.cliName, []string{"--version"}).
+					Return(tt.mockOutput, tt.mockError)
+			} else {
+				args := append([]string{tt.versionCommand}, tt.versionArgs...)
+				mockRunner.On("Run", mock.Anything, tt.cliName, args).
+					Return(tt.mockOutput, tt.mockError)
+			}
 
 			detector := NewDetector(mockRunner)
 			version, err := detector.GetVersion(context.Background(), tt.cliName, tt.versionCommand, tt.versionArgs...)
@@ -312,11 +324,11 @@ func TestDetector_DetectCLI(t *testing.T) {
 			provider: "gitea",
 			setupMocks: func(m *MockCommandRunner) {
 				// Check installed
-				m.On("Run", mock.Anything, "tea", []string{"version"}).
-					Return([]byte("tea version 0.9.2"), nil)
+				m.On("Run", mock.Anything, "tea", []string{"--version"}).
+					Return([]byte("Version: 0.9.2"), nil)
 				// Get version
-				m.On("Run", mock.Anything, "tea", []string{"version"}).
-					Return([]byte("tea version 0.9.2"), nil)
+				m.On("Run", mock.Anything, "tea", []string{"--version"}).
+					Return([]byte("Version: 0.9.2"), nil)
 				// Check auth
 				m.On("Run", mock.Anything, "tea", []string{"login", "list"}).
 					Return([]byte("No logins found"), fmt.Errorf("exit status 1"))

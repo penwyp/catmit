@@ -592,103 +592,30 @@ func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteUR
 
 
 // defaultCLIDetector implements CLIDetector for auth command
-type defaultCLIDetector struct{}
+type defaultCLIDetector struct{
+	detector *cli.Detector
+}
 
 func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string) (cli.CLIStatus, error) {
-	var cliName string
-	switch providerName {
-	case "github":
-		cliName = "gh"
-	case "gitea":
-		cliName = "tea"
-	case "gitlab":
-		cliName = "glab"
-	case "bitbucket":
-		cliName = "bb"
-	case "gogs":
-		// Gogs doesn't have an official CLI tool
-		return cli.CLIStatus{
-			Name:      "",
-			Installed: false,
-		}, fmt.Errorf("Gogs provider does not have a CLI tool")
-	default:
-		return cli.CLIStatus{}, catmitErrors.Wrap(catmitErrors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", providerName), nil)
+	// Use the proper detector from internal/cli package
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
 	}
-	
-	// Check if CLI is installed
-	_, err := exec.LookPath(cliName)
-	if err != nil {
-		return cli.CLIStatus{
-			Name:      cliName,
-			Installed: false,
-		}, nil
-	}
-	
-	status := cli.CLIStatus{
-		Name:      cliName,
-		Installed: true,
-	}
-	
-	// Get version
-	cmd := exec.CommandContext(ctx, cliName, "version")
-	if output, err := cmd.Output(); err == nil {
-		status.Version = strings.TrimSpace(string(output))
-	}
-	
-	// Check auth status
-	switch cliName {
-	case "gh":
-		cmd = exec.CommandContext(ctx, "gh", "auth", "status")
-		if err := cmd.Run(); err == nil {
-			status.Authenticated = true
-		}
-	case "tea":
-		cmd = exec.CommandContext(ctx, "tea", "login", "list")
-		if output, err := cmd.Output(); err == nil && len(output) > 0 {
-			status.Authenticated = true
-		}
-	}
-	
-	return status, nil
+	return d.detector.DetectCLI(ctx, providerName)
 }
 
 func (d *defaultCLIDetector) CheckMinVersion(current, minimum string) (bool, error) {
-	// Simple version comparison - this is a basic implementation
-	// In a real implementation, you'd want to use a proper version comparison library
-	if current == "" || minimum == "" {
-		return false, nil
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
 	}
-	
-	// For now, just do a simple string comparison
-	// This works for versions like "2.0.0" vs "1.9.0"
-	return current >= minimum, nil
+	return d.detector.CheckMinVersion(current, minimum)
 }
 
 func (d *defaultCLIDetector) SuggestInstallCommand(cliName string) []string {
-	switch cliName {
-	case "gh":
-		return []string{
-			"brew install gh",
-			"https://cli.github.com/",
-		}
-	case "tea":
-		return []string{
-			"brew install gitea/tap/tea",
-			"https://gitea.com/gitea/tea",
-		}
-	case "glab":
-		return []string{
-			"brew install glab",
-			"https://gitlab.com/gitlab-org/cli",
-		}
-	case "bb":
-		return []string{
-			"pip install atlassian-python-api",
-			"https://developer.atlassian.com/server/bitbucket/",
-		}
-	default:
-		return []string{}
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
 	}
+	return d.detector.SuggestInstallCommand(cliName)
 }
 
 // isPRRequested returns true if user requested PR creation via either flag

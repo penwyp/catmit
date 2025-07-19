@@ -16,22 +16,28 @@ type Detector struct {
 // NewDetector 创建新的CLI检测器
 func NewDetector(runner CommandRunner) *Detector {
 	if runner == nil {
-		runner = &defaultCommandRunner{}
+		runner = &DefaultCommandRunner{}
 	}
 	return &Detector{runner: runner}
 }
 
-// defaultCommandRunner 默认命令执行器
-type defaultCommandRunner struct{}
+// DefaultCommandRunner 默认命令执行器
+type DefaultCommandRunner struct{}
 
-func (r *defaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (r *DefaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	return cmd.CombinedOutput()
 }
 
 // CheckInstalled 检查CLI工具是否已安装
 func (d *Detector) CheckInstalled(ctx context.Context, cliName, checkCommand string) (bool, error) {
-	_, err := d.runner.Run(ctx, cliName, checkCommand)
+	var err error
+	// Special handling for tea which uses --version as a flag
+	if cliName == "tea" && checkCommand == "--version" {
+		_, err = d.runner.Run(ctx, cliName, "--version")
+	} else {
+		_, err = d.runner.Run(ctx, cliName, checkCommand)
+	}
 	if err != nil {
 		// 如果命令不存在，通常会包含 "command not found" 或 "not found"
 		errStr := err.Error()
@@ -46,8 +52,16 @@ func (d *Detector) CheckInstalled(ctx context.Context, cliName, checkCommand str
 
 // GetVersion 获取CLI工具版本
 func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand string, args ...string) (string, error) {
-	cmdArgs := append([]string{versionCommand}, args...)
-	output, err := d.runner.Run(ctx, cliName, cmdArgs...)
+	var output []byte
+	var err error
+	
+	// Special handling for tea which uses --version as a flag, not a subcommand
+	if cliName == "tea" && versionCommand == "--version" {
+		output, err = d.runner.Run(ctx, cliName, "--version")
+	} else {
+		cmdArgs := append([]string{versionCommand}, args...)
+		output, err = d.runner.Run(ctx, cliName, cmdArgs...)
+	}
 	if err != nil {
 		return "", fmt.Errorf("failed to get version: %w", err)
 	}
@@ -57,6 +71,8 @@ func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand strin
 		regexp.MustCompile(`version\s+v?(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
 		regexp.MustCompile(`(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
 		regexp.MustCompile(`Version:\s*v?(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
+		// tea specific pattern for "Version: development" or "Version: x.y.z" with ANSI codes
+		regexp.MustCompile(`Version:\s*(?:\x1b\[\d+m)?([^\x1b\s\t]+)(?:\x1b\[\d+m)?`),
 	}
 
 	outputStr := string(output)
@@ -103,15 +119,40 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 		if err != nil && strings.Contains(outputStr, "No logins") {
 			return false, "", nil
 		}
-		// 解析tea的表格输出
+		// 解析tea的表格输出 (支持旧的|分隔符和新的Unicode box drawing)
 		lines := strings.Split(outputStr, "\n")
 		for _, line := range lines {
-			if strings.Contains(line, "|") && strings.Contains(line, "true") {
-				parts := strings.Split(line, "|")
-				if len(parts) >= 4 {
-					username := strings.TrimSpace(parts[3])
-					if username != "" && username != "USER" {
-						return true, username, nil
+			// 跳过表头和分隔线
+			if strings.Contains(line, "NAME") || strings.Contains(line, "──") || strings.Contains(line, "┌") || strings.Contains(line, "└") {
+				continue
+			}
+			// 检查包含实际数据的行
+			if strings.Contains(line, "│") || strings.Contains(line, "|") {
+				// 统一处理不同的分隔符
+				normalizedLine := strings.ReplaceAll(line, "│", "|")
+				parts := strings.Split(normalizedLine, "|")
+				
+				// 检查是否是表头行
+				if strings.Contains(line, "USER") || strings.Contains(line, "#") {
+					continue
+				}
+				
+				// 旧格式: | # | URL | USER | ACTIVE |
+				// 新格式: │ NAME │ URL │ SSH HOST │ USER │ DEFAULT │
+				if len(parts) >= 5 {
+					// 查找USER列的位置
+					userIndex := -1
+					if strings.Contains(outputStr, "SSH HOST") { // 新格式
+						userIndex = 4 // parts[0]空, parts[1]NAME, parts[2]URL, parts[3]SSH HOST, parts[4]USER
+					} else if strings.Contains(outputStr, "ACTIVE") { // 旧格式
+						userIndex = 3 // parts[0]空, parts[1]#, parts[2]URL, parts[3]USER, parts[4]ACTIVE
+					}
+					
+					if userIndex > 0 && userIndex < len(parts) {
+						username := strings.TrimSpace(parts[userIndex])
+						if username != "" && username != "USER" {
+							return true, username, nil
+						}
 					}
 				}
 			}
@@ -167,7 +208,7 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 		},
 		"gitea": {
 			name:       "tea",
-			versionCmd: "version",
+			versionCmd: "--version",
 			authCmd:    "login",
 			authArgs:   []string{"list"},
 		},
