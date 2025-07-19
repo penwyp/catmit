@@ -132,7 +132,7 @@ func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, e
 	})
 	
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.ErrTypeUnknown, "failed to walk AST", err)
 	}
 	
 	// 保存最后一个章节

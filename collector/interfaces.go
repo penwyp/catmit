@@ -19,7 +19,7 @@ import (
 //	reader := collector.New(runner)
 //	diff, err := reader.StagedDiff(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to get staged diff: %w", err)
+//		return errors.Wrap(err, "failed to get staged diff")
 //	}
 type GitReader interface {
 	// StagedDiff returns staged changes (equivalent to `git diff --cached`)
@@ -87,7 +87,7 @@ type ChangesSummary struct {
 //	analyzer := collector.New(runner)
 //	summary, err := analyzer.AnalyzeChanges(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to analyze changes: %w", err)
+//		return errors.Wrap(err, "failed to analyze changes")
 //	}
 //	fmt.Printf("Primary change type: %s\n", summary.PrimaryChangeType)
 type ChangeAnalyzer interface {
@@ -114,7 +114,7 @@ type ChangeAnalyzer interface {
 //	provider := collector.New(runner)
 //	untracked, err := provider.UntrackedFiles(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to get untracked files: %w", err)
+//		return errors.Wrap(err, "failed to get untracked files")
 //	}
 //	for _, file := range untracked {
 //		content, err := provider.UntrackedFileContent(ctx, file)

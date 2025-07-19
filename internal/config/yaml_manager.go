@@ -176,7 +176,7 @@ func (m *yamlConfigManager) CreateDefaultConfig() error {
 	// Add comment header for YAML files
 	if m.format == FormatYAML {
 		if err := m.saveWithHeader(defaultConfig); err != nil {
-			return err
+			return errors.Wrap(errors.ErrTypeConfig, "failed to save config with header", err)
 		}
 		return nil
 	}

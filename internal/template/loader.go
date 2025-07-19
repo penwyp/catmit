@@ -167,7 +167,7 @@ func (l *FileLoader) loadSingleTemplate(relativePath string) (*Template, error) 
 	
 	// 检查文件是否存在
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return nil, err
+		return nil, errors.Wrapf(errors.ErrTypeConfig, "template file not found: %s", err, fullPath)
 	}
 	
 	// 读取文件内容
@@ -196,7 +196,7 @@ func (l *FileLoader) loadGlobTemplates(pattern string) ([]*Template, error) {
 	// 获取匹配的文件
 	matches, err := filepath.Glob(fullPattern)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to match template files", err)
 	}
 	
 	var templates []*Template
@@ -303,7 +303,7 @@ func (c *CachedLoader) Load(ctx context.Context, provider string) (*Template, er
 	// 从底层加载器加载
 	tmpl, err := c.loader.Load(ctx, provider)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load template from underlying loader", err)
 	}
 	
 	// 存入缓存

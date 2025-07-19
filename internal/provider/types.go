@@ -2,7 +2,7 @@ package provider
 
 import (
 	"context"
-	"errors"
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // RemoteInfo 包含解析后的Git remote信息
@@ -38,5 +38,5 @@ type HTTPProber interface {
 
 // 错误定义
 var (
-	ErrProbeTimeout = errors.New("probe timeout")
+	ErrProbeTimeout = errors.NewRetryable(errors.ErrTypeTimeout, "probe timeout")
 )

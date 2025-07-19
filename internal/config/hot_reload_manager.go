@@ -97,7 +97,7 @@ func (m *HotReloadManager) Load() (*Config, error) {
 func (m *HotReloadManager) Save(config *Config) error {
 	// Save to disk
 	if err := m.baseManager.Save(config); err != nil {
-		return err
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save config to disk", err)
 	}
 	
 	// Update in-memory cache
@@ -112,7 +112,7 @@ func (m *HotReloadManager) Save(config *Config) error {
 // CreateDefaultConfig creates the default config
 func (m *HotReloadManager) CreateDefaultConfig() error {
 	if err := m.baseManager.CreateDefaultConfig(); err != nil {
-		return err
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create default config", err)
 	}
 	
 	// Reload after creation
@@ -131,7 +131,7 @@ func (m *HotReloadManager) CreateDefaultConfig() error {
 func (m *HotReloadManager) UpdateRemote(host string, config RemoteConfig) error {
 	// Update on disk
 	if err := m.baseManager.UpdateRemote(host, config); err != nil {
-		return err
+		return errors.Wrap(errors.ErrTypeConfig, "failed to update remote config", err)
 	}
 	
 	// Reload to update cache

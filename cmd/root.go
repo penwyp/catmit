@@ -736,7 +736,7 @@ func run(cmd *cobra.Command, args []string) error {
 				cmd.SilenceErrors = true
 				errors.HandleFatal(err)
 			}
-			return err
+			return errors.Wrap(errors.ErrTypeGit, "failed to process diff", err)
 		}
 		builder := promptProvider(flagLang)
 		systemPrompt := builder.BuildSystemPrompt()
@@ -759,7 +759,7 @@ func run(cmd *cobra.Command, args []string) error {
 		defer apiCancel()
 		message, err := cli.GetCommitMessage(apiCtx, systemPrompt, userPrompt)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.ErrTypeLLM, "failed to get commit message from LLM", err)
 		}
 
 		if flagDryRun {
@@ -772,11 +772,11 @@ func run(cmd *cobra.Command, args []string) error {
 		// Only stage all if there are no staged changes and flagStageAll is true
 		if flagStageAll && !hasStagedChanges(ctx) {
 			if err := stageAll(ctx); err != nil {
-				return err
+				return errors.Wrap(errors.ErrTypeGit, "failed to stage all files", err)
 			}
 		}
 		if err := committer.Commit(ctx, message); err != nil {
-			return err
+			return errors.Wrap(errors.ErrTypeGit, "failed to commit", err)
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Committed successfully", true))
 		if flagPush {
@@ -854,7 +854,7 @@ func run(cmd *cobra.Command, args []string) error {
 	
 	finalModel, err := tea.NewProgram(mainModel).Run()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.ErrTypeUnknown, "failed to run TUI", err)
 	}
 
 	m, ok := finalModel.(*ui.MainModel)
@@ -879,7 +879,7 @@ func run(cmd *cobra.Command, args []string) error {
 		if err == context.Canceled {
 			return nil
 		}
-		return err
+		return errors.Wrap(errors.ErrTypeUnknown, "TUI execution failed", err)
 	}
 	
 	if done {
