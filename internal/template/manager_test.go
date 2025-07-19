@@ -69,7 +69,8 @@ Closes #{{.IssueNumber}}
 			validate: func(t *testing.T, tmpl *Template) {
 				assert.Equal(t, "github", tmpl.Provider)
 				assert.Contains(t, tmpl.Content, "## Description")
-				assert.Len(t, tmpl.Sections, 2)
+				assert.Len(t, tmpl.Sections, 3)
+				assert.Contains(t, tmpl.Sections, "Pull Request")
 				assert.Contains(t, tmpl.Sections, "Description")
 				assert.Contains(t, tmpl.Sections, "Checklist")
 			},
@@ -250,7 +251,14 @@ func TestFindRepositoryRoot(t *testing.T) {
 	
 	root, err := FindRepositoryRoot()
 	assert.NoError(t, err)
-	assert.Equal(t, tmpDir, root)
+	
+	// Resolve symlinks for comparison
+	expectedPath, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	actualPath, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	
+	assert.Equal(t, expectedPath, actualPath)
 	
 	// 测试不在git仓库中
 	noGitDir, err := os.MkdirTemp("", "no-git-*")

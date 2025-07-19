@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -344,4 +345,39 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// setupGitRepo initializes a git repository in the given directory
+func setupGitRepo(dir string) error {
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	
+	// Configure user
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = dir
+	return cmd.Run()
+}
+
+// runCommand runs a command in the current directory
+func runCommand(t *testing.T, command string, args ...string) {
+	cmd := exec.Command(command, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v failed: %v\nOutput: %s", command, args, err, out)
+	}
+}
+
+// isCommandAvailable checks if a command is available in PATH
+func isCommandAvailable(command string) bool {
+	_, err := exec.LookPath(command)
+	return err == nil
 }

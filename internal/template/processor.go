@@ -437,8 +437,10 @@ func (p *TemplateProcessor) fillChecklist(content string, data *TemplateData) st
 		shouldCheck := false
 		
 		switch {
-		case strings.Contains(lower, "test") && data.TestsAdded:
-			shouldCheck = true
+		case strings.Contains(lower, "test"):
+			if data.TestsAdded && (strings.Contains(lower, "added") || strings.Contains(lower, "write") || strings.Contains(lower, "written")) {
+				shouldCheck = true
+			}
 		case strings.Contains(lower, "doc") && data.DocsUpdated:
 			shouldCheck = true
 		case strings.Contains(lower, "breaking") && !data.BreakingChange:

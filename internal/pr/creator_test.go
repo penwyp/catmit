@@ -119,6 +119,7 @@ func TestPRCreator_Create(t *testing.T) {
 			setupMocks: func(git *MockGitRunner, providerDetector *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
 				// Git operations
 				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
 				
 				// Provider detection
 				remoteInfo := provider.RemoteInfo{Provider: "github", Host: "github.com", Owner: "owner", Repo: "repo"}
@@ -229,6 +230,7 @@ func TestPRCreator_Create(t *testing.T) {
 			},
 			setupMocks: func(git *MockGitRunner, providerDetector *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
 				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
 				
 				remoteInfo := provider.RemoteInfo{Provider: "github", Host: "github.com"}
 				providerDetector.On("DetectFromRemote", mock.Anything, "https://github.com/owner/repo.git").Return(remoteInfo, nil)

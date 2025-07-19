@@ -146,7 +146,17 @@ func (l *FileLoader) ListTemplates(ctx context.Context, provider string) ([]*Tem
 		}
 	}
 	
-	return allTemplates, nil
+	// 去重：基于文件路径去重
+	seen := make(map[string]bool)
+	var uniqueTemplates []*Template
+	for _, tmpl := range allTemplates {
+		if !seen[tmpl.Path] {
+			seen[tmpl.Path] = true
+			uniqueTemplates = append(uniqueTemplates, tmpl)
+		}
+	}
+	
+	return uniqueTemplates, nil
 }
 
 // loadSingleTemplate 加载单个模板文件

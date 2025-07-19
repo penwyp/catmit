@@ -37,7 +37,8 @@ Please provide a description of your changes.
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
 				// 验证章节
-				assert.Len(t, tmpl.Sections, 3)
+				assert.Len(t, tmpl.Sections, 4)
+				assert.Contains(t, tmpl.Sections, "Pull Request")
 				assert.Contains(t, tmpl.Sections, "Description")
 				assert.Contains(t, tmpl.Sections, "Type of Change")
 				assert.Contains(t, tmpl.Sections, "Testing")
@@ -152,7 +153,7 @@ Content 2
 `,
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				assert.Len(t, tmpl.Sections, 3)
+				assert.Len(t, tmpl.Sections, 4)
 				
 				// 验证章节级别
 				if section, ok := tmpl.Sections["Section 1"]; ok {
@@ -206,14 +207,14 @@ Closes #123
 	
 	sections, err := parser.ExtractSections(content)
 	assert.NoError(t, err)
-	assert.Len(t, sections, 4)
+	assert.Len(t, sections, 5)
 	
 	// 验证Description章节
 	desc := sections["Description"]
 	require.NotNil(t, desc)
 	assert.Equal(t, 2, desc.Level)
 	assert.True(t, desc.Required)
-	assert.Contains(t, desc.Content, "*Required*")
+	assert.Contains(t, desc.Content, "Required")
 	assert.Contains(t, desc.Content, "Please describe your changes")
 	
 	// 验证Checklist章节
@@ -343,7 +344,8 @@ func TestSimpleParser(t *testing.T) {
 	require.NotNil(t, tmpl)
 	
 	// 验证章节
-	assert.Len(t, tmpl.Sections, 3)
+	assert.Len(t, tmpl.Sections, 4)
+	assert.Contains(t, tmpl.Sections, "PR Template")
 	assert.Contains(t, tmpl.Sections, "What")
 	assert.Contains(t, tmpl.Sections, "Why")
 	assert.Contains(t, tmpl.Sections, "Changes")

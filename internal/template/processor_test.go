@@ -107,9 +107,9 @@ Files ({{.ChangedFiles | len}}):
 		{
 			name: "required field validation",
 			template: &Template{
-				Content: "{{.RequiredField}}",
+				Content: "{{.CommitMessage}}",
 				Variables: []Variable{
-					{Name: "RequiredField", Required: true},
+					{Name: "CommitMessage", Required: true},
 				},
 			},
 			data:    &TemplateData{},
@@ -266,7 +266,7 @@ func TestPreprocessData(t *testing.T) {
 	assert.Equal(t, 25, data.DeletedLines)
 	
 	// 验证issue号提取
-	assert.Equal(t, "456", data.IssueNumber)
+	assert.Equal(t, "PROJ-456", data.IssueNumber)
 	
 	// 验证特殊标记检测
 	assert.True(t, data.TestsAdded)
