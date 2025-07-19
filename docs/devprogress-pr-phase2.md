@@ -3,7 +3,7 @@
 **开始时间**: 2025-01-17  
 **当前状态**: Week 1-2 基础设施改进已完成  
 **最后更新**: 2025-01-19  
-**完成进度**: 5/10 核心模块 (50%)
+**完成进度**: 6/10 核心模块 (60%)
 
 ---
 
@@ -17,7 +17,7 @@
 | 错误处理优化 | 100% | 完成 | ✅统一错误框架 ✅友好提示 ✅重试机制 |
 | TUI 交互增强 | 100% | 完成 | ✅PR预览界面 ✅进度显示 ✅交互优化 |
 | 多 Provider 支持 | 80% | 进行中 | ✅基础架构 ✅Gitea完整支持 ✅GitLab支持 ⏳Bitbucket支持 |
-| PR 模板支持 | 0% | 待开始 | 检测和填充PR模板 |
+| PR 模板支持 | 100% | 完成 | ✅模板检测 ✅模板解析 ✅变量替换 ✅集成到PR创建流程 |
 | Fork 工作流支持 | 0% | 待开始 | 跨仓库PR支持 |
 | 测试覆盖提升 | 0% | 待开始 | 补充单元测试，E2E场景 |
 | 文档完善 | 0% | 待开始 | 用户指南，配置示例 |
@@ -136,11 +136,21 @@
 - ✅ 存在第三方工具但不够成熟和标准化
 - ⏳ 考虑暂缓 Bitbucket CLI 支持，或使用 API 直接实现
 
+##### PR 模板支持完成
+- ✅ 创建 internal/template 包
+- ✅ 实现模板加载器（支持多provider路径）
+- ✅ 实现模板解析器（支持Markdown和多种变量格式）
+- ✅ 实现模板处理器（智能变量替换和自动填充）
+- ✅ 集成到 pr.Creator 中
+- ✅ 更新 UI 显示模板使用状态
+- ✅ 添加 --pr-template 参数（默认启用）
+- ✅ 编写完整的单元测试和E2E测试
+
 #### 下一步计划
 1. 完善文档说明配置文件位置
-2. 实现 PR 模板支持
-3. 添加 Fork 工作流支持
-4. 提升测试覆盖率
+2. 添加 Fork 工作流支持
+3. 提升测试覆盖率
+4. 编写用户指南
 
 ---
 
@@ -185,26 +195,42 @@
 - `internal/errors/handler_test.go` - 错误处理器测试
 - `ui/pr_preview.go` - PR 预览 UI 组件
 - `ui/pr_preview_test.go` - PR 预览组件测试
+- `internal/template/types.go` - 模板类型定义
+- `internal/template/loader.go` - 模板加载器
+- `internal/template/parser.go` - 模板解析器
+- `internal/template/processor.go` - 模板处理器
+- `internal/template/manager.go` - 模板管理器
+- `internal/template/*_test.go` - 模板包测试文件
+- `test/e2e/pr_template_test.go` - PR模板E2E测试
 
 ### 修改文件
 - `cmd/root.go` - 主要变更：
   - 集成 ConfigDetector 替换 defaultProviderDetector
   - 添加新的 PR 相关参数（--pr, --pr-remote 等）
+  - 添加 --pr-template 参数（默认启用）
   - 重构 defaultCommitter 使用 pr.Creator
   - 实现完整的 GitRunner 接口
   - 添加 CheckMinVersion 到 CLIDetector
   - 使用 ui.PRConfig 传递 PR 配置
   - 修正配置路径为统一使用 ~/.config/catmit/providers.yaml
+  - 集成模板管理器到 PR 创建流程
 - `internal/provider/config_detector.go` - 增强 provider 检测模式
 - `ui/main_model.go` - 主要变更：
   - 添加 PhasePRPreview 阶段
-  - 添加 PRConfig 结构和相关字段
+  - 添加 PRConfig 结构和相关字段（包括UseTemplate）
   - 实现 NewMainModelWithPRConfig 构造函数
   - 添加 preparePRPreview 和 renderPRPreviewContent 方法
   - 集成 PR 预览流程到交互逻辑
+  - 添加模板支持相关字段
 - `internal/pr/command_builder.go` - 添加 GitLab MR 支持
-- `internal/pr/creator.go` - 添加 GitLab 解析和版本要求
+- `internal/pr/creator.go` - 主要变更：
+  - 添加 GitLab 解析和版本要求
+  - 添加 templateManager 字段
+  - 实现 WithTemplateManager 方法
+  - 集成模板处理到 Create 方法
+- `internal/pr/types.go` - 添加 UseTemplate 和 TemplateData 字段到 CreateOptions
 - `internal/cli/detector.go` - 添加 GitLab CLI 检测和认证
+- `ui/pr_preview.go` - 添加模板相关字段和显示逻辑
 
 ### 测试文件
 - `internal/pr/command_builder_gitlab_test.go` - GitLab 命令构建器测试

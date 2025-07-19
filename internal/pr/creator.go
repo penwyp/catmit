@@ -7,6 +7,7 @@ import (
 
 	"github.com/penwyp/catmit/internal/cli"
 	"github.com/penwyp/catmit/internal/provider"
+	"github.com/penwyp/catmit/internal/template"
 )
 
 // ErrPRAlreadyExists is returned when a PR already exists for the branch
@@ -64,6 +65,7 @@ type Creator struct {
 	cliDetector      CLIDetector
 	commandBuilder   CommandBuilderInterface
 	commandRunner    CommandRunner
+	templateManager  template.Manager // 可选的模板管理器
 }
 
 // NewCreator 创建新的PR创建器
@@ -81,6 +83,12 @@ func NewCreator(
 		commandBuilder:   commandBuilder,
 		commandRunner:    commandRunner,
 	}
+}
+
+// WithTemplateManager 设置模板管理器
+func (c *Creator) WithTemplateManager(tm template.Manager) *Creator {
+	c.templateManager = tm
+	return c
 }
 
 // Create 创建PR
@@ -148,12 +156,56 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 
 	// 获取当前分支（如果需要）
 	var headBranch string
-	if options.HeadBranch == "" && remoteInfo.Provider == "gitea" {
+	if options.HeadBranch == "" {
 		headBranch, err = c.git.GetCurrentBranch(ctx)
 		if err != nil {
 			return "", fmt.Errorf("failed to get current branch: %w", err)
 		}
-		options.HeadBranch = headBranch
+		if remoteInfo.Provider == "gitea" {
+			options.HeadBranch = headBranch
+		}
+	} else {
+		headBranch = options.HeadBranch
+	}
+
+	// 处理模板（如果启用）
+	if options.UseTemplate && c.templateManager != nil {
+		// 尝试加载模板
+		tmpl, err := c.templateManager.LoadTemplate(ctx, &remoteInfo)
+		if err == nil {
+			// 如果成功加载模板，准备模板数据
+			templateData := options.TemplateData
+			if templateData == nil {
+				// 如果没有提供模板数据，创建基础数据
+				templateData = &template.TemplateData{
+					Branch:     headBranch,
+					BaseBranch: options.BaseBranch,
+					Remote:     options.Remote,
+					RepoOwner:  remoteInfo.Owner,
+					RepoName:   remoteInfo.Repo,
+				}
+				
+				// 如果有标题和描述，使用它们
+				if options.Title != "" {
+					templateData.CommitTitle = options.Title
+				}
+				if options.Body != "" {
+					templateData.CommitMessage = options.Body
+					templateData.CommitBody = options.Body
+				}
+			}
+			
+			// 处理模板
+			processedBody, err := c.templateManager.ProcessTemplate(ctx, tmpl, templateData)
+			if err == nil {
+				// 成功处理，使用模板生成的内容
+				options.Body = processedBody
+				// 如果模板中包含标题，可能需要从中提取
+				// 但通常标题是单独的字段
+			}
+			// 如果模板处理失败，继续使用原始内容
+		}
+		// 如果模板加载失败，继续使用原始内容
 	}
 
 	// 构建PR选项

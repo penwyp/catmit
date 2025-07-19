@@ -81,15 +81,20 @@ type MainModel struct {
 
 	// UI样式
 	styles UIStyles
+	
+	// 模板相关
+	useTemplate    bool   // 是否尝试使用模板
+	templateData   interface{} // 模板数据
 }
 
 // PRConfig PR配置
 type PRConfig struct {
-	CreatePR bool
-	Remote   string
-	Base     string
-	Draft    bool
-	Provider string
+	CreatePR    bool
+	Remote      string
+	Base        string
+	Draft       bool
+	Provider    string
+	UseTemplate bool // 是否使用模板
 }
 
 // NewMainModel 创建新的统一模型
@@ -155,6 +160,7 @@ func NewMainModelWithPRConfig(
 		prBase:         prConfig.Base,
 		prDraft:        prConfig.Draft,
 		prProvider:     prConfig.Provider,
+		useTemplate:    prConfig.UseTemplate,
 		terminalWidth:  80,
 		terminalHeight: 24,
 		showDuration:   1500 * time.Millisecond,

@@ -22,6 +22,7 @@ import (
 	"github.com/penwyp/catmit/internal/logger"
 	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/internal/provider"
+	"github.com/penwyp/catmit/internal/template"
 	"github.com/penwyp/catmit/prompt"
 	"github.com/penwyp/catmit/ui"
 	"github.com/spf13/cobra"
@@ -123,6 +124,8 @@ func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byt
 // defaultCommitter 使用 git commit -m 执行提交。
 type defaultCommitter struct {
 	prCreator *pr.Creator
+	ctx       context.Context
+	message   string   // 保存commit message用于模板
 }
 
 // newDefaultCommitter creates a new defaultCommitter with PR support
@@ -143,6 +146,16 @@ func newDefaultCommitter() *defaultCommitter {
 		commandBuilder,
 		commandRunner,
 	)
+	
+	// 如果启用了模板支持，添加模板管理器
+	if flagPRTemplate {
+		// 获取仓库根目录
+		repoRoot, err := template.FindRepositoryRoot()
+		if err == nil {
+			templateManager := template.NewDefaultManager(repoRoot)
+			prCreator.WithTemplateManager(templateManager)
+		}
+	}
 	
 	return &defaultCommitter{
 		prCreator: prCreator,
@@ -171,6 +184,9 @@ func (r *defaultCommandRunner) Run(ctx context.Context, name string, args ...str
 }
 
 func (d *defaultCommitter) Commit(ctx context.Context, message string) error {
+	// 保存message和context用于后续PR创建
+	d.ctx = ctx
+	d.message = message
 	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -225,12 +241,35 @@ func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error
 		return "", catmitErrors.Wrap(catmitErrors.ErrTypePR, "PR creator not initialized", nil)
 	}
 	
+	// 准备模板数据（如果启用了模板）
+	var templateData *template.TemplateData
+	if flagPRTemplate && d.message != "" {
+		// 收集文件变更信息
+		col := collectorProvider()
+		changedFiles, _ := col.ChangedFiles(ctx)
+		branch, _ := col.BranchName(ctx)
+		changesSummary, _ := col.AnalyzeChanges(ctx)
+		
+		// 创建模板数据
+		templateData = template.CreateTemplateData(d.message, branch, changedFiles)
+		
+		// 丰富模板数据
+		if changesSummary != nil {
+			templateData.ChangesSummary = changesSummary.Summary
+			templateData.FilesCount = changesSummary.FilesChanged
+			templateData.AddedLines = changesSummary.Insertions
+			templateData.DeletedLines = changesSummary.Deletions
+		}
+	}
+	
 	// Build PR options from flags
 	options := pr.CreateOptions{
-		Remote:     flagPRRemote,
-		BaseBranch: flagPRBase,
-		Draft:      flagPRDraft,
-		Fill:       true, // Always use fill for now
+		Remote:       flagPRRemote,
+		BaseBranch:   flagPRBase,
+		Draft:        flagPRDraft,
+		Fill:         true, // Always use fill for now
+		UseTemplate:  flagPRTemplate,
+		TemplateData: templateData,
 	}
 	
 	// Create the PR
@@ -378,6 +417,7 @@ var (
 	flagPRBase     string
 	flagPRDraft    bool
 	flagPRProvider string
+	flagPRTemplate bool  // Enable PR template support
 )
 
 func init() {
@@ -398,6 +438,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flagPRBase, "pr-base", "", "base branch for pull request (defaults to provider's default branch)")
 	rootCmd.Flags().BoolVar(&flagPRDraft, "pr-draft", false, "create pull request as draft")
 	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
+	rootCmd.Flags().BoolVar(&flagPRTemplate, "pr-template", true, "use PR template if available")
 	
 	// Mark create-pr as deprecated
 	rootCmd.Flags().MarkDeprecated("create-pr", "use --pr instead")
@@ -846,11 +887,12 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// 交互模式：使用统一的MainModel
 	prConfig := ui.PRConfig{
-		CreatePR: isPRRequested(),
-		Remote:   flagPRRemote,
-		Base:     flagPRBase,
-		Draft:    flagPRDraft,
-		Provider: flagPRProvider,
+		CreatePR:    isPRRequested(),
+		Remote:      flagPRRemote,
+		Base:        flagPRBase,
+		Draft:       flagPRDraft,
+		Provider:    flagPRProvider,
+		UseTemplate: flagPRTemplate,
 	}
 	
 	mainModel := ui.NewMainModelWithPRConfig(

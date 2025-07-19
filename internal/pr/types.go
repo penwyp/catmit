@@ -1,5 +1,7 @@
 package pr
 
+import "github.com/penwyp/catmit/internal/template"
+
 // PROptions PR创建选项
 type PROptions struct {
 	// 通用字段
@@ -31,4 +33,8 @@ type CreateOptions struct {
 	Assignees  []string // 分配人
 	Reviewers  []string // 审查人
 	Fill       bool     // 使用--fill选项
+	
+	// 模板相关选项
+	UseTemplate   bool                   // 是否使用模板
+	TemplateData  *template.TemplateData // 模板数据（如果提供）
 }

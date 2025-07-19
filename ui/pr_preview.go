@@ -18,6 +18,10 @@ type PRPreviewData struct {
 	IsDraft     bool
 	HasChanges  bool
 	FileChanges []FileChange
+	
+	// 模板相关
+	UsingTemplate bool   // 是否使用了模板
+	TemplateName  string // 模板名称
 }
 
 // FileChange 表示文件变更信息
@@ -69,6 +73,16 @@ func (m *PRPreviewModel) View() string {
 	if m.data.IsDraft {
 		draftStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Yellow)
 		content.WriteString(m.renderInfoLine("Status", "Draft", draftStyle))
+	}
+	
+	// 显示是否使用了模板
+	if m.data.UsingTemplate {
+		templateStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Blue)
+		templateName := m.data.TemplateName
+		if templateName == "" {
+			templateName = "Default"
+		}
+		content.WriteString(m.renderInfoLine("Template", templateName, templateStyle))
 	}
 	
 	content.WriteString("\n")
