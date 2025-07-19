@@ -98,19 +98,21 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 		if err != nil && strings.Contains(outputStr, "not logged") {
 			return false, "", nil
 		}
-		// 提取用户名
-		userPattern := regexp.MustCompile(`Logged in to .+ as (\w+)`)
+		// 新的输出格式: "✓ Logged in to github.com account username (keyring)"
+		userPattern := regexp.MustCompile(`Logged in to .+ account (\w+)`)
 		matches := userPattern.FindStringSubmatch(outputStr)
 		if len(matches) > 1 {
 			return true, matches[1], nil
 		}
+		// 旧的输出格式: "Logged in to github.com as username"
+		userPattern2 := regexp.MustCompile(`Logged in to .+ as (\w+)`)
+		matches2 := userPattern2.FindStringSubmatch(outputStr)
+		if len(matches2) > 1 {
+			return true, matches2[1], nil
+		}
+		// 如果找到 "✓ Logged in" 但没有匹配到用户名，仍然认为已认证
 		if strings.Contains(outputStr, "✓") && strings.Contains(outputStr, "Logged in") {
-			// 尝试另一种模式
-			userPattern2 := regexp.MustCompile(`as (\w+)`)
-			matches2 := userPattern2.FindStringSubmatch(outputStr)
-			if len(matches2) > 1 {
-				return true, matches2[1], nil
-			}
+			return true, "", nil
 		}
 	}
 	
