@@ -130,6 +130,16 @@
 - ✅ 配置文件包含默认的 GitHub、GitLab、Bitbucket、Gitea 映射
 - ✅ 用户可以手动添加自定义 Git 服务器映射（如 git.pingcap.net → gitea）
 
+##### 配置热加载实现（2025-01-19 晚上）
+- ✅ 创建 HotReloadManager 包装现有配置管理器
+- ✅ 使用 fsnotify 监听配置文件变化
+- ✅ 实现去抖动机制（100ms）避免频繁重载
+- ✅ 支持配置变更回调通知
+- ✅ 线程安全的配置访问（atomic.Value）
+- ✅ 优雅处理文件删除和无效配置
+- ✅ 完整的单元测试覆盖（8个测试场景）
+- ✅ 集成到 cmd/root.go 中的 defaultProviderDetector
+
 ##### Bitbucket 支持研究
 - ✅ 研究了 Bitbucket CLI 工具选项
 - ✅ 发现没有官方的 Bitbucket CLI 工具（类似 gh/glab/tea）
@@ -166,7 +176,7 @@
 - [x] 实现 ~/.config/catmit/providers.yaml 的创建和管理
 - [x] 支持原子写入和并发保护
 - [x] 提供默认配置模板
-- [ ] 实现配置热加载（低优先级）
+- [x] 实现配置热加载（使用 fsnotify 文件监听）
 
 ### CLI 参数对齐
 - [x] 将 --create-pr 改为 -c/--pr（保持向后兼容）
@@ -189,6 +199,8 @@
 - `internal/provider/config_detector_test.go` - ConfigDetector 单元测试
 - `internal/config/yaml_manager.go` - YAML/JSON 配置管理器
 - `internal/config/yaml_manager_test.go` - 配置管理器测试
+- `internal/config/hot_reload_manager.go` - 配置热加载管理器
+- `internal/config/hot_reload_manager_test.go` - 热加载管理器测试
 - `internal/errors/errors.go` - 统一错误处理框架
 - `internal/errors/errors_test.go` - 错误框架单元测试
 - `internal/errors/handler.go` - 错误处理器实现
@@ -214,6 +226,7 @@
   - 使用 ui.PRConfig 传递 PR 配置
   - 修正配置路径为统一使用 ~/.config/catmit/providers.yaml
   - 集成模板管理器到 PR 创建流程
+  - 集成 HotReloadManager 实现配置热加载
 - `internal/provider/config_detector.go` - 增强 provider 检测模式
 - `ui/main_model.go` - 主要变更：
   - 添加 PhasePRPreview 阶段

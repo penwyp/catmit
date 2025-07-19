@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -255,10 +256,9 @@ func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error
 		
 		// 丰富模板数据
 		if changesSummary != nil {
-			templateData.ChangesSummary = changesSummary.Summary
-			templateData.FilesCount = changesSummary.FilesChanged
-			templateData.AddedLines = changesSummary.Insertions
-			templateData.DeletedLines = changesSummary.Deletions
+			// TODO: Map changesSummary fields to templateData when template.TemplateData is updated
+			// For now, we have basic data from CreateTemplateData
+			templateData.FilesCount = changesSummary.TotalChangedFiles
 		}
 	}
 	
@@ -531,6 +531,7 @@ func (d *defaultGitRunner) GetDefaultBranch(ctx context.Context, remote string) 
 // defaultProviderDetector implements ProviderDetector for auth command
 type defaultProviderDetector struct {
 	configDetector *provider.ConfigDetector
+	hotReloadManager *config.HotReloadManager
 }
 
 // newDefaultProviderDetector creates a provider detector with config support
@@ -561,8 +562,27 @@ func newDefaultProviderDetector() *defaultProviderDetector {
 		}
 	}
 	
+	var hotReloadManager *config.HotReloadManager
+	if configManager != nil {
+		// Wrap with hot reload capability
+		hotReloadManager, err = config.NewHotReloadManager(configManager, configPath)
+		if err != nil {
+			// Fall back to regular config manager
+			log.Printf("Failed to enable config hot reload: %v", err)
+			hotReloadManager = nil
+		} else {
+			// Set up a callback to log config changes
+			hotReloadManager.OnConfigChange(func(cfg *config.Config) {
+				log.Printf("Configuration reloaded from %s", configPath)
+			})
+			// Use hot reload manager as the config manager
+			configManager = hotReloadManager
+		}
+	}
+	
 	return &defaultProviderDetector{
 		configDetector: provider.NewConfigDetector(configManager),
+		hotReloadManager: hotReloadManager,
 	}
 }
 
