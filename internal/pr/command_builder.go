@@ -21,6 +21,8 @@ func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (strin
 		return b.BuildGitHubPRCommand(options)
 	case "gitea":
 		return b.BuildGiteaPRCommand(options)
+	case "gitlab":
+		return b.BuildGitLabMRCommand(options)
 	default:
 		return "", nil, fmt.Errorf("unsupported provider: %s", provider)
 	}
@@ -143,4 +145,79 @@ func (b *CommandBuilder) ParseGiteaPROutput(output string) (string, error) {
 		return matches[0], nil
 	}
 	return "", fmt.Errorf("no PR URL found in output")
+}
+
+// BuildGitLabMRCommand 构建GitLab CLI的MR创建命令
+func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []string, error) {
+	// 验证必需字段
+	if options.BaseBranch == "" {
+		return "", nil, fmt.Errorf("base branch is required")
+	}
+
+	args := []string{"mr", "create"}
+
+	// 如果使用fill选项，只需提供基础分支
+	if options.Fill {
+		args = append(args, "--fill")
+		args = append(args, "--target-branch", options.BaseBranch)
+		if options.Draft {
+			args = append(args, "--draft")
+		}
+		// Remove WIP prefix by default
+		args = append(args, "--remove-source-branch=false")
+		return "glab", args, nil
+	}
+
+	// 标题和描述
+	if options.Title != "" {
+		args = append(args, "--title", options.Title)
+	}
+	if options.Body != "" {
+		args = append(args, "--description", options.Body)
+	}
+
+	// 目标分支
+	args = append(args, "--target-branch", options.BaseBranch)
+
+	// 草稿状态
+	if options.Draft {
+		args = append(args, "--draft")
+	}
+
+	// 分配人
+	if len(options.Assignees) > 0 {
+		args = append(args, "--assignee", strings.Join(options.Assignees, ","))
+	}
+
+	// 标签
+	if len(options.Labels) > 0 {
+		args = append(args, "--label", strings.Join(options.Labels, ","))
+	}
+
+	// 审查人
+	if len(options.Reviewers) > 0 {
+		// GitLab uses --reviewer for reviewers
+		args = append(args, "--reviewer", strings.Join(options.Reviewers, ","))
+	}
+
+	// 里程碑
+	if options.Milestone != "" {
+		args = append(args, "--milestone", options.Milestone)
+	}
+
+	// Don't remove source branch by default
+	args = append(args, "--remove-source-branch=false")
+
+	return "glab", args, nil
+}
+
+// ParseGitLabMROutput 解析glab CLI的输出获取MR URL
+func (b *CommandBuilder) ParseGitLabMROutput(output string) (string, error) {
+	// GitLab MR URL的正则表达式
+	urlRegex := regexp.MustCompile(`https?://[^\s]+/-/merge_requests/\d+`)
+	matches := urlRegex.FindStringSubmatch(output)
+	if len(matches) > 0 {
+		return matches[0], nil
+	}
+	return "", fmt.Errorf("no MR URL found in output")
 }

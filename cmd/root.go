@@ -494,16 +494,12 @@ type defaultProviderDetector struct {
 
 // newDefaultProviderDetector creates a provider detector with config support
 func newDefaultProviderDetector() *defaultProviderDetector {
-	// Initialize config manager with proper path
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		// Fallback to home directory
-		configDir = os.Getenv("HOME")
-		if configDir == "" {
-			configDir = "."
-		}
-		configDir = filepath.Join(configDir, ".config")
+	// Always use ~/.config for consistency across platforms
+	configDir := os.Getenv("HOME")
+	if configDir == "" {
+		configDir = "."
 	}
+	configDir = filepath.Join(configDir, ".config")
 	
 	// Use YAML format for better readability
 	configPath := filepath.Join(configDir, "catmit", "providers.yaml")

@@ -22,6 +22,7 @@ func (e *ErrPRAlreadyExists) Error() string {
 var minVersionRequirements = map[string]string{
 	"github": "2.0.0",
 	"gitea":  "0.8.0",
+	"gitlab": "1.0.0",
 }
 
 // GitRunner Git命令执行器接口
@@ -48,6 +49,7 @@ type CommandBuilderInterface interface {
 	BuildCommand(provider string, options PROptions) (string, []string, error)
 	ParseGitHubPROutput(output string) (string, error)
 	ParseGiteaPROutput(output string) (string, error)
+	ParseGitLabMROutput(output string) (string, error)
 }
 
 // CommandRunner 命令执行器接口
@@ -186,6 +188,8 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		prURL, parseErr = c.commandBuilder.ParseGitHubPROutput(outputStr)
 	case "gitea":
 		prURL, parseErr = c.commandBuilder.ParseGiteaPROutput(outputStr)
+	case "gitlab":
+		prURL, parseErr = c.commandBuilder.ParseGitLabMROutput(outputStr)
 	}
 
 	// 如果命令执行失败

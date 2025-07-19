@@ -57,6 +57,11 @@ func (m *MockCommandBuilder) ParseGiteaPROutput(output string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockCommandBuilder) ParseGitLabMROutput(output string) (string, error) {
+	args := m.Called(output)
+	return args.String(0), args.Error(1)
+}
+
 // MockGitRunner 模拟Git执行器
 type MockGitRunner struct {
 	mock.Mock

@@ -192,8 +192,6 @@ func TestE2E_PRCreation_GitHub(t *testing.T) {
 }
 
 func TestE2E_PRCreation_Gitea(t *testing.T) {
-	t.Skip("Skipping Gitea PR test - current implementation only supports GitHub. Full multi-provider support requires IMPL-011 completion.")
-	
 	bin := buildBinary(t)
 	
 	// Mock LLM server
@@ -221,17 +219,40 @@ func TestE2E_PRCreation_Gitea(t *testing.T) {
 	}))
 	defer giteaAPIServer.Close()
 	
-	// Mock Gitea CLI
-	teaMock := mockGiteaCLI(t, map[string]string{
-		"login list":                     "gitea.example.com (testuser)",
-		"pr create --base main":          "https://gitea.example.com/owner/repo/pulls/42",
-	})
+	// Mock Gitea CLI with more generic command matching
+	mockBin := filepath.Join(t.TempDir(), "tea")
+	script := `#!/bin/bash
+args="$@"
+echo "DEBUG: tea called with args: $args" >&2
+case "$args" in
+  "version")
+    echo 'tea version 0.9.0'
+    exit 0
+    ;;
+  "login list")
+    echo 'URL  | NAME    | DEFAULT | SSH KEY | USER    | ACCESS TOKEN'
+    echo 'gitea.example.com | Default | true    | false   | testuser | ****************'
+    exit 0
+    ;;
+  pr\ create*)
+    echo "https://gitea.example.com/owner/repo/pulls/42"
+    exit 0
+    ;;
+  *)
+    echo "Unknown command: $args" >&2
+    exit 1
+    ;;
+esac
+`
+	err := os.WriteFile(mockBin, []byte(script), 0755)
+	require.NoError(t, err)
 	
-	repo := setupPRTestRepo(t, giteaAPIServer.URL + "/owner/repo.git")
+	// Use a more realistic Gitea URL for provider detection
+	repo := setupPRTestRepo(t, "https://gitea.example.com/owner/repo.git")
 	
 	// Create a file and stage it
 	testFile := filepath.Join(repo, "auth_fix.go")
-	err := os.WriteFile(testFile, []byte("package auth\n\nfunc FixBug() {}\n"), 0644)
+	err = os.WriteFile(testFile, []byte("package auth\n\nfunc FixBug() {}\n"), 0644)
 	require.NoError(t, err)
 	
 	cmd := exec.Command("git", "add", "auth_fix.go")
@@ -245,7 +266,7 @@ func TestE2E_PRCreation_Gitea(t *testing.T) {
 	catmitCmd.Env = append(os.Environ(),
 		"CATMIT_LLM_API_KEY=test-key",
 		"CATMIT_LLM_API_URL="+llmServer.URL,
-		"PATH="+filepath.Dir(teaMock)+":"+os.Getenv("PATH"),
+		"PATH="+filepath.Dir(mockBin)+":"+os.Getenv("PATH"),
 	)
 	
 	var out bytes.Buffer

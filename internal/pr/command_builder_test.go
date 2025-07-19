@@ -262,8 +262,19 @@ func TestCommandBuilder_BuildCommand(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:     "Unknown provider",
+			name:     "GitLab provider",
 			provider: "gitlab",
+			options: PROptions{
+				Title:      "Test MR",
+				Body:       "Test body",
+				BaseBranch: "main",
+			},
+			expectedCmd:   "glab",
+			expectedError: false,
+		},
+		{
+			name:     "Unknown provider",
+			provider: "bitbucket",
 			options: PROptions{
 				Title:      "Test PR",
 				BaseBranch: "main",

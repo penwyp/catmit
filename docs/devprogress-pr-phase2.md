@@ -2,7 +2,7 @@
 
 **开始时间**: 2025-01-17  
 **当前状态**: Week 1-2 基础设施改进已完成  
-**最后更新**: 2025-01-17  
+**最后更新**: 2025-01-19  
 **完成进度**: 5/10 核心模块 (50%)
 
 ---
@@ -16,7 +16,7 @@
 | CLI 参数对齐 | 100% | 完成 | ✅--pr参数 ✅PR相关参数 ✅向后兼容 |
 | 错误处理优化 | 100% | 完成 | ✅统一错误框架 ✅友好提示 ✅重试机制 |
 | TUI 交互增强 | 100% | 完成 | ✅PR预览界面 ✅进度显示 ✅交互优化 |
-| 多 Provider 支持 | 20% | 进行中 | ✅基础架构 ⏳Gitea完整支持 ⏳GitLab支持 |
+| 多 Provider 支持 | 80% | 进行中 | ✅基础架构 ✅Gitea完整支持 ✅GitLab支持 ⏳Bitbucket支持 |
 | PR 模板支持 | 0% | 待开始 | 检测和填充PR模板 |
 | Fork 工作流支持 | 0% | 待开始 | 跨仓库PR支持 |
 | 测试覆盖提升 | 0% | 待开始 | 补充单元测试，E2E场景 |
@@ -106,10 +106,41 @@
 - ✅ 优化 PR 创建进度显示
 - ✅ 添加 PR 预览测试
 
+#### 2025-01-19 更新 (上午)
+
+##### Gitea Provider 支持完成
+- ✅ 修复并启用了 TestE2E_PRCreation_Gitea 测试
+- ✅ 确认 Gitea PR 创建功能已正常工作
+- ✅ tea CLI 集成测试通过
+- ✅ Provider 检测正确识别 Gitea 实例
+
+##### GitLab Provider 支持完成
+- ✅ 实现 BuildGitLabMRCommand 和 ParseGitLabMROutput
+- ✅ 添加 GitLab CLI (glab) 检测和认证支持
+- ✅ 更新 command builder 和 creator 以支持 GitLab
+- ✅ 添加完整的单元测试覆盖
+- ✅ 设置最小版本要求 (1.0.0)
+
+#### 2025-01-19 更新 (下午)
+
+##### 配置文件位置修正
+- ✅ 修正配置路径为所有平台统一使用: `~/.config/catmit/providers.yaml`
+- ✅ 移除了 os.UserConfigDir() 的使用，改为直接使用 HOME/.config
+- ✅ 确认配置文件自动创建功能正常工作
+- ✅ 配置文件包含默认的 GitHub、GitLab、Bitbucket、Gitea 映射
+- ✅ 用户可以手动添加自定义 Git 服务器映射（如 git.pingcap.net → gitea）
+
+##### Bitbucket 支持研究
+- ✅ 研究了 Bitbucket CLI 工具选项
+- ✅ 发现没有官方的 Bitbucket CLI 工具（类似 gh/glab/tea）
+- ✅ 存在第三方工具但不够成熟和标准化
+- ⏳ 考虑暂缓 Bitbucket CLI 支持，或使用 API 直接实现
+
 #### 下一步计划
-1. 完善多 Provider 支持（Gitea、GitLab）
+1. 完善文档说明配置文件位置
 2. 实现 PR 模板支持
-3. 提升测试覆盖率
+3. 添加 Fork 工作流支持
+4. 提升测试覆盖率
 
 ---
 
@@ -163,6 +194,7 @@
   - 实现完整的 GitRunner 接口
   - 添加 CheckMinVersion 到 CLIDetector
   - 使用 ui.PRConfig 传递 PR 配置
+  - 修正配置路径为统一使用 ~/.config/catmit/providers.yaml
 - `internal/provider/config_detector.go` - 增强 provider 检测模式
 - `ui/main_model.go` - 主要变更：
   - 添加 PhasePRPreview 阶段
@@ -170,9 +202,16 @@
   - 实现 NewMainModelWithPRConfig 构造函数
   - 添加 preparePRPreview 和 renderPRPreviewContent 方法
   - 集成 PR 预览流程到交互逻辑
+- `internal/pr/command_builder.go` - 添加 GitLab MR 支持
+- `internal/pr/creator.go` - 添加 GitLab 解析和版本要求
+- `internal/cli/detector.go` - 添加 GitLab CLI 检测和认证
 
 ### 测试文件
-- (待添加)
+- `internal/pr/command_builder_gitlab_test.go` - GitLab 命令构建器测试
+- `internal/pr/creator_test.go` - 更新以支持 GitLab
+- `internal/cli/detector_gitlab_test.go` - GitLab CLI 检测测试
+- `test/e2e/pr_test.go` - 更新 Gitea 测试
+- `test/e2e/pr_gitlab_test.go` - GitLab E2E 测试
 
 ---
 

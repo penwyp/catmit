@@ -118,6 +118,31 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 		}
 	}
 	
+	// glab CLI 认证检查
+	if cliName == "glab" {
+		if err != nil && strings.Contains(outputStr, "No accounts configured") {
+			return false, "", nil
+		}
+		// Check for checkmark indicating logged in
+		if strings.Contains(outputStr, "✓") && strings.Contains(outputStr, "Logged in to") {
+			// Extract username from pattern like "✓ Logged in to gitlab.com as username"
+			userPattern := regexp.MustCompile(`Logged in to .+ as (\w+)`)
+			matches := userPattern.FindStringSubmatch(outputStr)
+			if len(matches) > 1 {
+				return true, matches[1], nil
+			}
+			return true, "", nil
+		}
+		// Also check for pattern without checkmark
+		if strings.Contains(outputStr, "Logged in to") {
+			userPattern := regexp.MustCompile(`Logged in to .+ as (\w+)`)
+			matches := userPattern.FindStringSubmatch(outputStr)
+			if len(matches) > 1 {
+				return true, matches[1], nil
+			}
+		}
+	}
+	
 	if err != nil {
 		return false, "", fmt.Errorf("failed to check auth status: %w", err)
 	}
@@ -145,6 +170,12 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 			versionCmd: "version",
 			authCmd:    "login",
 			authArgs:   []string{"list"},
+		},
+		"gitlab": {
+			name:       "glab",
+			versionCmd: "version",
+			authCmd:    "auth",
+			authArgs:   []string{"status"},
 		},
 	}
 
