@@ -23,19 +23,18 @@
 //   // Get comprehensive diff including untracked files
 //   diff, err := collector.ComprehensiveDiff(ctx)
 //   if err != nil {
-//       return fmt.Errorf("failed to get diff: %w", err)
+//       return errors.Wrap(errors.ErrTypeGit, "failed to get diff", err)
 //   }
 //   
 //   // Analyze changes for commit message generation
 //   changes, err := collector.AnalyzeChanges(ctx)
 //   if err != nil {
-//       return fmt.Errorf("failed to analyze changes: %w", err)
+//       return errors.Wrap(errors.ErrTypeGit, "failed to analyze changes", err)
 //   }
 package collector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -43,6 +42,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // Runner 抽象出命令执行器，方便在单元测试中注入 Mock。
@@ -216,7 +217,7 @@ func (c *Collector) runWithCache(ctx context.Context, name string, args ...strin
 	
 	// Check if error indicates not being in a git repository
 	if err != nil && isNotGitRepositoryError(err) {
-		err = ErrNotGitRepository
+		err = errors.ErrNoGitRepo
 	}
 	
 	c.cache.Set(cacheKey, result, err)
@@ -316,16 +317,16 @@ func optimizeStringSlice(slice []string) []string {
 }
 
 // ErrNoDiff 表示当前仓库没有待提交的 diff。
-var ErrNoDiff = fmt.Errorf("nothing to commit")
+var ErrNoDiff = errors.New(errors.ErrTypeGit, "nothing to commit").WithSuggestion("使用 'git add' 暂存您的更改")
 
 // Enhanced error types for better error handling and categorization.
 // These provide semantic meaning to different types of failures.
 var (
-	ErrGitCommandFailed  = fmt.Errorf("git command failed")      // Generic git command failure
-	ErrInvalidRepository = fmt.Errorf("not a valid git repository") // Not in a git repo
-	ErrNotGitRepository  = fmt.Errorf("not a git repository")   // Current directory is not a git repository
-	ErrNetworkTimeout    = fmt.Errorf("network timeout")         // Network-related timeouts
-	ErrPermissionDenied  = fmt.Errorf("permission denied")      // Permission/access issues
+	ErrGitCommandFailed  = errors.New(errors.ErrTypeGit, "git command failed")
+	ErrInvalidRepository = errors.New(errors.ErrTypeGit, "not a valid git repository").WithSuggestion("请在 Git 仓库中运行此命令")
+	ErrNotGitRepository  = errors.ErrNoGitRepo // Use predefined error from framework
+	ErrNetworkTimeout    = errors.ErrNetworkTimeout // Use predefined error from framework
+	ErrPermissionDenied  = errors.New(errors.ErrTypeGit, "permission denied").WithSuggestion("检查文件和目录权限")
 )
 
 // GitError represents a structured error from git operations with rich context.
@@ -362,6 +363,11 @@ type GitError struct {
 func (e *GitError) Error() string {
 	return fmt.Sprintf("git command failed: %s %s (exit code: %d) - %s",
 		e.Command, strings.Join(e.Args, " "), e.ExitCode, e.Context)
+}
+
+// ToCatmitError converts GitError to CatmitError
+func (e *GitError) ToCatmitError() *errors.CatmitError {
+	return errors.Wrap(errors.ErrTypeGit, e.Error(), e.Cause)
 }
 
 // Unwrap returns the underlying error
@@ -411,7 +417,7 @@ func (c *Collector) runWithRetry(ctx context.Context, config *RetryConfig, name 
 		
 		// Check if error indicates not being in a git repository
 		if isNotGitRepositoryError(err) {
-			return nil, ErrNotGitRepository
+			return nil, errors.ErrNoGitRepo
 		}
 		
 		// Check if error is retryable
@@ -427,13 +433,14 @@ func (c *Collector) runWithRetry(ctx context.Context, config *RetryConfig, name 
 	}
 	
 	// Create enhanced error with context
-	return nil, &GitError{
+	gitErr := &GitError{
 		Command:   name,
 		Args:      args,
 		Cause:     lastErr,
 		Context:   fmt.Sprintf("failed after %d attempts", config.MaxRetries+1),
 		Timestamp: time.Now(),
 	}
+	return nil, gitErr.ToCatmitError()
 }
 
 // isRetryableError determines if an error is worth retrying
@@ -654,17 +661,17 @@ func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 // Phase 3 Enhancement: Added caching and memory optimization
 func (c *Collector) RecentCommits(ctx context.Context, n int) ([]string, error) {
 	if n <= 0 {
-		return nil, fmt.Errorf("n must be positive")
+		return nil, errors.New(errors.ErrTypeValidation, "n must be positive")
 	}
 	// 防止过大的 n 值导致性能问题
 	if n > 1000 {
-		return nil, fmt.Errorf("n too large, maximum is 1000")
+		return nil, errors.New(errors.ErrTypeValidation, "n too large, maximum is 1000")
 	}
 
 	// Use cached execution for better performance
 	out, err := c.runWithCache(ctx, "git", "log", "--pretty=format:%s", fmt.Sprintf("-n%d", n))
 	if err != nil {
-		return nil, fmt.Errorf("git log failed: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "git log failed", err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -703,12 +710,12 @@ func (c *Collector) BranchName(ctx context.Context) (string, error) {
 	// Use cached execution - branch name rarely changes during a session
 	out, err := c.runWithCache(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return "", fmt.Errorf("git rev-parse failed: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "git rev-parse failed", err)
 	}
 	branchName := strings.TrimSpace(string(out))
 	// 安全验证：确保分支名称格式合法
 	if !validBranchName.MatchString(branchName) {
-		return "", fmt.Errorf("invalid branch name format: %s", sanitizeOutput(branchName))
+		return "", errors.New(errors.ErrTypeValidation, fmt.Sprintf("invalid branch name format: %s", sanitizeOutput(branchName)))
 	}
 	return branchName, nil
 }
@@ -731,11 +738,11 @@ func (c *Collector) ChangedFiles(ctx context.Context) ([]string, error) {
 	
 	// Execute batch operations
 	batch.ExecuteBatch(ctx)
-	results, errors := batch.GetResults()
+	results, errs := batch.GetResults()
 	
 	// Check for errors in staged files
-	if errors[0] != nil {
-		return nil, fmt.Errorf("git diff --name-only failed: %w", errors[0])
+	if errs[0] != nil {
+		return nil, errors.Wrap(errors.ErrTypeGit, "git diff --name-only failed", errs[0])
 	}
 	
 	// Process staged files
@@ -743,7 +750,7 @@ func (c *Collector) ChangedFiles(ctx context.Context) ([]string, error) {
 	files := strings.Split(strings.TrimSpace(string(stagedOut)), "\n")
 	
 	// Process untracked files (ignore errors for untracked files)
-	if errors[1] == nil && len(results[1].([]byte)) > 0 {
+	if errs[1] == nil && len(results[1].([]byte)) > 0 {
 		untrackedOut := results[1].([]byte)
 		untrackedFiles := strings.Split(strings.TrimSpace(string(untrackedOut)), "\n")
 		files = append(files, untrackedFiles...)
@@ -764,12 +771,12 @@ func (c *Collector) ChangedFiles(ctx context.Context) ([]string, error) {
 func (c *Collector) FileStatusSummary(ctx context.Context) (*FileStatusSummary, error) {
 	out, err := c.runWithCache(ctx, "git", "status", "--porcelain", "-b")
 	if err != nil {
-		return nil, fmt.Errorf("git status --porcelain -b failed: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "git status --porcelain -b failed", err)
 	}
 	
 	summary, err := parseGitStatusPorcelain(string(out))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse git status output: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to parse git status output", err)
 	}
 	
 	return summary, nil
@@ -865,7 +872,7 @@ func (c *Collector) UnstagedDiff(ctx context.Context) (string, error) {
 func (c *Collector) executeDiffCommand(ctx context.Context, errMsg string, emptyErr error, name string, args ...string) (string, error) {
 	result, err := c.runWithCache(ctx, name, args...)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", errMsg, err)
+		return "", errors.Wrap(errors.ErrTypeGit, errMsg, err)
 	}
 	
 	resultStr := strings.TrimSpace(string(result))
@@ -892,7 +899,7 @@ func (c *Collector) GitStatus(ctx context.Context) (string, error) {
 func (c *Collector) AnalyzeChanges(ctx context.Context) (*ChangesSummary, error) {
 	summary, err := c.FileStatusSummary(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file status summary: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to get file status summary", err)
 	}
 	
 	changes := &ChangesSummary{
@@ -904,7 +911,7 @@ func (c *Collector) AnalyzeChanges(ctx context.Context) (*ChangesSummary, error)
 	// Get untracked files
 	untrackedFiles, err := c.UntrackedFiles(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get untracked files: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to get untracked files", err)
 	}
 	
 	// Process untracked files
@@ -988,7 +995,7 @@ func (c *Collector) AnalyzeChanges(ctx context.Context) (*ChangesSummary, error)
 func (c *Collector) GetPriorityFiles(ctx context.Context) ([]FileStatus, error) {
 	summary, err := c.FileStatusSummary(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file status summary: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to get file status summary", err)
 	}
 	
 	// Use existing sorting logic
@@ -1005,7 +1012,7 @@ func (c *Collector) GetPriorityFiles(ctx context.Context) ([]FileStatus, error) 
 func (c *Collector) UntrackedFiles(ctx context.Context) ([]string, error) {
 	untracked, err := c.runWithCache(ctx, "git", "ls-files", "--others", "--exclude-standard")
 	if err != nil {
-		return nil, fmt.Errorf("git ls-files --others --exclude-standard failed: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "git ls-files --others --exclude-standard failed", err)
 	}
 	
 	files := strings.Split(strings.TrimSpace(string(untracked)), "\n")
@@ -1035,18 +1042,18 @@ func (c *Collector) UntrackedFileContent(ctx context.Context, path string) (stri
 	// Security check: sanitize file path
 	sanitizedPath := sanitizeOutput(path)
 	if sanitizedPath != path {
-		return "", fmt.Errorf("invalid file path: %s", path)
+		return "", errors.New(errors.ErrTypeValidation, fmt.Sprintf("invalid file path: %s", path))
 	}
 	
 	// Check if file should be ignored
 	if shouldIgnoreFile(path) {
-		return "", fmt.Errorf("file type not supported: %s", path)
+		return "", errors.New(errors.ErrTypeValidation, fmt.Sprintf("file type not supported: %s", path))
 	}
 	
 	// Use head to limit file size (10KB = 10240 bytes, approximately 640 lines of 16 chars each)
 	content, err := c.runner.Run(ctx, "head", "-c", "10240", path)
 	if err != nil {
-		return "", fmt.Errorf("failed to read file %s: %w", path, err)
+		return "", errors.Wrap(errors.ErrTypeGit, fmt.Sprintf("failed to read file %s", path), err)
 	}
 	
 	return string(content), nil
@@ -1091,7 +1098,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 	// 1. Get staged diff
 	stagedDiff, err := c.StagedDiff(ctx)
 	if err != nil && !errors.Is(err, ErrNoDiff) {
-		return "", fmt.Errorf("failed to get staged diff: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get staged diff", err)
 	}
 	if stagedDiff != "" {
 		diffParts = append(diffParts, stagedDiff)
@@ -1100,7 +1107,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 	// 2. Get unstaged diff
 	unstagedDiff, err := c.UnstagedDiff(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get unstaged diff: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get unstaged diff", err)
 	}
 	if unstagedDiff != "" {
 		diffParts = append(diffParts, unstagedDiff)
@@ -1109,7 +1116,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 	// 3. Get untracked files as diff - THIS IS THE CORE FIX
 	untrackedFiles, err := c.UntrackedFiles(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get untracked files: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get untracked files", err)
 	}
 	
 	// Convert untracked files to diff format
@@ -1130,7 +1137,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 		// Check if there are any changes at all
 		status, err := c.GitStatus(ctx)
 		if err != nil {
-			return "", fmt.Errorf("git status failed: %w", err)
+			return "", errors.Wrap(errors.ErrTypeGit, "git status failed", err)
 		}
 		if strings.TrimSpace(status) == "" {
 			return "", ErrNoDiff
@@ -1147,13 +1154,13 @@ func (c *Collector) CombinedDiff(ctx context.Context) (string, error) {
 	// --no-ext-diff 避免外部 diff 工具干扰，--cached 获取 staged diff。
 	staged, err := c.runner.Run(ctx, "git", "diff", "--cached", "--no-ext-diff")
 	if err != nil {
-		return "", fmt.Errorf("git diff --cached failed: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "git diff --cached failed", err)
 	}
 
 	// 未暂存的改动。
 	unstaged, err := c.runner.Run(ctx, "git", "diff", "--no-ext-diff")
 	if err != nil {
-		return "", fmt.Errorf("git diff failed: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "git diff failed", err)
 	}
 
 	combined := string(staged) + string(unstaged)
@@ -1162,7 +1169,7 @@ func (c *Collector) CombinedDiff(ctx context.Context) (string, error) {
 		// 可能是新文件删除等导致 diff 为空，检查 git status
 		status, err := c.runner.Run(ctx, "git", "status", "--porcelain")
 		if err != nil {
-			return "", fmt.Errorf("git status --porcelain failed: %w", err)
+			return "", errors.Wrap(errors.ErrTypeGit, "git status --porcelain failed", err)
 		}
 		statusStr := strings.TrimSpace(string(status))
 		if statusStr == "" {

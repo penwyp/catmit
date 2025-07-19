@@ -6,17 +6,27 @@ import (
 	"strings"
 
 	"github.com/penwyp/catmit/internal/cli"
+	"github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/provider"
 	"github.com/penwyp/catmit/internal/template"
 )
 
 // ErrPRAlreadyExists is returned when a PR already exists for the branch
+// This wraps the framework error with additional URL information
 type ErrPRAlreadyExists struct {
 	URL string
+	err error
 }
 
 func (e *ErrPRAlreadyExists) Error() string {
+	if e.err != nil {
+		return e.err.Error()
+	}
 	return fmt.Sprintf("pull request already exists: %s", e.URL)
+}
+
+func (e *ErrPRAlreadyExists) Unwrap() error {
+	return e.err
 }
 
 // Minimum version requirements for CLI tools
@@ -101,45 +111,45 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 	// 获取remote URL
 	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
 	if err != nil {
-		return "", fmt.Errorf("failed to get remote URL: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get remote URL", err)
 	}
 
 	// 检测provider
 	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to detect provider: %w", err)
+		return "", errors.Wrap(errors.ErrTypeProvider, "failed to detect provider", err)
 	}
 
 	// 检查是否支持的provider
 	if remoteInfo.Provider == "unknown" {
-		return "", fmt.Errorf("unsupported provider: %s", remoteInfo.Provider)
+		return "", errors.ErrProviderNotSupported
 	}
 
 	// 检测CLI状态
 	cliStatus, err := c.cliDetector.DetectCLI(ctx, remoteInfo.Provider)
 	if err != nil {
-		return "", fmt.Errorf("failed to detect CLI: %w", err)
+		return "", errors.Wrap(errors.ErrTypePR, "failed to detect CLI", err)
 	}
 
 	// 检查CLI是否安装
 	if !cliStatus.Installed {
-		return "", fmt.Errorf("%s is not installed", cliStatus.Name)
+		return "", errors.ErrCLINotInstalled.WithSuggestion(fmt.Sprintf("请安装 %s CLI 工具", cliStatus.Name))
 	}
 
 	// 检查是否认证
 	if !cliStatus.Authenticated {
-		return "", fmt.Errorf("%s is not authenticated", cliStatus.Name)
+		return "", errors.ErrCLINotAuthed.WithSuggestion(fmt.Sprintf("请运行 %s auth login 进行认证", cliStatus.Name))
 	}
 
 	// 检查版本要求
 	if minVersion, ok := minVersionRequirements[remoteInfo.Provider]; ok {
 		meetsRequirement, err := c.cliDetector.CheckMinVersion(cliStatus.Version, minVersion)
 		if err != nil {
-			return "", fmt.Errorf("failed to check version: %w", err)
+			return "", errors.Wrap(errors.ErrTypePR, "failed to check version", err)
 		}
 		if !meetsRequirement {
-			return "", fmt.Errorf("%s version %s is below minimum required version %s", 
-				cliStatus.Name, cliStatus.Version, minVersion)
+			return "", errors.New(errors.ErrTypePR, fmt.Sprintf("%s version %s is below minimum required version %s", 
+				cliStatus.Name, cliStatus.Version, minVersion)).WithSuggestion(fmt.Sprintf("请升级 %s 到 %s 或更高版本", cliStatus.Name, minVersion))
 		}
 	}
 
@@ -159,7 +169,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 	if options.HeadBranch == "" {
 		headBranch, err = c.git.GetCurrentBranch(ctx)
 		if err != nil {
-			return "", fmt.Errorf("failed to get current branch: %w", err)
+			return "", errors.Wrap(errors.ErrTypeGit, "failed to get current branch", err)
 		}
 		if remoteInfo.Provider == "gitea" {
 			options.HeadBranch = headBranch
@@ -224,7 +234,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 	// 构建命令
 	cmd, args, err := c.commandBuilder.BuildCommand(remoteInfo.Provider, prOptions)
 	if err != nil {
-		return "", fmt.Errorf("failed to build command: %w", err)
+		return "", errors.Wrap(errors.ErrTypePR, "failed to build command", err)
 	}
 
 	// 执行命令
@@ -250,11 +260,11 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		if strings.Contains(outputStr, "already exists") {
 			// 如果解析到了URL，返回特定的错误
 			if parseErr == nil && prURL != "" {
-				return "", &ErrPRAlreadyExists{URL: prURL}
+				return "", &ErrPRAlreadyExists{URL: prURL, err: errors.ErrPRAlreadyExists}
 			}
-			return "", fmt.Errorf("PR already exists but failed to parse URL: %s", outputStr)
+			return "", errors.Wrap(errors.ErrTypePR, "PR already exists but failed to parse URL", fmt.Errorf("%s", outputStr))
 		}
-		return "", fmt.Errorf("failed to create PR: %w\nOutput: %s", err, outputStr)
+		return "", errors.Wrap(errors.ErrTypePR, fmt.Sprintf("failed to create PR\nOutput: %s", outputStr), err)
 	}
 
 	// 如果命令成功且解析到URL
@@ -264,7 +274,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 
 	// 如果命令成功但解析失败
 	if parseErr != nil {
-		return "", fmt.Errorf("failed to parse PR URL from output: %w\nOutput: %s", parseErr, outputStr)
+		return "", errors.Wrap(errors.ErrTypePR, fmt.Sprintf("failed to parse PR URL from output\nOutput: %s", outputStr), parseErr)
 	}
 
 	return prURL, nil

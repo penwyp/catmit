@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +18,7 @@ import (
 	"github.com/penwyp/catmit/collector"
 	"github.com/penwyp/catmit/internal/cli"
 	"github.com/penwyp/catmit/internal/config"
-	catmitErrors "github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/logger"
 	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/internal/provider"
@@ -214,7 +213,7 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 	}
 	if err != nil {
 		// Include the git output in the error for better error reporting
-		return catmitErrors.Wrap(catmitErrors.ErrTypeGit, "git push failed", fmt.Errorf("%w\nOutput: %s", err, string(output)))
+		return errors.Wrap(errors.ErrTypeGit, "git push failed", fmt.Errorf("%w\nOutput: %s", err, string(output)))
 	}
 	return nil
 }
@@ -239,7 +238,7 @@ func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error
 	}
 	
 	if d.prCreator == nil {
-		return "", catmitErrors.Wrap(catmitErrors.ErrTypePR, "PR creator not initialized", nil)
+		return "", errors.New(errors.ErrTypePR, "PR creator not initialized")
 	}
 	
 	// 准备模板数据（如果启用了模板）
@@ -313,14 +312,14 @@ func (d *defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", "@{u}..HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
+		return false, errors.Wrap(errors.ErrTypeGit, "failed to check unpushed commits", err)
 	}
 	
 	// Parse the count
 	countStr := strings.TrimSpace(string(output))
 	count, err := strconv.Atoi(countStr)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse commit count: %w", err)
+		return false, errors.Wrap(errors.ErrTypeGit, "failed to parse commit count", err)
 	}
 	
 	return count > 0, nil
@@ -362,7 +361,7 @@ func checkGitRepository(ctx context.Context) error {
 	cmd.Stderr = nil
 	
 	if err := cmd.Run(); err != nil {
-		return collector.ErrNotGitRepository
+		return errors.ErrNoGitRepo
 	}
 	
 	return nil
@@ -634,7 +633,7 @@ func run(cmd *cobra.Command, args []string) error {
 	var err error
 	appLogger, err = logger.New(flagDebug)
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to initialize logger", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
 	
@@ -658,13 +657,12 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Early check: ensure we're in a git repository
 	if err := checkGitRepository(ctx); err != nil {
-		if errors.Is(err, collector.ErrNotGitRepository) {
+		if errors.Is(err, errors.ErrNoGitRepo) {
 			// Set both SilenceUsage and SilenceErrors to prevent Cobra's error output
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			// Print user-friendly error message directly
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-			os.Exit(1) // Exit directly to avoid any additional error output
+			// Use error handler for proper exit code
+			errors.HandleFatal(err)
 		}
 		// For other errors, let the normal error handling proceed
 		if flagDebug {
@@ -680,7 +678,7 @@ func run(cmd *cobra.Command, args []string) error {
 		// Use ComprehensiveDiff to include untracked files
 		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
-			if err == collector.ErrNoDiff {
+			if errors.Is(err, collector.ErrNoDiff) {
 				if isPRRequested() {
 					// Check if we need to push first
 					needsPush, err := committer.NeedsPush(ctx)
@@ -695,7 +693,7 @@ func run(cmd *cobra.Command, args []string) error {
 					if needsPush {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch...", false))
 						if err := committer.Push(ctx); err != nil {
-							return fmt.Errorf("failed to push branch: %w", err)
+							return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 						}
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
 					}
@@ -710,7 +708,7 @@ func run(cmd *cobra.Command, args []string) error {
 							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 							return nil
 						}
-						return catmitErrors.Wrap(catmitErrors.ErrTypePR, "failed to create pull request", err)
+						return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 					if prURL != "" {
@@ -724,21 +722,19 @@ func run(cmd *cobra.Command, args []string) error {
 				}
 				return nil
 			}
-			if errors.Is(err, collector.ErrNotGitRepository) {
+			if errors.Is(err, errors.ErrNoGitRepo) {
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
-				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-				os.Exit(1)
+				errors.HandleFatal(err)
 			}
-			return fmt.Errorf("failed to collect git diff: %w", err)
+			return errors.Wrap(errors.ErrTypeGit, "failed to collect git diff", err)
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
-			if errors.Is(err, collector.ErrNotGitRepository) {
+			if errors.Is(err, errors.ErrNoGitRepo) {
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
-				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-				os.Exit(1)
+				errors.HandleFatal(err)
 			}
 			return err
 		}
@@ -786,7 +782,7 @@ func run(cmd *cobra.Command, args []string) error {
 		if flagPush {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing...", false))
 			if err := committer.Push(ctx); err != nil {
-				return fmt.Errorf("push failed: %w", err)
+				return errors.Wrap(errors.ErrTypeGit, "push failed", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushed successfully", true))
 		}
@@ -863,22 +859,21 @@ func run(cmd *cobra.Command, args []string) error {
 
 	m, ok := finalModel.(*ui.MainModel)
 	if !ok {
-		return fmt.Errorf("internal error: unexpected model type, got %T", finalModel)
+		return errors.New(errors.ErrTypeUnknown, fmt.Sprintf("internal error: unexpected model type, got %T", finalModel))
 	}
 	
 	done, decision, _, err := m.IsDone()
 	if err != nil {
 		// Check if it's the "nothing to commit" error
-		if err == collector.ErrNoDiff {
+		if errors.Is(err, collector.ErrNoDiff) {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 			return nil
 		}
 		// Check if it's a git repository error
-		if errors.Is(err, collector.ErrNotGitRepository) {
+		if errors.Is(err, errors.ErrNoGitRepo) {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-			os.Exit(1)
+			errors.HandleFatal(err)
 		}
 		// 如果用户在加载时按 Ctrl+C 取消，则静默退出
 		if err == context.Canceled {

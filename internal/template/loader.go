@@ -146,12 +146,14 @@ func (l *FileLoader) ListTemplates(ctx context.Context, provider string) ([]*Tem
 		}
 	}
 	
-	// 去重：基于文件路径去重
+	// 去重：基于文件路径去重（考虑大小写不敏感的文件系统）
 	seen := make(map[string]bool)
 	var uniqueTemplates []*Template
 	for _, tmpl := range allTemplates {
-		if !seen[tmpl.Path] {
-			seen[tmpl.Path] = true
+		// 将路径转换为小写以处理大小写不敏感的文件系统
+		normalizedPath := strings.ToLower(tmpl.Path)
+		if !seen[normalizedPath] {
+			seen[normalizedPath] = true
 			uniqueTemplates = append(uniqueTemplates, tmpl)
 		}
 	}

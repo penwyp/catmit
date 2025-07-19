@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/penwyp/catmit/internal/pr"
+	"github.com/penwyp/catmit/internal/provider"
 	"github.com/penwyp/catmit/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -167,7 +167,7 @@ func TestE2E_PRCreation_WithTemplate(t *testing.T) {
 			manager := template.NewDefaultManager(tmpDir)
 			
 			// 加载模板
-			tmpl, err := manager.LoadTemplate(ctx, &pr.RemoteInfo{
+			tmpl, err := manager.LoadTemplate(ctx, &provider.RemoteInfo{
 				Provider: tt.provider,
 			})
 			require.NoError(t, err)
@@ -285,7 +285,7 @@ func TestE2E_PRTemplate_Integration(t *testing.T) {
 	manager := template.NewDefaultManager(tmpDir)
 	
 	// 加载模板
-	tmpl, err := manager.LoadTemplate(ctx, &pr.RemoteInfo{Provider: "github"})
+	tmpl, err := manager.LoadTemplate(ctx, &provider.RemoteInfo{Provider: "github"})
 	require.NoError(t, err)
 	
 	// 准备数据

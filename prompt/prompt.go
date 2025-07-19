@@ -6,6 +6,7 @@ import (
 	"strings"
 	
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // CollectorInterface 定义collector接口，用于获取Git数据
@@ -36,6 +37,11 @@ type Builder struct {
 // NewBuilder 创建 Prompt Builder。
 // diffLimit == 0 表示不对 diff 做截断。
 func NewBuilder(lang string, diffLimit int) *Builder {
+	// 验证语言代码
+	if lang != "" && lang != "en" && lang != "zh" {
+		// 警告：不支持的语言，默认使用英文
+		lang = "en"
+	}
 	return &Builder{
 		lang:        lang,
 		diffLimit:   diffLimit,
@@ -50,6 +56,13 @@ func NewBuilder(lang string, diffLimit int) *Builder {
 
 // NewBuilderWithTokenBudget 创建带有指定token预算的Prompt Builder
 func NewBuilderWithTokenBudget(lang string, diffLimit int, maxTokens int) *Builder {
+	// 验证token预算
+	if maxTokens < 1000 {
+		maxTokens = 1000 // 最小预算
+	}
+	if maxTokens > 100000 {
+		maxTokens = 100000 // 最大限制
+	}
 	reservedTokens := maxTokens / 4 // 预留25%的token
 	return &Builder{
 		lang:        lang,
@@ -194,7 +207,7 @@ func (b *Builder) BuildUserPromptWithBudget(ctx context.Context, collector inter
 	// 获取文件状态摘要
 	summary, err := col.FileStatusSummary(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get file status summary: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get file status summary", err)
 	}
 	
 	// 分支信息
@@ -228,7 +241,7 @@ func (b *Builder) BuildUserPromptWithBudget(ctx context.Context, collector inter
 	// 使用token预算控制的diff内容
 	diffContent, err := b.buildBudgetedDiff(ctx, col, summary.Files)
 	if err != nil {
-		return "", fmt.Errorf("failed to build diff content: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to build diff content", err)
 	}
 	
 	if diffContent != "" {
@@ -251,7 +264,7 @@ func (b *Builder) buildBudgetedDiff(ctx context.Context, collector CollectorInte
 	// 获取完整的diff
 	fullDiff, err := collector.ComprehensiveDiff(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get diff: %w", err)
+		return "", errors.Wrap(errors.ErrTypeGit, "failed to get diff", err)
 	}
 	
 	// 如果diff很小，直接返回

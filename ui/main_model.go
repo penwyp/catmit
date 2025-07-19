@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/pr"
 )
 
@@ -601,12 +601,12 @@ func (m *MainModel) renderCommitContent() string {
 		if m.enablePush {
 			errorText := "Push failed"
 			if m.err != nil {
-				// Extract meaningful error message, limit length for display
-				errStr := m.err.Error()
-				if len(errStr) > 80 {
-					errStr = errStr[:80] + "..."
+				// Use error framework's formatted output
+				errorText = errors.FormatError(m.err)
+				// Limit length for display if needed
+				if len(errorText) > 120 {
+					errorText = errorText[:120] + "..."
 				}
-				errorText = fmt.Sprintf("Push failed: %s", errStr)
 			}
 			content.WriteString("\n ✗ " + m.styles.Error.Render(errorText))
 		}
@@ -632,12 +632,12 @@ func (m *MainModel) renderCommitContent() string {
 		if m.createPR {
 			errorText := "Pull request creation failed"
 			if m.err != nil {
-				// Extract meaningful error message, limit length for display
-				errStr := m.err.Error()
-				if len(errStr) > 80 {
-					errStr = errStr[:80] + "..."
+				// Use error framework's formatted output
+				errorText = errors.FormatError(m.err)
+				// Limit length for display if needed
+				if len(errorText) > 120 {
+					errorText = errorText[:120] + "..."
 				}
-				errorText = fmt.Sprintf("Pull request creation failed: %s", errStr)
 			}
 			content.WriteString("\n ✗ " + m.styles.Error.Render(errorText))
 		}
@@ -720,7 +720,7 @@ func (m *MainModel) startCommit() tea.Cmd {
 		// 在commit之前，检查是否需要staging并执行
 		if m.stageAll && !m.committer.HasStagedChanges(m.ctx) {
 			if err := m.committer.StageAll(m.ctx); err != nil {
-				return commitDoneMsg{err: fmt.Errorf("staging failed: %w", err)}
+				return commitDoneMsg{err: errors.Wrap(errors.ErrTypeGit, "staging failed", err)}
 			}
 		}
 		err := m.committer.Commit(m.ctx, m.message)

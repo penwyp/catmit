@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // CommandBuilder PR命令构建器
@@ -24,7 +26,7 @@ func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (strin
 	case "gitlab":
 		return b.BuildGitLabMRCommand(options)
 	default:
-		return "", nil, fmt.Errorf("unsupported provider: %s", provider)
+		return "", nil, errors.New(errors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", provider)).WithSuggestion("当前支持 GitHub、GitLab、Gitea 和 Bitbucket")
 	}
 }
 
@@ -32,7 +34,7 @@ func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (strin
 func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []string, error) {
 	// 验证必需字段
 	if options.BaseBranch == "" {
-		return "", nil, fmt.Errorf("base branch is required")
+		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("使用 --pr-base 参数指定基础分支")
 	}
 
 	args := []string{"pr", "create"}
@@ -87,10 +89,10 @@ func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []stri
 func (b *CommandBuilder) BuildGiteaPRCommand(options PROptions) (string, []string, error) {
 	// 验证必需字段
 	if options.BaseBranch == "" {
-		return "", nil, fmt.Errorf("base branch is required")
+		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("使用 --pr-base 参数指定基础分支")
 	}
 	if options.HeadBranch == "" {
-		return "", nil, fmt.Errorf("head branch is required for Gitea")
+		return "", nil, errors.New(errors.ErrTypeValidation, "head branch is required for Gitea")
 	}
 
 	args := []string{"pr", "create"}
@@ -133,7 +135,7 @@ func (b *CommandBuilder) ParseGitHubPROutput(output string) (string, error) {
 	if len(matches) > 0 {
 		return matches[0], nil
 	}
-	return "", fmt.Errorf("no PR URL found in output")
+	return "", errors.New(errors.ErrTypePR, "no PR URL found in output")
 }
 
 // ParseGiteaPROutput 解析tea CLI的输出获取PR URL
@@ -144,14 +146,14 @@ func (b *CommandBuilder) ParseGiteaPROutput(output string) (string, error) {
 	if len(matches) > 0 {
 		return matches[0], nil
 	}
-	return "", fmt.Errorf("no PR URL found in output")
+	return "", errors.New(errors.ErrTypePR, "no PR URL found in output")
 }
 
 // BuildGitLabMRCommand 构建GitLab CLI的MR创建命令
 func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []string, error) {
 	// 验证必需字段
 	if options.BaseBranch == "" {
-		return "", nil, fmt.Errorf("base branch is required")
+		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("使用 --pr-base 参数指定基础分支")
 	}
 
 	args := []string{"mr", "create"}
@@ -219,5 +221,5 @@ func (b *CommandBuilder) ParseGitLabMROutput(output string) (string, error) {
 	if len(matches) > 0 {
 		return matches[0], nil
 	}
-	return "", fmt.Errorf("no MR URL found in output")
+	return "", errors.New(errors.ErrTypePR, "no MR URL found in output")
 }

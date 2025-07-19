@@ -306,13 +306,13 @@ func isRequiredVariable(name string, content string) bool {
 			fmt.Sprintf("%s %s", marker, lowerName),
 			fmt.Sprintf("%s %s", lowerName, marker),
 			// 处理带尖括号的情况
-			fmt.Sprintf("%s.*<%s>", marker, lowerName),
-			fmt.Sprintf("<%s>.*%s", lowerName, marker),
-			// 处理带星号包围的情况
-			fmt.Sprintf("%s.*\\*\\*%s\\*\\*", marker, lowerName),
-			fmt.Sprintf("\\*\\*%s\\*\\*.*%s", lowerName, marker),
+			fmt.Sprintf("%s <%s>", marker, lowerName),
+			fmt.Sprintf("<%s> %s", lowerName, marker),
+			// 处理带星号包围的情况  
+			fmt.Sprintf("%s **%s**", marker, lowerName),
+			fmt.Sprintf("**%s** %s", lowerName, marker),
 			// 处理末尾带星号的情况
-			fmt.Sprintf("%s\\*", lowerName),
+			fmt.Sprintf("%s*", lowerName),
 		}
 		
 		for _, pattern := range patterns {

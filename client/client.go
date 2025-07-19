@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
+	"github.com/penwyp/catmit/internal/errors"
 	"go.uber.org/zap"
 )
 
@@ -154,6 +156,11 @@ func isValidUTF8Start(b byte) bool {
 
 // GetCompletion 实现 OpenAI 兼容的 API 调用
 func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	// 检查 API Key 是否设置
+	if p.apiKey == "" {
+		return "", errors.ErrLLMAPIKey
+	}
+	
 	// 构建请求体，使用 system 和 user 消息分离
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt},
@@ -169,13 +176,13 @@ func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemProm
 
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", errors.Wrap(errors.ErrTypeLLM, "failed to marshal request", err)
 	}
 
 	// 构建 HTTP 请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiURL, bytes.NewReader(data))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", errors.Wrap(errors.ErrTypeLLM, "failed to create request", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -186,35 +193,51 @@ func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemProm
 	// 发送请求
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		// 如果是 context 取消或超时，直接返回原始错误以便调用方区分。
-		return "", err
+		// 如果是 context 取消或超时，返回适当的错误类型
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", errors.ErrLLMTimeout
+		}
+		if strings.Contains(err.Error(), "timeout") {
+			return "", errors.ErrLLMTimeout
+		}
+		// 其他网络错误
+		return "", errors.WrapRetryable(errors.ErrTypeLLM, "network request failed", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// 读取响应体以便错误处理和解析。
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", errors.Wrap(errors.ErrTypeLLM, "failed to read response", err)
 	}
 
 	// 非 200 统一处理为错误输出，包含状态码但不包含响应体以防泄露敏感信息。
 	if resp.StatusCode != http.StatusOK {
-		// 只记录状态码，不记录响应体内容以防泄露 API 密钥等敏感信息
-		return "", fmt.Errorf("API error: status %d", resp.StatusCode)
+		// 处理特定的状态码
+		switch resp.StatusCode {
+		case http.StatusTooManyRequests:
+			return "", errors.ErrLLMRateLimit
+		case http.StatusUnauthorized:
+			return "", errors.New(errors.ErrTypeAuth, "API authentication failed").WithSuggestion("检查您的 API Key 是否正确")
+		case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
+			return "", errors.NewRetryable(errors.ErrTypeLLM, fmt.Sprintf("API server error: status %d", resp.StatusCode))
+		default:
+			return "", errors.New(errors.ErrTypeLLM, fmt.Sprintf("API error: status %d", resp.StatusCode))
+		}
 	}
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", errors.Wrap(errors.ErrTypeLLM, "failed to parse response", err).WithSuggestion("API 响应格式可能已变更，请检查 API 文档")
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("invalid response: empty choices")
+		return "", errors.ErrLLMResponse
 	}
 
 	// 验证响应内容完整性
 	if chatResp.Choices[0].Message.Content == "" {
-		return "", fmt.Errorf("invalid response: empty message content")
+		return "", errors.New(errors.ErrTypeLLM, "invalid response: empty message content")
 	}
 
 	return chatResp.Choices[0].Message.Content, nil
