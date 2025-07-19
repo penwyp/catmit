@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/penwyp/catmit/collector"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,9 +20,6 @@ type mockCollector struct {
 
 func (m mockCollector) RecentCommits(_ context.Context, n int) ([]string, error) {
 	return m.commits, m.err
-}
-func (m mockCollector) Diff(_ context.Context) (string, error) {
-	return m.diff, m.err
 }
 func (m mockCollector) BranchName(_ context.Context) (string, error) { return "test", nil }
 func (m mockCollector) ChangedFiles(_ context.Context) ([]string, error) {
@@ -64,6 +62,35 @@ func (mockPrompt) BuildUserPrompt(seed, diff string, commits []string, branch st
 }
 
 func (mockPrompt) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
+	return "user prompt with budget", nil
+}
+
+type mockPromptWithCapture struct {
+	capturedSeed *string
+}
+
+func (m mockPromptWithCapture) Build(seed, diff string, commits []string, branch string, files []string) string {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
+	return "prompt"
+}
+
+func (m mockPromptWithCapture) BuildSystemPrompt() string {
+	return "system prompt"
+}
+
+func (m mockPromptWithCapture) BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
+	return "user prompt"
+}
+
+func (m mockPromptWithCapture) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
+	if m.capturedSeed != nil {
+		*m.capturedSeed = seed
+	}
 	return "user prompt with budget", nil
 }
 
@@ -247,7 +274,7 @@ func TestRealRunner(t *testing.T) {
 func TestDefaultCommitter(t *testing.T) {
 	// We can't easily test the actual git commit without affecting the repository
 	// So we'll test the structure and ensure it implements the interface
-	committer := defaultCommitter{}
+	committer := &defaultCommitter{}
 	require.Implements(t, (*commitInterface)(nil), committer)
 }
 
@@ -343,20 +370,105 @@ func TestRun_WithSeedText(t *testing.T) {
 		flagDryRun = originalFlagDryRun
 	}()
 
-	flagDryRun = false
+	flagDryRun = true // Set to true since we're using --dry-run
 	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
 	promptProvider = func(lang string) promptInterface { return mockPrompt{} }
 	clientProvider = func() clientInterface { return mockClient{message: "feat: with seed"} }
 	committer = &recordCommitter{}
 
-	rootCmd.SetArgs([]string{"--dry-run", "seed text"})
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	rootCmd.SetErr(&buf)
-
-	err := rootCmd.Execute()
+	// Need to reset command parsing to handle arguments properly
+	// Use the run function directly instead of going through rootCmd.Execute
+	cmd := &cobra.Command{}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(context.Background())
+	
+	// Call the run function directly with seed text
+	err := run(cmd, []string{"seed"})
 	require.NoError(t, err)
-	require.Contains(t, buf.String(), "feat: with seed")
+	require.Contains(t, output.String(), "feat: with seed")
+}
+
+func TestRun_WithSeedFlag(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalClientProvider := clientProvider
+	originalCommitter := committer
+	originalFlagDryRun := flagDryRun
+	originalFlagSeed := flagSeed
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		clientProvider = originalClientProvider
+		committer = originalCommitter
+		flagDryRun = originalFlagDryRun
+		flagSeed = originalFlagSeed
+	}()
+
+	flagDryRun = true
+	flagSeed = "seed from flag"
+	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
+	promptProvider = func(lang string) promptInterface { return mockPrompt{} }
+	clientProvider = func() clientInterface { return mockClient{message: "feat: with seed flag"} }
+	committer = &recordCommitter{}
+
+	cmd := &cobra.Command{}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(context.Background())
+	
+	// Call run function with no positional args to test flag
+	err := run(cmd, []string{})
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "feat: with seed flag")
+}
+
+func TestRun_SeedFlagPriority(t *testing.T) {
+	// Save original values
+	originalCollectorProvider := collectorProvider
+	originalPromptProvider := promptProvider
+	originalClientProvider := clientProvider
+	originalCommitter := committer
+	originalFlagDryRun := flagDryRun
+	originalFlagSeed := flagSeed
+	
+	// Restore after test
+	defer func() {
+		collectorProvider = originalCollectorProvider
+		promptProvider = originalPromptProvider
+		clientProvider = originalClientProvider
+		committer = originalCommitter
+		flagDryRun = originalFlagDryRun
+		flagSeed = originalFlagSeed
+	}()
+
+	flagDryRun = true
+	flagSeed = "flag seed"
+	
+	var capturedSeed string
+	promptProvider = func(lang string) promptInterface { 
+		return mockPromptWithCapture{capturedSeed: &capturedSeed}
+	}
+	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
+	clientProvider = func() clientInterface { return mockClient{message: "feat: test"} }
+	committer = &recordCommitter{}
+
+	cmd := &cobra.Command{}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetContext(context.Background())
+	
+	// Call run with both flag and positional arg
+	err := run(cmd, []string{"positional seed"})
+	require.NoError(t, err)
+	// Flag should take priority
+	require.Equal(t, "flag seed", capturedSeed)
 }
 
 func TestRoot_NoDiff_YesMode(t *testing.T) {

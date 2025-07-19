@@ -136,55 +136,6 @@ func TestNewInterfaceImplementations(t *testing.T) {
 		assert.Contains(t, content, "package main")
 		assert.Contains(t, content, "func main()")
 	})
-
-	// Test LegacyCollectorInterface for backward compatibility
-	t.Run("LegacyCollectorInterface", func(t *testing.T) {
-		// Test legacy interface methods individually with fresh collectors for each test
-		// to avoid complex mock ordering issues
-		
-		// Test RecentCommits
-		mr1 := &mockRunner{outputs: [][]byte{[]byte("feat: add feature")}, errs: []error{nil}}
-		c1 := New(mr1)
-		commits, err := c1.RecentCommits(context.Background(), 1)
-		require.NoError(t, err)
-		assert.Len(t, commits, 1)
-
-		// Test Diff (uses ComprehensiveDiff)
-		mr2 := &mockRunner{
-			outputs: [][]byte{[]byte("diff content"), []byte(""), []byte("")},
-			errs: []error{nil, nil, nil},
-		}
-		c2 := New(mr2)
-		diff, err := c2.Diff(context.Background())
-		require.NoError(t, err)
-		assert.Contains(t, diff, "diff content")
-
-		// Test BranchName
-		mr3 := &mockRunner{outputs: [][]byte{[]byte("main")}, errs: []error{nil}}
-		c3 := New(mr3)
-		branch, err := c3.BranchName(context.Background())
-		require.NoError(t, err)
-		assert.Equal(t, "main", branch)
-
-		// Test ChangedFiles
-		mr4 := &mockRunner{
-			outputs: [][]byte{[]byte("file.txt"), []byte("")},
-			errs: []error{nil, nil},
-		}
-		c4 := New(mr4)
-		files, err := c4.ChangedFiles(context.Background())
-		require.NoError(t, err)
-		assert.Len(t, files, 1)
-		assert.Equal(t, "file.txt", files[0])
-
-		// Test FileStatusSummary
-		mr5 := &mockRunner{outputs: [][]byte{[]byte("## main\nM  file.txt")}, errs: []error{nil}}
-		c5 := New(mr5)
-		summary, err := c5.FileStatusSummary(context.Background())
-		require.NoError(t, err)
-		assert.Equal(t, "main", summary.BranchName)
-		assert.Len(t, summary.Files, 1)
-	})
 }
 
 // TestInterfaceSegregation verifies that interfaces are properly segregated
@@ -197,13 +148,11 @@ func TestInterfaceSegregation(t *testing.T) {
 	var gitReader GitReader = collector
 	var analyzer ChangeAnalyzer = collector
 	var provider FileContentProvider = collector
-	var legacy LegacyCollectorInterface = collector
 
 	// These should compile without error, demonstrating interface segregation
 	_ = gitReader
 	_ = analyzer
 	_ = provider
-	_ = legacy
 }
 
 // TestHelperFunctions tests the new helper functions

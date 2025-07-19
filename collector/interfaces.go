@@ -19,7 +19,7 @@ import (
 //	reader := collector.New(runner)
 //	diff, err := reader.StagedDiff(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to get staged diff: %w", err)
+//		return errors.Wrap(err, "failed to get staged diff")
 //	}
 type GitReader interface {
 	// StagedDiff returns staged changes (equivalent to `git diff --cached`)
@@ -87,7 +87,7 @@ type ChangesSummary struct {
 //	analyzer := collector.New(runner)
 //	summary, err := analyzer.AnalyzeChanges(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to analyze changes: %w", err)
+//		return errors.Wrap(err, "failed to analyze changes")
 //	}
 //	fmt.Printf("Primary change type: %s\n", summary.PrimaryChangeType)
 type ChangeAnalyzer interface {
@@ -114,7 +114,7 @@ type ChangeAnalyzer interface {
 //	provider := collector.New(runner)
 //	untracked, err := provider.UntrackedFiles(ctx)
 //	if err != nil {
-//		return fmt.Errorf("failed to get untracked files: %w", err)
+//		return errors.Wrap(err, "failed to get untracked files")
 //	}
 //	for _, file := range untracked {
 //		content, err := provider.UntrackedFileContent(ctx, file)
@@ -147,23 +147,4 @@ type EnhancedDiffProvider interface {
 	
 	// CombinedDiff returns staged and unstaged diffs combined (legacy behavior)
 	CombinedDiff(ctx context.Context) (string, error)
-}
-
-// LegacyCollectorInterface represents the current monolithic collector interface.
-// This interface is maintained for backward compatibility during the transition period.
-// 
-// DEPRECATED: Use the focused interfaces (GitReader, ChangeAnalyzer, FileContentProvider)
-// instead of this monolithic interface. This will be removed in a future version.
-//
-// Migration guide:
-// - For git operations: use GitReader
-// - For change analysis: use ChangeAnalyzer  
-// - For file content access: use FileContentProvider
-// - For comprehensive diff: use EnhancedDiffProvider
-type LegacyCollectorInterface interface {
-	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
-	BranchName(ctx context.Context) (string, error)
-	ChangedFiles(ctx context.Context) ([]string, error)
-	FileStatusSummary(ctx context.Context) (*FileStatusSummary, error)
 }

@@ -213,7 +213,7 @@ func (m *mockCollector) FileStatusSummary(ctx context.Context) (*collector.FileS
 	return m.summary, nil
 }
 
-func (m *mockCollector) Diff(ctx context.Context) (string, error) {
+func (m *mockCollector) ComprehensiveDiff(ctx context.Context) (string, error) {
 	if m.shouldError {
 		return "", fmt.Errorf("mock error")
 	}

@@ -14,8 +14,8 @@ import (
 type Stage int
 
 const (
-	StageCollect Stage = iota
-	StagePreprocess // 新增：智能数据预处理阶段
+	StageCollect    Stage = iota
+	StagePreprocess       // 新增：智能数据预处理阶段
 	StagePrompt
 	StageQuery
 	StageDone
@@ -24,12 +24,9 @@ const (
 // Interfaces duplicated to decouple from cmd package
 type collectorInterface interface {
 	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
-	// 新增：支持文件状态摘要
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
-	// Enhanced methods for comprehensive diff support
 	ComprehensiveDiff(ctx context.Context) (string, error)
 	AnalyzeChanges(ctx context.Context) (*collector.ChangesSummary, error)
 }
@@ -38,7 +35,6 @@ type promptInterface interface {
 	Build(seed, diff string, commits []string, branch string, files []string) string
 	BuildSystemPrompt() string
 	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
-	// 新增：支持token预算控制的智能prompt构建
 	BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error)
 }
 
@@ -59,8 +55,8 @@ type LoadingModel struct {
 	promptBuild promptInterface
 	client      clientInterface
 
-	seed string
-	lang string
+	seed       string
+	lang       string
 	apiTimeout time.Duration
 
 	// timing control for minimum display duration
@@ -243,11 +239,7 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 		// Use ComprehensiveDiff to include untracked files
 		diff, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
-			// Fallback to legacy diff for backward compatibility
-			diff, err = col.Diff(ctx)
-			if err != nil {
-				return errorMsg{err}
-			}
+			return errorMsg{err}
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
@@ -259,7 +251,7 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	}
 }
 
-// 新增：预处理命令，获取文件状态摘要
+// 预处理命令，获取文件状态摘要
 func preprocessCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
 		// 尝试使用新的FileStatusSummary方法
@@ -272,7 +264,7 @@ func preprocessCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	}
 }
 
-// 新增：智能prompt构建命令，使用token预算控制
+// 智能prompt构建命令，使用token预算控制
 func buildSmartPromptCmd(pb promptInterface, col collectorInterface, ctx context.Context, seed string) tea.Cmd {
 	return func() tea.Msg {
 		// 尝试使用新的BuildUserPromptWithBudget方法
@@ -285,7 +277,6 @@ func buildSmartPromptCmd(pb promptInterface, col collectorInterface, ctx context
 		return smartPromptBuiltMsg{systemPrompt: systemPrompt, userPrompt: userPrompt}
 	}
 }
-
 
 func queryCmd(cli clientInterface, ctx context.Context, systemPrompt, userPrompt string, apiTimeout time.Duration) tea.Cmd {
 	return func() tea.Msg {

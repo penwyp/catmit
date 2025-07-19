@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +16,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/client"
 	"github.com/penwyp/catmit/collector"
+	"github.com/penwyp/catmit/internal/cli"
+	"github.com/penwyp/catmit/internal/config"
+	"github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/logger"
+	"github.com/penwyp/catmit/internal/pr"
+	"github.com/penwyp/catmit/internal/provider"
+	"github.com/penwyp/catmit/internal/template"
 	"github.com/penwyp/catmit/prompt"
 	"github.com/penwyp/catmit/ui"
 	"github.com/spf13/cobra"
@@ -31,14 +38,6 @@ func GetVersionString() string {
 	return fmt.Sprintf("catmit version %s", version)
 }
 
-// ErrPRAlreadyExists is returned when a PR already exists for the branch
-type ErrPRAlreadyExists struct {
-	URL string
-}
-
-func (e *ErrPRAlreadyExists) Error() string {
-	return fmt.Sprintf("pull request already exists: %s", e.URL)
-}
 
 // 将关键依赖抽象为接口以便测试时注入 Mock。
 // 若在运行时未被替换，则使用默认实现。
@@ -46,13 +45,12 @@ var (
 	collectorProvider func() collectorInterface                   = defaultCollectorProvider
 	promptProvider    func(lang string) promptInterface           = defaultPromptProvider
 	clientProvider    func() clientInterface                      = defaultClientProvider
-	committer         commitInterface                             = defaultCommitter{}
+	committer         commitInterface                             // Will be initialized in init()
 	appLogger         *zap.Logger                                 // 全局日志记录器
 )
 
 type collectorInterface interface {
 	RecentCommits(ctx context.Context, n int) ([]string, error)
-	Diff(ctx context.Context) (string, error)
 	BranchName(ctx context.Context) (string, error)
 	ChangedFiles(ctx context.Context) ([]string, error)
 	FileStatusSummary(ctx context.Context) (*collector.FileStatusSummary, error)
@@ -124,17 +122,78 @@ func (r realRunner) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 // defaultCommitter 使用 git commit -m 执行提交。
+type defaultCommitter struct {
+	prCreator *pr.Creator
+	ctx       context.Context
+	message   string   // 保存commit message用于模板
+}
 
-type defaultCommitter struct{}
+// newDefaultCommitter creates a new defaultCommitter with PR support
+func newDefaultCommitter() *defaultCommitter {
+	// Initialize PR creator with default implementations
+	gitRunner := &defaultGitRunner{}
+	providerDetector := newDefaultProviderDetector()
+	cliDetector := &defaultCLIDetector{}
+	
+	// Create command builder and runner
+	commandBuilder := pr.NewCommandBuilder()
+	commandRunner := &defaultCommandRunner{debug: flagDebug}
+	
+	prCreator := pr.NewCreator(
+		gitRunner,
+		providerDetector,
+		cliDetector,
+		commandBuilder,
+		commandRunner,
+	)
+	
+	// 如果启用了模板支持，添加模板管理器
+	if flagPRTemplate {
+		// 获取仓库根目录
+		repoRoot, err := template.FindRepositoryRoot()
+		if err == nil {
+			templateManager := template.NewDefaultManager(repoRoot)
+			prCreator.WithTemplateManager(templateManager)
+		}
+	}
+	
+	return &defaultCommitter{
+		prCreator: prCreator,
+	}
+}
 
-func (defaultCommitter) Commit(ctx context.Context, message string) error {
+// defaultCommandRunner implements pr.CommandRunner
+type defaultCommandRunner struct {
+	debug bool
+}
+
+func (r *defaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if r.debug {
+		appLogger.Debug("Running command for PR",
+			zap.String("command", name),
+			zap.Strings("args", args))
+	}
+	output, err := cmd.CombinedOutput()
+	if r.debug {
+		appLogger.Debug("PR command output",
+			zap.Int("output_length", len(output)),
+			zap.Error(err))
+	}
+	return output, err
+}
+
+func (d *defaultCommitter) Commit(ctx context.Context, message string) error {
+	// 保存message和context用于后续PR创建
+	d.ctx = ctx
+	d.message = message
 	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func (d defaultCommitter) Push(ctx context.Context) error {
+func (d *defaultCommitter) Push(ctx context.Context) error {
 	if appLogger != nil {
 		appLogger.Debug("Executing git push command")
 	}
@@ -154,65 +213,69 @@ func (d defaultCommitter) Push(ctx context.Context) error {
 	}
 	if err != nil {
 		// Include the git output in the error for better error reporting
-		return fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))
+		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
 	}
 	return nil
 }
 
-func (defaultCommitter) StageAll(ctx context.Context) error {
+func (d *defaultCommitter) StageAll(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "git", "add", "-A")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run()
 }
 
-func (defaultCommitter) HasStagedChanges(ctx context.Context) bool {
+func (d *defaultCommitter) HasStagedChanges(ctx context.Context) bool {
 	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--quiet")
 	err := cmd.Run()
 	// git diff --cached --quiet returns exit code 1 if there are staged changes
 	return err != nil
 }
 
-func (d defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
+func (d *defaultCommitter) CreatePullRequest(ctx context.Context) (string, error) {
 	if appLogger != nil {
-		appLogger.Debug("Creating GitHub pull request")
+		appLogger.Debug("Creating pull request with new PR creator")
 	}
 	
-	// Check if gh CLI is available
-	if _, err := exec.LookPath("gh"); err != nil {
-		return "", fmt.Errorf("gh CLI not found: %w. Please install GitHub CLI: https://cli.github.com/", err)
+	if d.prCreator == nil {
+		return "", errors.New(errors.ErrTypePR, "PR creator not initialized")
 	}
 	
-	// Execute gh pr create command
-	cmd := exec.CommandContext(ctx, "gh", "pr", "create", "--fill", "--base", "main", "--draft=false")
-	output, err := cmd.CombinedOutput()
-	
-	if appLogger != nil {
-		if err != nil {
-			appLogger.Debug("GitHub PR creation failed", 
-				zap.Error(err),
-				zap.String("output", string(output)))
-		} else {
-			appLogger.Debug("GitHub PR created successfully", 
-				zap.String("output", string(output)))
+	// 准备模板数据（如果启用了模板）
+	var templateData *template.TemplateData
+	if flagPRTemplate && d.message != "" {
+		// 收集文件变更信息
+		col := collectorProvider()
+		changedFiles, _ := col.ChangedFiles(ctx)
+		branch, _ := col.BranchName(ctx)
+		changesSummary, _ := col.AnalyzeChanges(ctx)
+		
+		// 创建模板数据
+		templateData = template.CreateTemplateData(d.message, branch, changedFiles)
+		
+		// 丰富模板数据
+		if changesSummary != nil {
+			// TODO: Map changesSummary fields to templateData when template.TemplateData is updated
+			// For now, we have basic data from CreateTemplateData
+			templateData.FilesCount = changesSummary.TotalChangedFiles
 		}
 	}
 	
+	// Build PR options from flags
+	options := pr.CreateOptions{
+		Remote:       flagPRRemote,
+		BaseBranch:   flagPRBase,
+		Draft:        flagPRDraft,
+		Fill:         true, // Always use fill for now
+		UseTemplate:  flagPRTemplate,
+		TemplateData: templateData,
+	}
+	
+	// Create the PR
+	prURL, err := d.prCreator.Create(ctx, options)
 	if err != nil {
-		// Check if PR already exists
-		outputStr := string(output)
-		if strings.Contains(outputStr, "already exists") {
-			// Extract the existing PR URL
-			existingPRURL := extractPRURL(outputStr)
-			if existingPRURL != "" {
-				return "", &ErrPRAlreadyExists{URL: existingPRURL}
-			}
-		}
-		return "", fmt.Errorf("failed to create pull request: %w\nOutput: %s", err, outputStr)
+		return "", err
 	}
-	
-	// Extract PR URL from output
-	prURL := extractPRURL(string(output))
 	
 	return prURL, nil
 }
@@ -234,7 +297,7 @@ func extractPRURL(output string) string {
 	return ""
 }
 
-func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
+func (d *defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	// Check if the current branch has unpushed commits
 	// First, check if we have an upstream branch
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
@@ -249,14 +312,14 @@ func (defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", "@{u}..HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
+		return false, errors.Wrap(errors.ErrTypeGit, "failed to check unpushed commits", err)
 	}
 	
 	// Parse the count
 	countStr := strings.TrimSpace(string(output))
 	count, err := strconv.Atoi(countStr)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse commit count: %w", err)
+		return false, errors.Wrap(errors.ErrTypeGit, "failed to parse commit count", err)
 	}
 	
 	return count > 0, nil
@@ -298,7 +361,7 @@ func checkGitRepository(ctx context.Context) error {
 	cmd.Stderr = nil
 	
 	if err := cmd.Run(); err != nil {
-		return collector.ErrNotGitRepository
+		return errors.ErrNoGitRepo
 	}
 	
 	return nil
@@ -344,7 +407,16 @@ var (
 	flagPush     bool
 	flagStageAll bool
 	flagVersion  bool
-	flagCreatePR bool
+	flagCreatePR bool  // Deprecated: use flagPR instead
+	flagPR       bool  // New PR flag
+	flagSeed     string  // Seed text for commit message generation
+	
+	// PR-specific flags
+	flagPRRemote   string
+	flagPRBase     string
+	flagPRDraft    bool
+	flagPRProvider string
+	flagPRTemplate bool  // Enable PR template support
 )
 
 func init() {
@@ -356,12 +428,199 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
-	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push")
+	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push (deprecated, use --pr)")
+	rootCmd.Flags().BoolVarP(&flagPR, "pr", "c", false, "create pull request after successful push")
+	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
+	
+	// PR-specific flags
+	rootCmd.Flags().StringVar(&flagPRRemote, "pr-remote", "origin", "remote to use for pull request")
+	rootCmd.Flags().StringVar(&flagPRBase, "pr-base", "", "base branch for pull request (defaults to provider's default branch)")
+	rootCmd.Flags().BoolVar(&flagPRDraft, "pr-draft", false, "create pull request as draft")
+	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
+	rootCmd.Flags().BoolVar(&flagPRTemplate, "pr-template", true, "use PR template if available")
+	
+	// Mark create-pr as deprecated
+	rootCmd.Flags().MarkDeprecated("create-pr", "use --pr instead")
+	
+	// Add auth subcommand
+	authCmd := &cobra.Command{
+		Use:   "auth",
+		Short: "Authentication related commands",
+		Long:  `Manage authentication for PR creation with various git hosting providers`,
+	}
+	
+	// Create auth status command with default implementations
+	authStatusCmd := NewAuthStatusCommand(
+		&defaultGitRunner{},
+		newDefaultProviderDetector(),
+		&defaultCLIDetector{},
+	)
+	
+	authCmd.AddCommand(authStatusCmd)
+	rootCmd.AddCommand(authCmd)
 }
 
 func Execute() error { return rootCmd.Execute() }
 
 func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
+
+// defaultGitRunner implements GitRunner for auth command
+type defaultGitRunner struct{}
+
+func (d *defaultGitRunner) GetRemotes(ctx context.Context) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var remotes []string
+	for _, line := range lines {
+		if line = strings.TrimSpace(line); line != "" {
+			remotes = append(remotes, line)
+		}
+	}
+	return remotes, nil
+}
+
+func (d *defaultGitRunner) GetRemoteURL(ctx context.Context, remote string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", remote)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (d *defaultGitRunner) GetCurrentBranch(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (d *defaultGitRunner) GetCommitMessage(ctx context.Context, ref string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--pretty=%B", ref)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (d *defaultGitRunner) GetDefaultBranch(ctx context.Context, remote string) (string, error) {
+	// Try to get the default branch from the remote
+	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", fmt.Sprintf("refs/remotes/%s/HEAD", remote))
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback to main/master
+		return "main", nil
+	}
+	// Extract branch name from refs/remotes/origin/HEAD -> refs/remotes/origin/main
+	parts := strings.Split(strings.TrimSpace(string(output)), "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1], nil
+	}
+	return "main", nil
+}
+
+// defaultProviderDetector implements ProviderDetector for auth command
+type defaultProviderDetector struct {
+	configDetector *provider.ConfigDetector
+	hotReloadManager *config.HotReloadManager
+}
+
+// newDefaultProviderDetector creates a provider detector with config support
+func newDefaultProviderDetector() *defaultProviderDetector {
+	// Always use ~/.config for consistency across platforms
+	configDir := os.Getenv("HOME")
+	if configDir == "" {
+		configDir = "."
+	}
+	configDir = filepath.Join(configDir, ".config")
+	
+	// Use YAML format for better readability
+	configPath := filepath.Join(configDir, "catmit", "providers.yaml")
+	
+	// Create YAML config manager
+	configManager, err := config.NewYAMLConfigManager(configPath)
+	if err != nil {
+		// If we can't create the manager, work without config
+		configManager = nil
+	} else {
+		// Check if config file exists, create default if not
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			// Create default config for user convenience
+			if createErr := configManager.CreateDefaultConfig(); createErr != nil {
+				// If creation fails, just work without config
+				configManager = nil
+			}
+		}
+	}
+	
+	var hotReloadManager *config.HotReloadManager
+	if configManager != nil {
+		// Wrap with hot reload capability
+		hotReloadManager, err = config.NewHotReloadManager(configManager, configPath)
+		if err != nil {
+			// Fall back to regular config manager
+			log.Printf("Failed to enable config hot reload: %v", err)
+			hotReloadManager = nil
+		} else {
+			// Set up a callback to log config changes
+			hotReloadManager.OnConfigChange(func(cfg *config.Config) {
+				log.Printf("Configuration reloaded from %s", configPath)
+			})
+			// Use hot reload manager as the config manager
+			configManager = hotReloadManager
+		}
+	}
+	
+	return &defaultProviderDetector{
+		configDetector: provider.NewConfigDetector(configManager),
+		hotReloadManager: hotReloadManager,
+	}
+}
+
+func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error) {
+	return d.configDetector.DetectFromRemote(ctx, remoteURL)
+}
+
+
+// defaultCLIDetector implements CLIDetector for auth command
+type defaultCLIDetector struct{
+	detector *cli.Detector
+}
+
+func (d *defaultCLIDetector) DetectCLI(ctx context.Context, providerName string) (cli.CLIStatus, error) {
+	// Use the proper detector from internal/cli package
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
+	}
+	return d.detector.DetectCLI(ctx, providerName)
+}
+
+func (d *defaultCLIDetector) CheckMinVersion(current, minimum string) (bool, error) {
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
+	}
+	return d.detector.CheckMinVersion(current, minimum)
+}
+
+func (d *defaultCLIDetector) SuggestInstallCommand(cliName string) []string {
+	if d.detector == nil {
+		d.detector = cli.NewDetector(nil)
+	}
+	return d.detector.SuggestInstallCommand(cliName)
+}
+
+// isPRRequested returns true if user requested PR creation via either flag
+func isPRRequested() bool {
+	return flagPR || flagCreatePR
+}
 
 func run(cmd *cobra.Command, args []string) error {
 	// Handle version flag
@@ -374,26 +633,36 @@ func run(cmd *cobra.Command, args []string) error {
 	var err error
 	appLogger, err = logger.New(flagDebug)
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to initialize logger", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
+	
+	// Initialize committer with PR support after logger is available
+	if committer == nil {
+		committer = newDefaultCommitter()
+	}
 
-	seedText := ""
-	if len(args) > 0 {
+	// Prioritize --seed flag over positional argument
+	seedText := flagSeed
+	if seedText == "" && len(args) > 0 {
 		seedText = args[0]
 	}
 
 	ctx := cmd.Context()
 
+	// Show deprecation warning if --create-pr is used
+	if flagCreatePR {
+		_, _ = fmt.Fprintln(cmd.OutOrStderr(), "⚠️  Warning: --create-pr is deprecated, please use --pr instead")
+	}
+
 	// Early check: ensure we're in a git repository
 	if err := checkGitRepository(ctx); err != nil {
-		if errors.Is(err, collector.ErrNotGitRepository) {
+		if errors.Is(err, errors.ErrNoGitRepo) {
 			// Set both SilenceUsage and SilenceErrors to prevent Cobra's error output
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			// Print user-friendly error message directly
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-			os.Exit(1) // Exit directly to avoid any additional error output
+			// Use error handler for proper exit code
+			errors.HandleFatal(err)
 		}
 		// For other errors, let the normal error handling proceed
 		if flagDebug {
@@ -409,8 +678,8 @@ func run(cmd *cobra.Command, args []string) error {
 		// Use ComprehensiveDiff to include untracked files
 		diffText, err := col.ComprehensiveDiff(ctx)
 		if err != nil {
-			if err == collector.ErrNoDiff {
-				if flagCreatePR {
+			if errors.Is(err, collector.ErrNoDiff) {
+				if isPRRequested() {
 					// Check if we need to push first
 					needsPush, err := committer.NeedsPush(ctx)
 					if err != nil {
@@ -424,7 +693,7 @@ func run(cmd *cobra.Command, args []string) error {
 					if needsPush {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch...", false))
 						if err := committer.Push(ctx); err != nil {
-							return fmt.Errorf("failed to push branch: %w", err)
+							return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 						}
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
 					}
@@ -433,13 +702,13 @@ func run(cmd *cobra.Command, args []string) error {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
 					prURL, err := committer.CreatePullRequest(ctx)
 					if err != nil {
-						var prExists *ErrPRAlreadyExists
+						var prExists *pr.ErrPRAlreadyExists
 						if errors.As(err, &prExists) {
 							_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
 							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 							return nil
 						}
-						return fmt.Errorf("failed to create pull request: %w", err)
+						return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 					if prURL != "" {
@@ -453,40 +722,21 @@ func run(cmd *cobra.Command, args []string) error {
 				}
 				return nil
 			}
-			if errors.Is(err, collector.ErrNotGitRepository) {
+			if errors.Is(err, errors.ErrNoGitRepo) {
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
-				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-				os.Exit(1)
+				errors.HandleFatal(err)
 			}
-			if flagDebug {
-				appLogger.Debug("Comprehensive diff collection failed, trying fallback", zap.Error(err))
-			}
-			// Fallback to legacy diff for backward compatibility
-			diffText, err = col.Diff(ctx)
-			if err != nil {
-				if err == collector.ErrNoDiff {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
-					return nil
-				}
-				if errors.Is(err, collector.ErrNotGitRepository) {
-					cmd.SilenceUsage = true
-					cmd.SilenceErrors = true
-					_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-					return fmt.Errorf("git repository required")
-				}
-				return fmt.Errorf("failed to collect git diff: %w", err)
-			}
+			return errors.Wrap(errors.ErrTypeGit, "failed to collect git diff", err)
 		}
 		commits, err := col.RecentCommits(ctx, 10)
 		if err != nil {
-			if errors.Is(err, collector.ErrNotGitRepository) {
+			if errors.Is(err, errors.ErrNoGitRepo) {
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
-				_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-				os.Exit(1)
+				errors.HandleFatal(err)
 			}
-			return err
+			return errors.Wrap(errors.ErrTypeGit, "failed to process diff", err)
 		}
 		builder := promptProvider(flagLang)
 		systemPrompt := builder.BuildSystemPrompt()
@@ -509,7 +759,7 @@ func run(cmd *cobra.Command, args []string) error {
 		defer apiCancel()
 		message, err := cli.GetCommitMessage(apiCtx, systemPrompt, userPrompt)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.ErrTypeLLM, "failed to get commit message from LLM", err)
 		}
 
 		if flagDryRun {
@@ -522,44 +772,73 @@ func run(cmd *cobra.Command, args []string) error {
 		// Only stage all if there are no staged changes and flagStageAll is true
 		if flagStageAll && !hasStagedChanges(ctx) {
 			if err := stageAll(ctx); err != nil {
-				return err
+				return errors.Wrap(errors.ErrTypeGit, "failed to stage all files", err)
 			}
 		}
 		if err := committer.Commit(ctx, message); err != nil {
-			return err
+			return errors.Wrap(errors.ErrTypeGit, "failed to commit", err)
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Committed successfully", true))
 		if flagPush {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing...", false))
 			if err := committer.Push(ctx); err != nil {
-				return fmt.Errorf("push failed: %w", err)
+				return errors.Wrap(errors.ErrTypeGit, "push failed", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushed successfully", true))
-			
-			// Create pull request if requested
-			if flagCreatePR {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
-				prURL, err := committer.CreatePullRequest(ctx)
+		}
+		
+		// Create pull request if requested (after push or commit)
+		if isPRRequested() {
+			// Check if we need to push first
+			if !flagPush {
+				needsPush, err := committer.NeedsPush(ctx)
 				if err != nil {
-					var prExists *ErrPRAlreadyExists
-					if errors.As(err, &prExists) {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
-						return nil
+					if flagDebug {
+						appLogger.Debug("Failed to check if push is needed", zap.Error(err))
 					}
-					return fmt.Errorf("failed to create pull request: %w", err)
+					// Continue anyway, let the PR creation fail if needed
+					needsPush = false
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
-				if prURL != "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
+				
+				if needsPush {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch for PR...", false))
+					if err := committer.Push(ctx); err != nil {
+						return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
+					}
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
 				}
+			}
+			
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Creating pull request...", false))
+			prURL, err := committer.CreatePullRequest(ctx)
+			if err != nil {
+				var prExists *pr.ErrPRAlreadyExists
+				if errors.As(err, &prExists) {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request already exists", true))
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
+					return nil
+				}
+				return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
+			if prURL != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prURL)
 			}
 		}
 		return nil
 	}
 
 	// 交互模式：使用统一的MainModel
-	mainModel := ui.NewMainModel(
+	prConfig := ui.PRConfig{
+		CreatePR:    isPRRequested(),
+		Remote:      flagPRRemote,
+		Base:        flagPRBase,
+		Draft:       flagPRDraft,
+		Provider:    flagPRProvider,
+		UseTemplate: flagPRTemplate,
+	}
+	
+	mainModel := ui.NewMainModelWithPRConfig(
 		ctx, 
 		collectorProvider(), 
 		promptProvider(flagLang), 
@@ -570,38 +849,37 @@ func run(cmd *cobra.Command, args []string) error {
 		time.Duration(flagTimeout)*time.Second,
 		flagPush,
 		flagStageAll,
-		flagCreatePR,
+		prConfig,
 	)
 	
 	finalModel, err := tea.NewProgram(mainModel).Run()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.ErrTypeUnknown, "failed to run TUI", err)
 	}
 
 	m, ok := finalModel.(*ui.MainModel)
 	if !ok {
-		return fmt.Errorf("internal error: unexpected model type, got %T", finalModel)
+		return errors.Newf(errors.ErrTypeUnknown, "internal error: unexpected model type, got %T", finalModel)
 	}
 	
 	done, decision, _, err := m.IsDone()
 	if err != nil {
 		// Check if it's the "nothing to commit" error
-		if err == collector.ErrNoDiff {
+		if errors.Is(err, collector.ErrNoDiff) {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 			return nil
 		}
 		// Check if it's a git repository error
-		if errors.Is(err, collector.ErrNotGitRepository) {
+		if errors.Is(err, errors.ErrNoGitRepo) {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			_, _ = fmt.Fprintln(cmd.OutOrStderr(), getGitRepositoryErrorMessage(flagLang))
-			os.Exit(1)
+			errors.HandleFatal(err)
 		}
 		// 如果用户在加载时按 Ctrl+C 取消，则静默退出
 		if err == context.Canceled {
 			return nil
 		}
-		return err
+		return errors.Wrap(errors.ErrTypeUnknown, "TUI execution failed", err)
 	}
 	
 	if done {

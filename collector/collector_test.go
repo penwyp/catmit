@@ -799,6 +799,5 @@ func TestCollector_BackwardCompatibility(t *testing.T) {
 		var _ ChangeAnalyzer = c
 		var _ FileContentProvider = c
 		var _ EnhancedDiffProvider = c
-		var _ LegacyCollectorInterface = c
 	})
 }
