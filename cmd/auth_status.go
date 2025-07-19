@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/penwyp/catmit/internal/cli"
+	"github.com/penwyp/catmit/internal/errors"
 	"github.com/penwyp/catmit/internal/provider"
 	"github.com/spf13/cobra"
 )
@@ -52,7 +53,7 @@ func NewAuthStatusCommand(git GitRunner, providerDetector ProviderDetector, cliD
 			// 获取所有remotes
 			remotes, err := git.GetRemotes(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to get git remotes: %w", err)
+				return errors.Wrap(errors.ErrTypeGit, "failed to get git remotes", err)
 			}
 			
 			if len(remotes) == 0 {

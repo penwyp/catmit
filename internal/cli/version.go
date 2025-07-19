@@ -1,10 +1,11 @@
 package cli
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 var versionRegex = regexp.MustCompile(`^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([^+]+))?(?:\+(.+))?$`)
@@ -12,12 +13,12 @@ var versionRegex = regexp.MustCompile(`^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([^+]
 // ParseVersion 解析语义化版本字符串
 func ParseVersion(versionStr string) (Version, error) {
 	if versionStr == "" {
-		return Version{}, fmt.Errorf("empty version string")
+		return Version{}, errors.New(errors.ErrTypeValidation, "empty version string")
 	}
 
 	matches := versionRegex.FindStringSubmatch(versionStr)
 	if matches == nil {
-		return Version{}, fmt.Errorf("invalid version format: %s", versionStr)
+		return Version{}, errors.Newf(errors.ErrTypeValidation, "invalid version format: %s", versionStr)
 	}
 
 	var v Version
@@ -25,7 +26,7 @@ func ParseVersion(versionStr string) (Version, error) {
 	// Major version (required)
 	major, err := strconv.Atoi(matches[1])
 	if err != nil {
-		return Version{}, fmt.Errorf("invalid major version: %s", matches[1])
+		return Version{}, errors.Newf(errors.ErrTypeValidation, "invalid major version: %s", matches[1])
 	}
 	v.Major = major
 
@@ -33,7 +34,7 @@ func ParseVersion(versionStr string) (Version, error) {
 	if matches[2] != "" {
 		minor, err := strconv.Atoi(matches[2])
 		if err != nil {
-			return Version{}, fmt.Errorf("invalid minor version: %s", matches[2])
+			return Version{}, errors.Newf(errors.ErrTypeValidation, "invalid minor version: %s", matches[2])
 		}
 		v.Minor = minor
 	}
@@ -42,7 +43,7 @@ func ParseVersion(versionStr string) (Version, error) {
 	if matches[3] != "" {
 		patch, err := strconv.Atoi(matches[3])
 		if err != nil {
-			return Version{}, fmt.Errorf("invalid patch version: %s", matches[3])
+			return Version{}, errors.Newf(errors.ErrTypeValidation, "invalid patch version: %s", matches[3])
 		}
 		v.Patch = patch
 	}
@@ -161,12 +162,12 @@ func CheckMinVersion(current, minimum string) (bool, error) {
 	// 解析版本以验证格式
 	_, err := ParseVersion(current)
 	if err != nil {
-		return false, fmt.Errorf("invalid current version: %w", err)
+		return false, errors.Wrap(errors.ErrTypeValidation, "invalid current version", err)
 	}
 
 	_, err = ParseVersion(minimum)
 	if err != nil {
-		return false, fmt.Errorf("invalid minimum version: %w", err)
+		return false, errors.Wrap(errors.ErrTypeValidation, "invalid minimum version", err)
 	}
 
 	// 使用比较函数

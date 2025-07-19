@@ -22,7 +22,7 @@ func (e *ErrPRAlreadyExists) Error() string {
 	if e.err != nil {
 		return e.err.Error()
 	}
-	return fmt.Sprintf("pull request already exists: %s", e.URL)
+	return "pull request already exists: " + e.URL
 }
 
 func (e *ErrPRAlreadyExists) Unwrap() error {
@@ -262,9 +262,9 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			if parseErr == nil && prURL != "" {
 				return "", &ErrPRAlreadyExists{URL: prURL, err: errors.ErrPRAlreadyExists}
 			}
-			return "", errors.Wrap(errors.ErrTypePR, "PR already exists but failed to parse URL", fmt.Errorf("%s", outputStr))
+			return "", errors.Wrapf(errors.ErrTypePR, "PR already exists but failed to parse URL", errors.New(errors.ErrTypePR, outputStr))
 		}
-		return "", errors.Wrap(errors.ErrTypePR, fmt.Sprintf("failed to create PR\nOutput: %s", outputStr), err)
+		return "", errors.Wrapf(errors.ErrTypePR, "failed to create PR\nOutput: %s", err, outputStr)
 	}
 
 	// 如果命令成功且解析到URL

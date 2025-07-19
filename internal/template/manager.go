@@ -2,7 +2,6 @@ package template
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	
@@ -160,7 +159,7 @@ func FindRepositoryRoot() (string, error) {
 		dir = parent
 	}
 	
-	return "", fmt.Errorf("not in a git repository")
+	return "", errors.New(errors.ErrTypeGit, "not in a git repository")
 }
 
 // CreateTemplateData 从各种源创建模板数据

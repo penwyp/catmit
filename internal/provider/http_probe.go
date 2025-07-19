@@ -3,9 +3,10 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // httpProber 实现HTTP探测功能
@@ -52,7 +53,7 @@ func NewHTTPProber(opts ...ProberOption) HTTPProber {
 
 // ProbeGitea 探测Gitea API
 func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult {
-	url := fmt.Sprintf("%s/api/v1/version", baseURL)
+	url := baseURL + "/api/v1/version"
 	
 	var lastErr error
 	for attempt := 0; attempt <= p.maxRetries; attempt++ {
@@ -88,7 +89,7 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 
 		// 服务器错误（5xx），继续重试
 		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
-			lastErr = fmt.Errorf("server error: %d", resp.StatusCode)
+			lastErr = errors.Newf(errors.ErrTypeExternal, "server error: %d", resp.StatusCode)
 			continue
 		}
 

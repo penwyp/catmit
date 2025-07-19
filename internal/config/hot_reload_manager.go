@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // HotReloadManager wraps a config manager with hot reload capability
@@ -40,7 +40,7 @@ type HotReloadManager struct {
 func NewHotReloadManager(baseManager Manager, configPath string) (*HotReloadManager, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file watcher: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to create file watcher", err)
 	}
 	
 	ctx, cancel := context.WithCancel(context.Background())
@@ -60,17 +60,17 @@ func NewHotReloadManager(baseManager Manager, configPath string) (*HotReloadMana
 	if err != nil {
 		if !os.IsNotExist(err) {
 			watcher.Close()
-			return nil, fmt.Errorf("failed to load initial config: %w", err)
+			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load initial config", err)
 		}
 		// Create default config if not exists
 		if err := baseManager.CreateDefaultConfig(); err != nil {
 			watcher.Close()
-			return nil, fmt.Errorf("failed to create default config: %w", err)
+			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to create default config", err)
 		}
 		config, err = baseManager.Load()
 		if err != nil {
 			watcher.Close()
-			return nil, fmt.Errorf("failed to load default config: %w", err)
+			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load default config", err)
 		}
 	}
 	m.currentConfig.Store(config)
@@ -88,7 +88,7 @@ func NewHotReloadManager(baseManager Manager, configPath string) (*HotReloadMana
 func (m *HotReloadManager) Load() (*Config, error) {
 	config := m.currentConfig.Load()
 	if config == nil {
-		return nil, fmt.Errorf("no config loaded")
+		return nil, errors.New(errors.ErrTypeConfig, "no config loaded")
 	}
 	return config.(*Config), nil
 }
@@ -118,7 +118,7 @@ func (m *HotReloadManager) CreateDefaultConfig() error {
 	// Reload after creation
 	config, err := m.baseManager.Load()
 	if err != nil {
-		return fmt.Errorf("failed to load created config: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to load created config", err)
 	}
 	
 	m.currentConfig.Store(config)
@@ -137,7 +137,7 @@ func (m *HotReloadManager) UpdateRemote(host string, config RemoteConfig) error 
 	// Reload to update cache
 	newConfig, err := m.baseManager.Load()
 	if err != nil {
-		return fmt.Errorf("failed to reload after update: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to reload after update", err)
 	}
 	
 	m.currentConfig.Store(newConfig)
@@ -177,12 +177,12 @@ func (m *HotReloadManager) startWatching() error {
 	
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 	
 	// Add directory to watcher
 	if err := m.watcher.Add(dir); err != nil {
-		return fmt.Errorf("failed to watch config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to watch config directory", err)
 	}
 	
 	// Start the watcher goroutine

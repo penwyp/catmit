@@ -2,11 +2,12 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // configManager 配置文件管理器实现
@@ -18,7 +19,7 @@ type configManager struct {
 // NewConfigManager 创建新的配置管理器
 func NewConfigManager(configPath string) (Manager, error) {
 	if configPath == "" {
-		return nil, fmt.Errorf("config path cannot be empty")
+		return nil, errors.New(errors.ErrTypeConfig, "config path cannot be empty")
 	}
 
 	return &configManager{
@@ -33,12 +34,12 @@ func (m *configManager) Load() (*Config, error) {
 
 	data, err := ioutil.ReadFile(m.configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to read config file", err)
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to parse config", err)
 	}
 
 	return &config, nil
@@ -52,26 +53,26 @@ func (m *configManager) Save(config *Config) error {
 	// 序列化配置
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to marshal config", err)
 	}
 
 	// 确保目录存在
 	dir := filepath.Dir(m.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 
 	// 原子写入：先写入临时文件，然后重命名
 	tmpFile := m.configPath + ".tmp"
 	if err := ioutil.WriteFile(tmpFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to write temp config file", err)
 	}
 
 	// 原子重命名
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		// 清理临时文件
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to save config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
 	return nil

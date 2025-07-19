@@ -1,11 +1,12 @@
 package provider
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 // ParseGitRemoteURL 解析Git remote URL
 func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 	if remoteURL == "" {
-		return RemoteInfo{}, fmt.Errorf("empty URL")
+		return RemoteInfo{}, errors.New(errors.ErrTypeValidation, "empty URL")
 	}
 
 	var info RemoteInfo
@@ -28,7 +29,7 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 	if strings.HasPrefix(remoteURL, "git@") || strings.HasPrefix(remoteURL, "ssh://") {
 		matches := sshPattern.FindStringSubmatch(remoteURL)
 		if len(matches) < 4 {
-			return RemoteInfo{}, fmt.Errorf("invalid SSH URL format: %s", remoteURL)
+			return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "invalid SSH URL format: %s", remoteURL)
 		}
 
 		info.Protocol = "ssh"
@@ -38,7 +39,7 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 		if matches[2] != "" {
 			port, err := strconv.Atoi(matches[2])
 			if err != nil {
-				return RemoteInfo{}, fmt.Errorf("invalid port: %s", matches[2])
+				return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "invalid port: %s", matches[2])
 			}
 			info.Port = port
 		}
@@ -46,7 +47,7 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 		// 解析路径
 		pathParts := strings.Split(matches[3], "/")
 		if len(pathParts) < 2 {
-			return RemoteInfo{}, fmt.Errorf("invalid repository path: %s", matches[3])
+			return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "invalid repository path: %s", matches[3])
 		}
 
 		info.Repo = strings.TrimSuffix(pathParts[len(pathParts)-1], ".git")
@@ -56,7 +57,7 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 		// 解析HTTPS格式
 		u, err := url.Parse(remoteURL)
 		if err != nil {
-			return RemoteInfo{}, fmt.Errorf("invalid URL: %w", err)
+			return RemoteInfo{}, errors.Wrap(errors.ErrTypeValidation, "invalid URL", err)
 		}
 
 		info.Protocol = "https"
@@ -66,7 +67,7 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 		if u.Port() != "" {
 			port, err := strconv.Atoi(u.Port())
 			if err != nil {
-				return RemoteInfo{}, fmt.Errorf("invalid port: %s", u.Port())
+				return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "invalid port: %s", u.Port())
 			}
 			info.Port = port
 		}
@@ -76,19 +77,19 @@ func ParseGitRemoteURL(remoteURL string) (RemoteInfo, error) {
 		path = strings.TrimSuffix(path, ".git")
 		
 		if path == "" {
-			return RemoteInfo{}, fmt.Errorf("missing repository path")
+			return RemoteInfo{}, errors.New(errors.ErrTypeValidation, "missing repository path")
 		}
 
 		pathParts := strings.Split(path, "/")
 		if len(pathParts) < 2 {
-			return RemoteInfo{}, fmt.Errorf("invalid repository path: %s", path)
+			return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "invalid repository path: %s", path)
 		}
 
 		info.Repo = pathParts[len(pathParts)-1]
 		info.Owner = strings.Join(pathParts[:len(pathParts)-1], "/")
 
 	} else {
-		return RemoteInfo{}, fmt.Errorf("unsupported URL format: %s", remoteURL)
+		return RemoteInfo{}, errors.Newf(errors.ErrTypeValidation, "unsupported URL format: %s", remoteURL)
 	}
 
 	// 检测Provider类型
@@ -114,7 +115,7 @@ func detectProviderFromHost(host string) string {
 // GetHTTPURL 获取HTTP(S) URL
 func (r RemoteInfo) GetHTTPURL() string {
 	if r.Port > 0 && r.Port != 80 && r.Port != 443 {
-		return fmt.Sprintf("https://%s:%d", r.Host, r.Port)
+		return "https://" + r.Host + ":" + strconv.Itoa(r.Port)
 	}
-	return fmt.Sprintf("https://%s", r.Host)
+	return "https://" + r.Host
 }

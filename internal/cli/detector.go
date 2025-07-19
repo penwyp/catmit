@@ -2,10 +2,11 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
+	
+	"github.com/penwyp/catmit/internal/errors"
 )
 
 // Detector CLI工具检测器
@@ -63,7 +64,7 @@ func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand strin
 		output, err = d.runner.Run(ctx, cliName, cmdArgs...)
 	}
 	if err != nil {
-		return "", fmt.Errorf("failed to get version: %w", err)
+		return "", errors.Wrap(errors.ErrTypeExternal, "failed to get version", err)
 	}
 
 	// 提取版本号的正则表达式
@@ -83,7 +84,7 @@ func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand strin
 		}
 	}
 
-	return "", fmt.Errorf("version not found in output")
+	return "", errors.New(errors.ErrTypeValidation, "version not found in output")
 }
 
 // CheckAuthStatus 检查认证状态
@@ -187,7 +188,7 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 	}
 	
 	if err != nil {
-		return false, "", fmt.Errorf("failed to check auth status: %w", err)
+		return false, "", errors.Wrap(errors.ErrTypeExternal, "failed to check auth status", err)
 	}
 	
 	return false, "", nil
@@ -224,7 +225,7 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 
 	config, exists := cliConfig[provider]
 	if !exists {
-		return CLIStatus{}, fmt.Errorf("unsupported provider: %s", provider)
+		return CLIStatus{}, errors.Newf(errors.ErrTypeValidation, "unsupported provider: %s", provider)
 	}
 
 	status := CLIStatus{

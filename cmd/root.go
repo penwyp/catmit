@@ -213,7 +213,7 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 	}
 	if err != nil {
 		// Include the git output in the error for better error reporting
-		return errors.Wrap(errors.ErrTypeGit, "git push failed", fmt.Errorf("%w\nOutput: %s", err, string(output)))
+		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
 	}
 	return nil
 }
@@ -803,7 +803,7 @@ func run(cmd *cobra.Command, args []string) error {
 				if needsPush {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pushing branch for PR...", false))
 					if err := committer.Push(ctx); err != nil {
-						return fmt.Errorf("failed to push branch: %w", err)
+						return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Branch pushed successfully", true))
 				}
@@ -818,7 +818,7 @@ func run(cmd *cobra.Command, args []string) error {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PR URL: %s\n", prExists.URL)
 					return nil
 				}
-				return catmitErrors.Wrap(catmitErrors.ErrTypePR, "failed to create pull request", err)
+				return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), renderStatusBar("Pull request created successfully", true))
 			if prURL != "" {
@@ -859,7 +859,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	m, ok := finalModel.(*ui.MainModel)
 	if !ok {
-		return errors.New(errors.ErrTypeUnknown, fmt.Sprintf("internal error: unexpected model type, got %T", finalModel))
+		return errors.Newf(errors.ErrTypeUnknown, "internal error: unexpected model type, got %T", finalModel)
 	}
 	
 	done, decision, _, err := m.IsDone()

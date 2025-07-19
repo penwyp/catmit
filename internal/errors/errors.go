@@ -29,6 +29,8 @@ const (
 	ErrTypeValidation
 	// ErrTypeLLM LLM API 相关错误
 	ErrTypeLLM
+	// ErrTypeExternal 外部命令/工具相关错误
+	ErrTypeExternal
 )
 
 // CatmitError 统一错误结构
@@ -73,11 +75,30 @@ func New(errType ErrorType, message string) *CatmitError {
 	}
 }
 
+// Newf 创建格式化的新 CatmitError
+func Newf(errType ErrorType, format string, args ...interface{}) *CatmitError {
+	return &CatmitError{
+		Type:      errType,
+		Message:   fmt.Sprintf(format, args...),
+		Retryable: false,
+	}
+}
+
 // Wrap 包装已有错误
 func Wrap(errType ErrorType, message string, cause error) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
 		Message:   message,
+		Cause:     cause,
+		Retryable: false,
+	}
+}
+
+// Wrapf 格式化包装已有错误
+func Wrapf(errType ErrorType, format string, cause error, args ...interface{}) *CatmitError {
+	return &CatmitError{
+		Type:      errType,
+		Message:   fmt.Sprintf(format, args...),
 		Cause:     cause,
 		Retryable: false,
 	}

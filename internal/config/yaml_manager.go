@@ -2,12 +2,12 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/penwyp/catmit/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,7 +29,7 @@ type yamlConfigManager struct {
 // NewYAMLConfigManager creates a config manager that supports both JSON and YAML
 func NewYAMLConfigManager(configPath string) (Manager, error) {
 	if configPath == "" {
-		return nil, fmt.Errorf("config path cannot be empty")
+		return nil, errors.New(errors.ErrTypeConfig, "config path cannot be empty")
 	}
 
 	// Determine format based on extension
@@ -61,7 +61,7 @@ func (m *yamlConfigManager) Load() (*Config, error) {
 		if os.IsNotExist(err) {
 			return nil, err // Return the raw error for IsNotExist checks
 		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to read config file", err)
 	}
 
 	var config Config
@@ -76,7 +76,7 @@ func (m *yamlConfigManager) Load() (*Config, error) {
 				// and the format is not exposed outside the struct
 				return &config, nil
 			}
-			return nil, fmt.Errorf("failed to parse config as JSON: %w", err)
+			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to parse config as JSON", err)
 		}
 	case FormatYAML:
 		if err := yaml.Unmarshal(data, &config); err != nil {
@@ -86,7 +86,7 @@ func (m *yamlConfigManager) Load() (*Config, error) {
 				// and the format is not exposed outside the struct
 				return &config, nil
 			}
-			return nil, fmt.Errorf("failed to parse config as YAML: %w", err)
+			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to parse config as YAML", err)
 		}
 	}
 
@@ -108,30 +108,30 @@ func (m *yamlConfigManager) Save(config *Config) error {
 	case FormatYAML:
 		data, err = yaml.Marshal(config)
 	default:
-		return fmt.Errorf("unknown format: %s", m.format)
+		return errors.Newf(errors.ErrTypeConfig, "unknown format: %s", m.format)
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to marshal config", err)
 	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(m.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 
 	// Atomic write: write to temp file then rename
 	tmpFile := m.configPath + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to write temp config file", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		// Clean up temp file
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to save config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
 	return nil
@@ -188,7 +188,7 @@ func (m *yamlConfigManager) CreateDefaultConfig() error {
 func (m *yamlConfigManager) saveWithHeader(config *Config) error {
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to marshal config", err)
 	}
 
 	// Add header comment
@@ -202,18 +202,18 @@ func (m *yamlConfigManager) saveWithHeader(config *Config) error {
 	// Ensure directory exists
 	dir := filepath.Dir(m.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 
 	// Atomic write
 	tmpFile := m.configPath + ".tmp"
 	if err := os.WriteFile(tmpFile, fullData, 0644); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to write temp config file", err)
 	}
 
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to save config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
 	return nil
@@ -236,7 +236,7 @@ func (m *yamlConfigManager) UpdateRemote(host string, remoteConfig RemoteConfig)
 				Remotes: make(map[string]RemoteConfig),
 			}
 		} else {
-			return fmt.Errorf("failed to read config file: %w", err)
+			return errors.Wrap(errors.ErrTypeConfig, "failed to read config file", err)
 		}
 	} else {
 		// Parse the existing config
@@ -248,7 +248,7 @@ func (m *yamlConfigManager) UpdateRemote(host string, remoteConfig RemoteConfig)
 				if yamlErr := yaml.Unmarshal(data, config); yamlErr == nil {
 					// Successfully parsed as YAML
 				} else {
-					return fmt.Errorf("failed to parse config: %w", err)
+					return errors.Wrap(errors.ErrTypeConfig, "failed to parse config", err)
 				}
 			}
 		case FormatYAML:
@@ -257,7 +257,7 @@ func (m *yamlConfigManager) UpdateRemote(host string, remoteConfig RemoteConfig)
 				if jsonErr := json.Unmarshal(data, config); jsonErr == nil {
 					// Successfully parsed as JSON
 				} else {
-					return fmt.Errorf("failed to parse config: %w", err)
+					return errors.Wrap(errors.ErrTypeConfig, "failed to parse config", err)
 				}
 			}
 		}
@@ -280,30 +280,30 @@ func (m *yamlConfigManager) UpdateRemote(host string, remoteConfig RemoteConfig)
 	case FormatYAML:
 		saveData, saveErr = yaml.Marshal(config)
 	default:
-		return fmt.Errorf("unknown format: %s", m.format)
+		return errors.Newf(errors.ErrTypeConfig, "unknown format: %s", m.format)
 	}
 
 	if saveErr != nil {
-		return fmt.Errorf("failed to marshal config: %w", saveErr)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to marshal config", saveErr)
 	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(m.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 
 	// Atomic write: write to temp file then rename
 	tmpFile := m.configPath + ".tmp"
 	if err := os.WriteFile(tmpFile, saveData, 0644); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to write temp config file", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		// Clean up temp file
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to save config file: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
 	return nil
@@ -314,7 +314,7 @@ func (m *yamlConfigManager) ConvertFormat(newFormat Format) error {
 	// Load current config
 	config, err := m.Load()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to load config", err)
 	}
 
 	// Update format
@@ -336,7 +336,7 @@ func (m *yamlConfigManager) ConvertFormat(newFormat Format) error {
 	if err := m.Save(config); err != nil {
 		// Restore old format on error
 		m.format = oldFormat
-		return fmt.Errorf("failed to save in new format: %w", err)
+		return errors.Wrap(errors.ErrTypeConfig, "failed to save in new format", err)
 	}
 
 	return nil
