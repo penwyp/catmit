@@ -499,17 +499,56 @@ func (d *defaultGitRunner) GetCommitMessage(ctx context.Context, ref string) (st
 }
 
 func (d *defaultGitRunner) GetDefaultBranch(ctx context.Context, remote string) (string, error) {
-	// Try to get the default branch from the remote
-	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", fmt.Sprintf("refs/remotes/%s/HEAD", remote))
+	// First try to get the default branch directly from remote using ls-remote
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--symref", remote, "HEAD")
 	output, err := cmd.Output()
-	if err != nil {
-		// Fallback to main/master
-		return "main", nil
+	if err == nil {
+		// Parse output format: ref: refs/heads/master  HEAD
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "ref: refs/heads/") {
+				branch := strings.TrimPrefix(line, "ref: refs/heads/")
+				// Remove trailing HEAD
+				parts := strings.Fields(branch)
+				if len(parts) > 0 {
+					if flagDebug && appLogger != nil {
+						appLogger.Debug("Got default branch from remote", zap.String("branch", parts[0]), zap.String("remote", remote))
+					}
+					return parts[0], nil
+				}
+			}
+		}
 	}
-	// Extract branch name from refs/remotes/origin/HEAD -> refs/remotes/origin/main
-	parts := strings.Split(strings.TrimSpace(string(output)), "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1], nil
+	
+	// Fallback to local symbolic-ref
+	cmd = exec.CommandContext(ctx, "git", "symbolic-ref", fmt.Sprintf("refs/remotes/%s/HEAD", remote))
+	output, err = cmd.Output()
+	if err == nil {
+		// Extract branch name from refs/remotes/origin/HEAD -> refs/remotes/origin/main
+		parts := strings.Split(strings.TrimSpace(string(output)), "/")
+		if len(parts) > 0 {
+			if flagDebug && appLogger != nil {
+				appLogger.Debug("Got default branch from local ref", zap.String("branch", parts[len(parts)-1]), zap.String("remote", remote))
+			}
+			return parts[len(parts)-1], nil
+		}
+	}
+	
+	// Try common default branch names
+	commonDefaults := []string{"main", "master", "develop", "trunk"}
+	for _, branch := range commonDefaults {
+		cmd = exec.CommandContext(ctx, "git", "ls-remote", "--heads", remote, branch)
+		output, err = cmd.Output()
+		if err == nil && len(output) > 0 {
+			if flagDebug && appLogger != nil {
+				appLogger.Debug("Found common default branch", zap.String("branch", branch), zap.String("remote", remote))
+			}
+			return branch, nil
+		}
+	}
+	
+	if flagDebug && appLogger != nil {
+		appLogger.Debug("Falling back to 'main' as default branch", zap.String("remote", remote))
 	}
 	return "main", nil
 }

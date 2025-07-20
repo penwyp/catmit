@@ -25,6 +25,24 @@ go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out  # 
 golangci-lint run               # Lint check
 ```
 
+### Testing Commands
+```bash
+# Run single test or test file
+go test -run TestCollector_RecentCommits ./collector  # Run specific test
+go test -run TestCollector ./...                      # Run all tests matching pattern
+
+# Testing options
+go test -v ./...                # Verbose output
+go test -race ./...             # With race detection
+go test -count=1 ./...          # Disable test caching
+go test -timeout 30s ./...      # With custom timeout
+
+# Coverage analysis
+go test -cover ./collector                     # Basic coverage for package
+go test -coverprofile=coverage.out ./...       # Generate coverage report
+go tool cover -html=coverage.out               # View coverage in browser
+```
+
 ### Environment Setup
 Required environment variable:
 - `CATMIT_LLM_API_KEY=sk-xxxx` - LLM API key for calls
@@ -240,3 +258,11 @@ The README follows modern GitHub project standards with:
 - Static compilation with `CGO_ENABLED=0`
 - Automated releases on git tag creation
 - Homebrew tap support for easy installation
+
+### Release Commands
+```bash
+make release    # Tag and push release (triggers GitHub Actions)
+# Manual release process:
+# 1. Create and push tag: git tag vX.Y.Z && git push origin vX.Y.Z
+# 2. GitHub Actions will automatically build and create release
+```
