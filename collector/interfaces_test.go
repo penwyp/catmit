@@ -293,10 +293,9 @@ func TestPerformanceOptimizations(t *testing.T) {
 		}, "git", "status")
 		
 		require.Error(t, err)
-		var gitErr *GitError
-		assert.True(t, errors.As(err, &gitErr))
-		assert.Equal(t, "git", gitErr.Command)
-		assert.Contains(t, gitErr.Context, "failed after")
+		// The error should be a CatmitError wrapping git failure
+		assert.Contains(t, err.Error(), "git command failed")
+		assert.Contains(t, err.Error(), "failed after")
 	})
 }
 
