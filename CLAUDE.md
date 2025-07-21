@@ -143,6 +143,22 @@ catmit "feat: auth"  # Seed text via positional argument
 catmit --seed "feat: auth"  # Seed text via flag (same effect)
 ```
 
+### Squash workflow
+```bash
+catmit squash        # Default mode (opens editor) with TUI
+catmit squash -n     # No confirmation, output directly
+catmit squash -l zh  # Generate Chinese commit message
+catmit squash -t 60  # 60 second timeout
+```
+
+The squash command helps consolidate multiple commit messages into a single, comprehensive commit message. It:
+- Opens your default editor ($EDITOR) to input commit messages
+- Uses LLM to analyze and merge them intelligently
+- Maintains conventional commit format
+- Automatically copies result to clipboard with confirmation
+- Cleans output to ensure no AI prefixes are included
+- Supports all language options from main command
+
 ### Pull Request workflow
 ```bash
 catmit --create-pr   # Commit, push, and create GitHub PR

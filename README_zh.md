@@ -196,6 +196,35 @@ catmit --help
 catmit --version
 ```
 
+### 🔀 合并提交信息
+```bash
+# 将多个提交信息合并为一个（打开编辑器）
+catmit squash
+
+# 跳过确认，直接输出
+catmit squash --no-confirm
+
+# 生成中文提交信息
+catmit squash --lang zh
+
+# 自定义超时时间
+catmit squash --timeout 60
+
+# 示例工作流：
+$ catmit squash
+# 打开默认编辑器输入提交信息
+# 每行一个提交信息，保存并退出
+
+# 生成的结果（自动复制到剪贴板）：
+feat: 实现完整的认证系统
+
+- 添加基于 JWT 的用户认证功能
+- 修复移动端登录错误
+- 更新认证相关文档
+
+✓ 已复制到剪贴板
+```
+
 ### 🚀 Pull Request 创建
 ```bash
 # 提交并创建 GitHub pull request

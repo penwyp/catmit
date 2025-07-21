@@ -196,6 +196,35 @@ catmit --help
 catmit --version
 ```
 
+### 🔀 Squash Commits
+```bash
+# Consolidate multiple commit messages into one (opens editor)
+catmit squash
+
+# Skip confirmation, output directly
+catmit squash --no-confirm
+
+# Generate in Chinese
+catmit squash --lang zh
+
+# Custom timeout
+catmit squash --timeout 60
+
+# Example workflow:
+$ catmit squash
+# Opens your default editor to input commit messages
+# Enter messages one per line, save and exit
+
+# Generated result (automatically copied to clipboard):
+feat: implement complete authentication system
+
+- Add user authentication with JWT support
+- Fix login error on mobile devices
+- Update authentication documentation
+
+✓ Copied to clipboard
+```
+
 ### 🚀 Pull Request Creation
 ```bash
 # Commit and create a GitHub pull request
