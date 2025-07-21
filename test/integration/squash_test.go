@@ -197,7 +197,7 @@ func TestSquash_UIModel(t *testing.T) {
 	}
 
 	// 创建 UI 模型
-	model := ui.NewSquashModel(s, messages)
+	model := ui.NewSquashModel(s, messages, false)
 
 	// 测试初始化
 	initCmd := model.Init()
