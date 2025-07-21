@@ -161,12 +161,10 @@ func TestCommitModel_View(t *testing.T) {
 	// Test view rendering
 	view := model.View()
 	
-	assert.Contains(t, view, "Commit Progress")
+	// 由于边框现在由MainModel处理，这里只检查内容
 	assert.Contains(t, view, "Message:")
 	assert.Contains(t, view, "test: sample commit message")
-	assert.Contains(t, view, "┌") // Top border
-	assert.Contains(t, view, "└") // Bottom border
-	assert.Contains(t, view, "│") // Side borders
+	// 不再检查边框字符，因为View()现在只返回内容
 }
 
 func TestCommitModel_calculateContentWidth(t *testing.T) {

@@ -23,7 +23,6 @@ type BaseModel struct {
 	height int
 
 	// State management
-	phase int
 	done  bool
 	err   error
 

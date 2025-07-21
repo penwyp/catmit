@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -163,7 +162,7 @@ func (m *CommitModel) calculateContentWidth() int {
 	return availableWidth
 }
 
-// View 渲染界面
+// View 渲染界面（仅返回内容，边框由MainModel统一处理）
 func (m *CommitModel) View() string {
 	// 调色板（与ReviewModel保持一致）
 	const (
@@ -177,85 +176,50 @@ func (m *CommitModel) View() string {
 	contentWidth := m.calculateContentWidth()
 	
 	// 样式定义
-	borderStyle := lipgloss.NewStyle().Foreground(cBlue)
 	titleStyle := lipgloss.NewStyle().Foreground(cWhite).Bold(true)
-	langStyle := lipgloss.NewStyle().Foreground(cGray)
 	
 	// 状态样式
 	progressStyle := lipgloss.NewStyle().Foreground(cYellow)
 	successStyle := lipgloss.NewStyle().Foreground(cGreen)
 	
-	// 辅助函数：行渲染器（与ReviewModel保持一致）
-	renderLine := func(content string) string {
-		contentDisplayWidth := lipgloss.Width(content)
-		if contentDisplayWidth > contentWidth {
-			content = content[:contentWidth-3] + "..."
-			contentDisplayWidth = lipgloss.Width(content)
-		}
-		
-		linePadding := contentWidth - contentDisplayWidth
-		if linePadding < 0 {
-			linePadding = 0
-		}
-		return borderStyle.Render("│") + content + strings.Repeat(" ", linePadding) + borderStyle.Render("│")
-	}
-	
-	// 构建标题
-	titleText := titleStyle.Render("Commit Progress") + langStyle.Render(fmt.Sprintf(" (%s)", m.lang))
-	titlePadding := contentWidth - lipgloss.Width(titleText)
-	if titlePadding < 0 {
-		titlePadding = 0
-	}
-	header := borderStyle.Render("┌") + strings.Repeat(borderStyle.Render("─"), titlePadding/2) +
-		titleText + strings.Repeat(borderStyle.Render("─"), titlePadding-titlePadding/2) +
-		borderStyle.Render("┐")
-	
 	// 构建内容
-	var contentLines []string
+	var content strings.Builder
 	
 	// 显示commit message（截断显示）
 	messagePreview := m.message
 	if len(messagePreview) > contentWidth-4 {
 		messagePreview = messagePreview[:contentWidth-7] + "..."
 	}
-	contentLines = append(contentLines, renderLine(" "+titleStyle.Render("Message: ")+messagePreview))
-	contentLines = append(contentLines, renderLine("")) // 空行
+	content.WriteString(" " + titleStyle.Render("Message: ") + messagePreview + "\n")
+	content.WriteString("\n") // 空行
 	
 	// 根据阶段显示状态
 	switch m.stage {
 	case CommitStageInit, CommitStageCommitting:
 		statusLine := " " + m.spinner.View() + " " + progressStyle.Render("Committing changes...")
-		contentLines = append(contentLines, renderLine(statusLine))
+		content.WriteString(statusLine)
 	case CommitStageCommitted:
 		statusLine := " ✓ " + successStyle.Render("Committed successfully")
-		contentLines = append(contentLines, renderLine(statusLine))
+		content.WriteString(statusLine)
 		if m.enablePush {
-			statusLine = " " + m.spinner.View() + " " + progressStyle.Render("Preparing to push...")
-			contentLines = append(contentLines, renderLine(statusLine))
+			statusLine = "\n " + m.spinner.View() + " " + progressStyle.Render("Preparing to push...")
+			content.WriteString(statusLine)
 		}
 	case CommitStagePushing:
 		statusLine := " ✓ " + successStyle.Render("Committed successfully")
-		contentLines = append(contentLines, renderLine(statusLine))
-		statusLine = " " + m.spinner.View() + " " + progressStyle.Render("Pushing to remote...")
-		contentLines = append(contentLines, renderLine(statusLine))
+		content.WriteString(statusLine)
+		statusLine = "\n " + m.spinner.View() + " " + progressStyle.Render("Pushing to remote...")
+		content.WriteString(statusLine)
 	case CommitStagePushed, CommitStageDone:
 		statusLine := " ✓ " + successStyle.Render("Committed successfully")
-		contentLines = append(contentLines, renderLine(statusLine))
+		content.WriteString(statusLine)
 		if m.enablePush {
-			statusLine = " ✓ " + successStyle.Render("Pushed successfully")
-			contentLines = append(contentLines, renderLine(statusLine))
+			statusLine = "\n ✓ " + successStyle.Render("Pushed successfully")
+			content.WriteString(statusLine)
 		}
 	}
 	
-	// 构建底部边框
-	bottomBorder := borderStyle.Render("└" + strings.Repeat("─", contentWidth) + "┘")
-	
-	// 组装最终输出
-	result := []string{header}
-	result = append(result, contentLines...)
-	result = append(result, bottomBorder)
-	
-	return strings.Join(result, "\n")
+	return content.String()
 }
 
 // IsDone 返回操作是否完成

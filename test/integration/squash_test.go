@@ -220,7 +220,7 @@ func TestSquash_ClipboardIntegration(t *testing.T) {
 	originalContent, _ := clipboard.ReadAll()
 	defer func() {
 		// 恢复原始剪贴板内容
-		clipboard.WriteAll(originalContent)
+		_ = clipboard.WriteAll(originalContent)
 	}()
 
 	testContent := "feat: test clipboard integration"
@@ -256,7 +256,7 @@ func TestSquash_NoConfirmMode(t *testing.T) {
 	
 	// 读取输出
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 	
 	// 验证输出
