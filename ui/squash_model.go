@@ -25,15 +25,12 @@ const (
 
 // SquashModel 是 squash 命令的 TUI 模型
 type SquashModel struct {
+	BaseModel
 	squash        *squash.Squash
 	messages      []string
 	result        string
 	phase         SquashPhase
 	spinner       spinner.Model
-	err           error
-	width         int
-	height        int
-	selectedIndex int
 	copySuccess   bool
 }
 
@@ -44,17 +41,23 @@ type squashMsg struct {
 }
 
 // NewSquashModel 创建一个新的 SquashModel
-func NewSquashModel(s *squash.Squash, messages []string) *SquashModel {
+func NewSquashModel(s *squash.Squash, messages []string, appendMode bool) *SquashModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	
-	return &SquashModel{
-		squash:   s,
-		messages: messages,
-		phase:    SquashPhaseGenerating,
-		spinner:  sp,
+	model := &SquashModel{
+		BaseModel: NewBaseModel("Squashing Commit Messages", nil, appendMode),
+		squash:    s,
+		messages:  messages,
+		phase:     SquashPhaseGenerating,
+		spinner:   sp,
 	}
+	
+	// Set content renderer
+	model.SetContentRenderer(model.renderContent)
+	
+	return model
 }
 
 // Run 运行 TUI
@@ -87,49 +90,25 @@ func (m *SquashModel) generateCommitMessage() tea.Cmd {
 func (m *SquashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.HandleWindowSize(msg)
 		return m, nil
 
 	case tea.KeyMsg:
-		switch m.phase {
-		case SquashPhaseReviewing:
-			switch msg.String() {
-			case "a", "A":
-				// Accept
-				m.phase = SquashPhaseDone
-				// 输出结果
-				fmt.Println(m.result)
-				// 尝试复制到剪贴板
-				if err := clipboard.WriteAll(m.result); err == nil {
-					fmt.Fprintln(os.Stderr, "✓ Copied to clipboard")
-				}
-				return m, tea.Quit
-
-			case "r", "R":
-				// Regenerate
-				m.phase = SquashPhaseGenerating
-				m.copySuccess = false
-				return m, tea.Batch(
-					m.spinner.Tick,
-					m.generateCommitMessage(),
-				)
-
-			case "e", "E":
-				// Edit - 这里可以实现编辑功能，暂时先返回提示
-				fmt.Fprintln(os.Stderr, "Edit feature not yet implemented")
-				return m, nil
-
-			case "q", "Q", "ctrl+c":
-				// Quit
-				return m, tea.Quit
+		// Let BaseModel handle navigation in review phase
+		if m.phase == SquashPhaseReviewing {
+			cmd := m.HandleKeyboard(msg)
+			if cmd != nil {
+				return m, cmd
 			}
 		}
+		return m, nil
 
 	case squashMsg:
 		if msg.err != nil {
-			m.err = msg.err
+			m.SetError(msg.err)
 			m.phase = SquashPhaseReviewing
+			// Update actions for error state
+			m.updateActionsForPhase()
 			return m, nil
 		}
 		m.result = msg.result
@@ -138,6 +117,8 @@ func (m *SquashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err := clipboard.WriteAll(m.result); err == nil {
 			m.copySuccess = true
 		}
+		// Update actions for review state
+		m.updateActionsForPhase()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -151,49 +132,111 @@ func (m *SquashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View 渲染视图
-func (m *SquashModel) View() string {
+// updateActionsForPhase updates the available actions based on the current phase
+func (m *SquashModel) updateActionsForPhase() {
+	switch m.phase {
+	case SquashPhaseReviewing:
+		if m.GetError() != nil {
+			// Error state actions
+			m.SetActions([]Action{
+				{Key: "R", Label: "etry", Handler: m.regenerate},
+				{Key: "Q", Label: "uit", Handler: m.quit},
+			})
+		} else {
+			// Normal review actions
+			m.SetActions([]Action{
+				{Key: "A", Label: "ccept", Handler: m.accept},
+				{Key: "R", Label: "egenerate", Handler: m.regenerate},
+				{Key: "E", Label: "dit", Handler: m.edit},
+				{Key: "Q", Label: "uit", Handler: m.quit},
+			})
+		}
+	default:
+		// No actions during generation
+		m.SetActions(nil)
+	}
+}
+
+// Action handlers
+func (m *SquashModel) accept() tea.Cmd {
+	return func() tea.Msg {
+		m.phase = SquashPhaseDone
+		// 输出结果
+		fmt.Println(m.result)
+		// 尝试复制到剪贴板
+		if err := clipboard.WriteAll(m.result); err == nil {
+			fmt.Fprintln(os.Stderr, "✓ Copied to clipboard")
+		}
+		return tea.Quit()
+	}
+}
+
+func (m *SquashModel) regenerate() tea.Cmd {
+	m.phase = SquashPhaseGenerating
+	m.copySuccess = false
+	m.SetError(nil)
+	return tea.Batch(
+		m.spinner.Tick,
+		m.generateCommitMessage(),
+	)
+}
+
+func (m *SquashModel) edit() tea.Cmd {
+	// TODO: Implement edit functionality
+	return func() tea.Msg {
+		fmt.Fprintln(os.Stderr, "Edit feature not yet implemented")
+		return nil
+	}
+}
+
+func (m *SquashModel) quit() tea.Cmd {
+	return tea.Quit
+}
+
+// renderContent renders the main content based on the current phase
+func (m *SquashModel) renderContent() string {
 	switch m.phase {
 	case SquashPhaseGenerating:
-		return m.viewGenerating()
+		return m.renderGenerating()
 	case SquashPhaseReviewing:
-		return m.viewReviewing()
-	case SquashPhaseDone:
-		return ""
+		return m.renderReviewing()
 	default:
 		return ""
 	}
 }
 
-// viewGenerating 渲染生成中的视图
-func (m *SquashModel) viewGenerating() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("12"))
-
-	content := []string{
-		titleStyle.Render("Squashing Commit Messages"),
-		"",
-		m.spinner.View() + " Generating consolidated commit message...",
-		"",
-		fmt.Sprintf("Processing %d commit messages", len(m.messages)),
+// View 渲染视图
+func (m *SquashModel) View() string {
+	if m.phase == SquashPhaseDone {
+		return ""
 	}
-
-	return lipgloss.NewStyle().
-		Padding(1, 2).
-		Render(strings.Join(content, "\n"))
+	// Update title based on phase
+	switch m.phase {
+	case SquashPhaseGenerating:
+		m.SetTitle("Squashing Commit Messages")
+	case SquashPhaseReviewing:
+		if m.GetError() != nil {
+			m.SetTitle("Error")
+		} else {
+			m.SetTitle("Generated commit message:")
+		}
+	}
+	return m.BaseModel.View()
 }
 
-// viewReviewing 渲染审核视图
-func (m *SquashModel) viewReviewing() string {
-	if m.err != nil {
-		return m.viewError()
-	}
+// renderGenerating 渲染生成中的内容
+func (m *SquashModel) renderGenerating() string {
+	var content []string
+	content = append(content, 
+		m.spinner.View()+" Generating consolidated commit message...",
+		"",
+		fmt.Sprintf("Processing %d commit messages", len(m.messages)),
+	)
+	return strings.Join(content, "\n")
+}
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("12"))
-
+// renderReviewing 渲染审核内容
+func (m *SquashModel) renderReviewing() string {
 	resultStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -203,56 +246,16 @@ func (m *SquashModel) viewReviewing() string {
 	successStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("10"))
 
-	actionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("14")).
-		Bold(true)
+	var content []string
+	
+	// Show the result
+	content = append(content, resultStyle.Render(m.result), "")
 
-	content := []string{
-		titleStyle.Render("Generated commit message:"),
-		"",
-		resultStyle.Render(m.result),
-		"",
-	}
-
+	// Show copy success message
 	if m.copySuccess {
 		content = append(content, successStyle.Render("✅ Copied to clipboard!"), "")
 	}
 
-	actions := []string{
-		actionStyle.Render("[A]") + "ccept  ",
-		actionStyle.Render("[R]") + "egenerate  ",
-		actionStyle.Render("[E]") + "dit  ",
-		actionStyle.Render("[Q]") + "uit",
-	}
-	content = append(content, strings.Join(actions, ""))
-
-	return lipgloss.NewStyle().
-		Padding(1, 2).
-		Render(strings.Join(content, "\n"))
+	return strings.Join(content, "\n")
 }
 
-// viewError 渲染错误视图
-func (m *SquashModel) viewError() string {
-	errorStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("9"))
-
-	content := []string{
-		errorStyle.Render("Error:"),
-		"",
-		m.err.Error(),
-		"",
-		"Press [R] to retry or [Q] to quit",
-	}
-
-	return lipgloss.NewStyle().
-		Padding(1, 2).
-		Render(strings.Join(content, "\n"))
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

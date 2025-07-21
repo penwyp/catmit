@@ -30,6 +30,7 @@ var (
 	squashNoConfirm bool
 	squashLang      string
 	squashTimeout   int
+	squashAppendMode bool
 )
 
 var squashCmd = &cobra.Command{
@@ -57,6 +58,7 @@ func init() {
 	squashCmd.Flags().BoolVarP(&squashNoConfirm, "no-confirm", "n", false, "Skip confirmation and output directly")
 	squashCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
 	squashCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
+	squashCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
 }
 
 func runSquash(cmd *cobra.Command, args []string) error {
@@ -97,7 +99,7 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	}
 
 	// TUI 模式
-	model := ui.NewSquashModel(squashInstance, messages)
+	model := ui.NewSquashModel(squashInstance, messages, squashAppendMode)
 	if err := model.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
