@@ -170,7 +170,7 @@ func TestSquash_buildPrompt(t *testing.T) {
 				"feat: 添加功能",
 				"fix: 修复错误",
 			},
-			expected: "输入提交信息：\n1. feat: 添加功能\n2. fix: 修复错误",
+			expected: "**输入提交信息：**\n1. feat: 添加功能\n2. fix: 修复错误",
 		},
 	}
 
