@@ -139,16 +139,15 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 				if strings.Contains(line, "USER") || strings.Contains(line, "#") {
 					continue
 				}
-
 				// Old format: | # | URL | USER | ACTIVE |
 				// New format: │ NAME │ URL │ SSH HOST │ USER │ DEFAULT │
 				if len(parts) >= 5 {
-					// Find the position of the USER column
+					// Find the index of the USER column based on the detected table format
 					userIndex := -1
 					if strings.Contains(outputStr, "SSH HOST") { // New format
-						userIndex = 4 // parts[0]空, parts[1]NAME, parts[2]URL, parts[3]SSH HOST, parts[4]USER
+						userIndex = 4 // parts[0] is empty, parts[1] is NAME, parts[2] is URL, parts[3] is SSH HOST, parts[4] is USER
 					} else if strings.Contains(outputStr, "ACTIVE") { // Old format
-						userIndex = 3 // parts[0]空, parts[1]#, parts[2]URL, parts[3]USER, parts[4]ACTIVE
+						userIndex = 3 // parts[0] is empty, parts[1] is #, parts[2] is URL, parts[3] is USER, parts[4] is ACTIVE
 					}
 
 					if userIndex > 0 && userIndex < len(parts) {

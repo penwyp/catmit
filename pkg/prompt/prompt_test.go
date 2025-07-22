@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test building prompt in English
 func TestBuilder_Build_English(t *testing.T) {
 	b := NewBuilder("en", 0)
 	diff := "diff --git a/main.go b/main.go\n+fmt.Println(\"hello\")"
@@ -22,6 +23,7 @@ func TestBuilder_Build_English(t *testing.T) {
 	require.Contains(t, out, "feat: add feature")
 }
 
+// Test building prompt in Chinese
 func TestBuilder_Build_Chinese(t *testing.T) {
 	b := NewBuilder("zh", 0)
 	diff := "diff --git a/file.txt b/file.txt\n+增加一行"
@@ -31,23 +33,24 @@ func TestBuilder_Build_Chinese(t *testing.T) {
 	require.Contains(t, out, "seed text")
 }
 
+// Test diff truncation logic
 func TestBuilder_Truncation(t *testing.T) {
 	longDiff := strings.Repeat("a", 500)
-	b := NewBuilder("en", 100) // 限制 100 字节
+	b := NewBuilder("en", 100) // limit to 100 bytes
 
 	out := b.Build("", longDiff, nil, "dev", []string{})
 
 	require.Contains(t, out, "(diff truncated)")
-	// 确保最终 diff 部分被截断
-	require.LessOrEqual(t, len(out), 2000) // 结果不应太长（系统提示词更长）
+	// Ensure the final diff part is truncated
+	require.LessOrEqual(t, len(out), 2000) // Result should not be too long (system prompt is longer)
 }
 
-// 新增测试 - 测试系统提示词和用户提示词分离
+// Test system prompt and user prompt separation
 func TestBuilder_BuildSystemPrompt_English(t *testing.T) {
 	b := NewBuilder("en", 0)
 	systemPrompt := b.BuildSystemPrompt()
 
-	// 验证系统提示词包含关键元素
+	// Validate system prompt contains key elements
 	require.Contains(t, systemPrompt, "expert software engineer")
 	require.Contains(t, systemPrompt, "Conventional Commits")
 	require.Contains(t, systemPrompt, "MUST be in English")
@@ -60,13 +63,14 @@ func TestBuilder_BuildSystemPrompt_Chinese(t *testing.T) {
 	b := NewBuilder("zh", 0)
 	systemPrompt := b.BuildSystemPrompt()
 
-	// 验证中文语言指令
+	// Validate Chinese language instruction
 	require.Contains(t, systemPrompt, "MUST be in Chinese")
-	// 其他元素仍然存在
+	// Other elements should still exist
 	require.Contains(t, systemPrompt, "expert software engineer")
 	require.Contains(t, systemPrompt, "Conventional Commits")
 }
 
+// Test user prompt content
 func TestBuilder_BuildUserPrompt(t *testing.T) {
 	b := NewBuilder("en", 0)
 	diff := "diff --git a/main.go b/main.go\n+fmt.Println(\"hello\")"
@@ -74,7 +78,7 @@ func TestBuilder_BuildUserPrompt(t *testing.T) {
 
 	userPrompt := b.BuildUserPrompt("seed text", diff, commits, "test", []string{"main.go"})
 
-	// 验证用户提示词包含数据元素
+	// Validate user prompt contains data elements
 	require.Contains(t, userPrompt, "Seed: seed text")
 	require.Contains(t, userPrompt, "Branch: test")
 	require.Contains(t, userPrompt, "Changed files: main.go")
@@ -84,42 +88,44 @@ func TestBuilder_BuildUserPrompt(t *testing.T) {
 	require.Contains(t, userPrompt, diff)
 }
 
+// Test user prompt with diff truncation
 func TestBuilder_BuildUserPrompt_WithTruncation(t *testing.T) {
-	b := NewBuilder("en", 100) // 限制 100 字节
+	b := NewBuilder("en", 100) // limit to 100 bytes
 	longDiff := strings.Repeat("a", 500)
 
 	userPrompt := b.BuildUserPrompt("", longDiff, nil, "", []string{})
 
-	// 验证 diff 截断
+	// Validate diff truncation
 	require.Contains(t, userPrompt, "(diff truncated)")
-	// 确保没有包含完整的原始 diff
+	// Ensure the full original diff is not included
 	require.NotContains(t, userPrompt, strings.Repeat("a", 300))
 }
 
+// Test user prompt with empty context
 func TestBuilder_BuildUserPrompt_EmptyContext(t *testing.T) {
 	b := NewBuilder("en", 0)
 
 	userPrompt := b.BuildUserPrompt("", "", nil, "", []string{})
 
-	// 验证空上下文的处理
+	// Validate handling of empty context
 	require.Equal(t, "No changes detected.", userPrompt)
 }
 
-// 验证向后兼容性
+// Test backward compatibility
 func TestBuilder_Build_BackwardCompatibility(t *testing.T) {
 	b := NewBuilder("en", 0)
 	diff := "diff --git a/main.go b/main.go\n+fmt.Println(\"hello\")"
 	commits := []string{"feat: add feature"}
 
-	// 旧方法仍然可用
+	// Old method should still work
 	oldResult := b.Build("seed", diff, commits, "test", []string{"main.go"})
 
-	// 新方法的组合结果应该与旧方法类似
+	// New method's combined result should be similar to the old method
 	systemPrompt := b.BuildSystemPrompt()
 	userPrompt := b.BuildUserPrompt("seed", diff, commits, "test", []string{"main.go"})
 	newResult := systemPrompt + "\n\n" + userPrompt
 
-	// 验证结果类似（内容可能不完全一致，但都包含关键信息）
+	// Validate results are similar (content may not be exactly the same, but both contain key info)
 	require.Contains(t, oldResult, "MUST be in English")
 	require.Contains(t, oldResult, "seed")
 	require.Contains(t, oldResult, diff)
@@ -128,14 +134,14 @@ func TestBuilder_Build_BackwardCompatibility(t *testing.T) {
 	require.Contains(t, newResult, diff)
 }
 
-// 测试新增的token预算功能
+// Test token budget feature
 func TestNewBuilderWithTokenBudget(t *testing.T) {
 	t.Parallel()
 
 	b := NewBuilderWithTokenBudget("en", 0, 4000)
 
 	require.Equal(t, 4000, b.tokenBudget.MaxTokens)
-	require.Equal(t, 1000, b.tokenBudget.ReservedTokens) // 25% 预留
+	require.Equal(t, 1000, b.tokenBudget.ReservedTokens) // 25% reserved
 	require.Equal(t, 3000, b.tokenBudget.AvailableTokens)
 }
 
@@ -165,6 +171,7 @@ func TestEstimateTokens(t *testing.T) {
 
 // TestSortFilesByPriority removed - functionality moved to collector package
 
+// Test smart diff truncation logic
 func TestSmartTruncateDiff(t *testing.T) {
 	t.Parallel()
 
@@ -183,18 +190,18 @@ func TestSmartTruncateDiff(t *testing.T) {
 		}
 		largeDiff := strings.Join(lines, "\n")
 
-		result := b.smartTruncateDiff(largeDiff, 20) // 很小的token限制
+		result := b.smartTruncateDiff(largeDiff, 20) // very small token limit
 
-		require.Contains(t, result, "line 0")         // 包含头部
-		require.Contains(t, result, "line 99")        // 包含尾部
-		require.Contains(t, result, "Diff truncated") // 包含截断标记
-		require.Less(t, len(result), len(largeDiff))  // 结果应该更短
+		require.Contains(t, result, "line 0")         // should contain head
+		require.Contains(t, result, "line 99")        // should contain tail
+		require.Contains(t, result, "Diff truncated") // should contain truncation marker
+		require.Less(t, len(result), len(largeDiff))  // result should be shorter
 	})
 
 	t.Run("small_line_count", func(t *testing.T) {
 		diff := "line1\nline2\nline3"
-		result := b.smartTruncateDiff(diff, 1) // 很小的token限制
-		require.Equal(t, diff, result)         // 小于20行不截断
+		result := b.smartTruncateDiff(diff, 1) // very small token limit
+		require.Equal(t, diff, result)         // less than 20 lines, no truncation
 	})
 }
 
@@ -241,6 +248,7 @@ func (m *mockCollector) ChangedFiles(ctx context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
+// Test BuildUserPromptWithBudget with various scenarios
 func TestBuildUserPromptWithBudget(t *testing.T) {
 	t.Parallel()
 

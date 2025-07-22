@@ -56,14 +56,14 @@ func TestConfigManager_CreateDefaultConfig(t *testing.T) {
 	manager, err := NewConfigManager(configPath)
 	require.NoError(t, err)
 
-	// 创建默认配置
+	// Create default config
 	err = manager.CreateDefaultConfig()
 	assert.NoError(t, err)
 
-	// 验证文件已创建
+	// Verify file is created
 	assert.FileExists(t, configPath)
 
-	// 读取并验证内容
+	// Read and verify content
 	config, err := manager.Load()
 	assert.NoError(t, err)
 	assert.NotNil(t, config)
@@ -157,7 +157,7 @@ func TestConfigManager_Save(t *testing.T) {
 	manager, err := NewConfigManager(configPath)
 	require.NoError(t, err)
 
-	// 准备测试配置
+	// Prepare test config
 	config := &Config{
 		Version: "1.0.0",
 		Remotes: map[string]RemoteConfig{
@@ -169,14 +169,14 @@ func TestConfigManager_Save(t *testing.T) {
 		},
 	}
 
-	// 保存配置
+	// Save config
 	err = manager.Save(config)
 	assert.NoError(t, err)
 
-	// 验证文件存在
+	// Verify file exists
 	assert.FileExists(t, configPath)
 
-	// 重新加载验证
+	// Reload and verify
 	loaded, err := manager.Load()
 	assert.NoError(t, err)
 	assert.Equal(t, config.Version, loaded.Version)
@@ -192,7 +192,7 @@ func TestConfigManager_AtomicWrite(t *testing.T) {
 	manager, err := NewConfigManager(configPath)
 	require.NoError(t, err)
 
-	// 创建初始配置
+	// Create initial config
 	config1 := &Config{
 		Version: "1.0.0",
 		Remotes: map[string]RemoteConfig{
@@ -202,11 +202,11 @@ func TestConfigManager_AtomicWrite(t *testing.T) {
 	err = manager.Save(config1)
 	require.NoError(t, err)
 
-	// 模拟写入过程中的错误
-	// 原子写入应该保证要么完全成功，要么保持原状态
-	// 这里我们通过权限测试来验证
+	// Simulate error during write process
+	// Atomic write should guarantee either full success or keep the original state
+	// Here we verify by permission test
 
-	// 先验证正常情况
+	// First verify normal case
 	config2 := &Config{
 		Version: "2.0.0",
 		Remotes: map[string]RemoteConfig{
@@ -216,7 +216,7 @@ func TestConfigManager_AtomicWrite(t *testing.T) {
 	err = manager.Save(config2)
 	assert.NoError(t, err)
 
-	// 验证新配置已保存
+	// Verify new config is saved
 	loaded, err := manager.Load()
 	assert.NoError(t, err)
 	assert.Equal(t, "2.0.0", loaded.Version)
@@ -231,11 +231,11 @@ func TestConfigManager_ConcurrentWrite(t *testing.T) {
 	manager, err := NewConfigManager(configPath)
 	require.NoError(t, err)
 
-	// 创建初始配置
+	// Create initial config
 	err = manager.CreateDefaultConfig()
 	require.NoError(t, err)
 
-	// 并发写入测试
+	// Concurrent write test
 	var wg sync.WaitGroup
 	errors := make(chan error, 10)
 
@@ -260,12 +260,12 @@ func TestConfigManager_ConcurrentWrite(t *testing.T) {
 	wg.Wait()
 	close(errors)
 
-	// 验证没有错误
+	// Verify no errors
 	for err := range errors {
 		t.Errorf("Concurrent write error: %v", err)
 	}
 
-	// 验证最终状态是有效的
+	// Verify final state is valid
 	_, err = manager.Load()
 	assert.NoError(t, err)
 }
@@ -279,11 +279,11 @@ func TestConfigManager_UpdateRemote(t *testing.T) {
 	manager, err := NewConfigManager(configPath)
 	require.NoError(t, err)
 
-	// 创建初始配置
+	// Create initial config
 	err = manager.CreateDefaultConfig()
 	require.NoError(t, err)
 
-	// 更新remote配置
+	// Update remote config
 	remoteConfig := RemoteConfig{
 		Provider:     "custom",
 		CLITool:      "custom-cli",
@@ -295,7 +295,7 @@ func TestConfigManager_UpdateRemote(t *testing.T) {
 	err = manager.UpdateRemote("custom.example.com", remoteConfig)
 	assert.NoError(t, err)
 
-	// 验证更新
+	// Verify update
 	config, err := manager.Load()
 	assert.NoError(t, err)
 	assert.Contains(t, config.Remotes, "custom.example.com")

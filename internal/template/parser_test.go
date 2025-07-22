@@ -36,17 +36,17 @@ Please provide a description of your changes.
 `,
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				// 验证章节
+				// Verify sections
 				assert.Len(t, tmpl.Sections, 4)
 				assert.Contains(t, tmpl.Sections, "Pull Request")
 				assert.Contains(t, tmpl.Sections, "Description")
 				assert.Contains(t, tmpl.Sections, "Type of Change")
 				assert.Contains(t, tmpl.Sections, "Testing")
 
-				// 验证变量
+				// Verify variables
 				assert.GreaterOrEqual(t, len(tmpl.Variables), 2)
 
-				// 查找特定变量
+				// Find specific variables
 				hasCommitMessage := false
 				hasTestingInstructions := false
 				for _, v := range tmpl.Variables {
@@ -75,7 +75,7 @@ Closes #{{.IssueNumber}}
 `,
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				// 查找带描述的变量
+				// Find variables with descriptions
 				var commitMsgVar *Variable
 				var issueNumVar *Variable
 
@@ -124,11 +124,11 @@ Closes #{{.IssueNumber}}
 			content: `This is a simple template with {{.Variable}} but no markdown sections.`,
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				// 应该有一个默认章节
+				// Should have a default section
 				assert.Len(t, tmpl.Sections, 1)
 				assert.Contains(t, tmpl.Sections, "Content")
 
-				// 应该找到变量
+				// Should find the variable
 				assert.Len(t, tmpl.Variables, 1)
 				assert.Equal(t, "Variable", tmpl.Variables[0].Name)
 			},
@@ -155,7 +155,7 @@ Content 2
 			validate: func(t *testing.T, tmpl *Template) {
 				assert.Len(t, tmpl.Sections, 4)
 
-				// 验证章节级别
+				// Verify section levels
 				if section, ok := tmpl.Sections["Section 1"]; ok {
 					assert.Equal(t, 2, section.Level)
 				}
@@ -209,7 +209,7 @@ Closes #123
 	assert.NoError(t, err)
 	assert.Len(t, sections, 5)
 
-	// 验证Description章节
+	// Verify Description section
 	desc := sections["Description"]
 	require.NotNil(t, desc)
 	assert.Equal(t, 2, desc.Level)
@@ -217,13 +217,13 @@ Closes #123
 	assert.Contains(t, desc.Content, "Required")
 	assert.Contains(t, desc.Content, "Please describe your changes")
 
-	// 验证Checklist章节
+	// Verify Checklist section
 	checklist := sections["Checklist"]
 	require.NotNil(t, checklist)
 	assert.Contains(t, checklist.Content, "- [ ] Tests added")
 	assert.Contains(t, checklist.Content, "- [ ] Documentation updated")
 
-	// 验证嵌套章节
+	// Verify nested section
 	review := sections["Review Guidelines"]
 	require.NotNil(t, review)
 	assert.Equal(t, 3, review.Level)
@@ -301,13 +301,13 @@ Required: {{.Summary}}
 			variables, err := parser.ExtractVariables(tt.content)
 			assert.NoError(t, err)
 
-			// 创建映射便于查找
+			// Create a map for easy lookup
 			varMap := make(map[string]Variable)
 			for _, v := range variables {
 				varMap[v.Name] = v
 			}
 
-			// 验证每个期望的变量
+			// Verify each expected variable
 			for name, expected := range tt.expected {
 				v, ok := varMap[name]
 				assert.True(t, ok, "Variable %s not found", name)
@@ -343,14 +343,14 @@ func TestSimpleParser(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, tmpl)
 
-	// 验证章节
+	// Verify sections
 	assert.Len(t, tmpl.Sections, 4)
 	assert.Contains(t, tmpl.Sections, "PR Template")
 	assert.Contains(t, tmpl.Sections, "What")
 	assert.Contains(t, tmpl.Sections, "Why")
 	assert.Contains(t, tmpl.Sections, "Changes")
 
-	// 验证变量
+	// Verify variables
 	assert.GreaterOrEqual(t, len(tmpl.Variables), 3)
 
 	varNames := make(map[string]bool)
@@ -405,7 +405,7 @@ Required: {{.Var1}}
 		{"Var2", true},
 		{"Var3", true},
 		{"Var4", true},
-		{"Description", true}, // 默认必填
+		{"Description", true}, // Default required
 		{"OptionalVar", false},
 	}
 

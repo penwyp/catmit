@@ -156,62 +156,64 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 	})
 }
 
+// TestDefaultHandler_inferErrorType tests the inferErrorType method of DefaultHandler.
+// It checks that the error type, message, and suggestion are correctly inferred for various error scenarios.
 func TestDefaultHandler_inferErrorType(t *testing.T) {
 	tests := []struct {
 		name           string
 		err            error
 		expectedType   ErrorType
 		expectedMsg    string
-		hassSuggestion bool
+		hasSuggestion  bool
 	}{
 		{
-			name:           "git repository error",
-			err:            errors.New("fatal: not a git repository"),
-			expectedType:   ErrTypeGit,
-			expectedMsg:    "不是 Git 仓库",
-			hassSuggestion: true,
+			name:          "git repository error",
+			err:           errors.New("fatal: not a git repository"),
+			expectedType:  ErrTypeGit,
+			expectedMsg:   "Not a Git repository",
+			hasSuggestion: true,
 		},
 		{
-			name:           "no changes error",
-			err:            errors.New("nothing to commit, working tree clean"),
-			expectedType:   ErrTypeGit,
-			expectedMsg:    "没有需要提交的更改",
-			hassSuggestion: true,
+			name:          "no changes error",
+			err:           errors.New("nothing to commit, working tree clean"),
+			expectedType:  ErrTypeGit,
+			expectedMsg:   "No changes to commit",
+			hasSuggestion: true,
 		},
 		{
-			name:           "timeout error",
-			err:            errors.New("context deadline exceeded"),
-			expectedType:   ErrTypeTimeout,
-			expectedMsg:    "操作超时",
-			hassSuggestion: true,
+			name:          "timeout error",
+			err:           errors.New("context deadline exceeded"),
+			expectedType:  ErrTypeTimeout,
+			expectedMsg:   "Operation timed out",
+			hasSuggestion: true,
 		},
 		{
-			name:           "network error",
-			err:            errors.New("connection refused"),
-			expectedType:   ErrTypeNetwork,
-			expectedMsg:    "网络错误",
-			hassSuggestion: true,
+			name:          "network error",
+			err:           errors.New("connection refused"),
+			expectedType:  ErrTypeNetwork,
+			expectedMsg:   "Network error",
+			hasSuggestion: true,
 		},
 		{
-			name:           "auth error",
-			err:            errors.New("authentication failed"),
-			expectedType:   ErrTypeAuth,
-			expectedMsg:    "认证失败",
-			hassSuggestion: true,
+			name:          "auth error",
+			err:           errors.New("authentication failed"),
+			expectedType:  ErrTypeAuth,
+			expectedMsg:   "Authentication failed",
+			hasSuggestion: true,
 		},
 		{
-			name:           "rate limit error",
-			err:            errors.New("API rate limit exceeded"),
-			expectedType:   ErrTypeLLM,
-			expectedMsg:    "API 速率限制",
-			hassSuggestion: true,
+			name:          "rate limit error",
+			err:           errors.New("API rate limit exceeded"),
+			expectedType:  ErrTypeLLM,
+			expectedMsg:   "API rate limit exceeded",
+			hasSuggestion: true,
 		},
 		{
-			name:           "unknown error",
-			err:            errors.New("something went wrong"),
-			expectedType:   ErrTypeUnknown,
-			expectedMsg:    "something went wrong",
-			hassSuggestion: false,
+			name:          "unknown error",
+			err:           errors.New("something went wrong"),
+			expectedType:  ErrTypeUnknown,
+			expectedMsg:   "something went wrong",
+			hasSuggestion: false,
 		},
 	}
 
@@ -225,7 +227,7 @@ func TestDefaultHandler_inferErrorType(t *testing.T) {
 			assert.Equal(t, tt.expectedMsg, result.Message)
 			assert.Equal(t, tt.err, result.Cause)
 
-			if tt.hassSuggestion {
+			if tt.hasSuggestion {
 				assert.NotEmpty(t, result.Suggestion)
 			} else {
 				assert.Empty(t, result.Suggestion)

@@ -125,55 +125,55 @@ func TestE2E_PRCreation_WithTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建临时目录
+			// Create a temporary directory
 			tmpDir, err := os.MkdirTemp("", "pr-template-test-*")
 			require.NoError(t, err)
 			defer os.RemoveAll(tmpDir)
 
-			// 初始化git仓库
+			// Initialize git repository
 			ctx := context.Background()
 			err = setupGitRepo(tmpDir)
 			require.NoError(t, err)
 
-			// 切换到测试目录
+			// Change to test directory
 			oldWd, err := os.Getwd()
 			require.NoError(t, err)
 			defer func() { _ = os.Chdir(oldWd) }()
 			require.NoError(t, os.Chdir(tmpDir))
 
-			// 创建模板文件
+			// Create template file
 			templateDir := filepath.Dir(tt.templatePath)
 			if templateDir != "." {
 				require.NoError(t, os.MkdirAll(templateDir, 0755))
 			}
 			require.NoError(t, os.WriteFile(tt.templatePath, []byte(tt.templateContent), 0644))
 
-			// 创建测试文件
+			// Create test files
 			require.NoError(t, os.WriteFile("feature.go", []byte("package main\n\nfunc Feature() {}\n"), 0644))
 			require.NoError(t, os.WriteFile("feature_test.go", []byte("package main\n\nimport \"testing\"\n\nfunc TestFeature(t *testing.T) {}\n"), 0644))
 
-			// 添加并提交文件
+			// Add and commit files
 			runCommand(t, "git", "add", ".")
 			runCommand(t, "git", "commit", "-m", "initial commit")
 
-			// 创建feature分支
+			// Create feature branch
 			runCommand(t, "git", "checkout", "-b", "feature/test")
 
-			// 修改文件
+			// Modify files
 			require.NoError(t, os.WriteFile("feature.go", []byte("package main\n\nfunc Feature() {\n\t// New feature\n}\n"), 0644))
 			require.NoError(t, os.WriteFile("feature_test.go", []byte("package main\n\nimport \"testing\"\n\nfunc TestFeature(t *testing.T) {\n\t// Test updated\n}\n"), 0644))
 
-			// 测试模板处理
+			// Test template processing
 			manager := template.NewDefaultManager(tmpDir)
 
-			// 加载模板
+			// Load template
 			tmpl, err := manager.LoadTemplate(ctx, &provider.RemoteInfo{
 				Provider: tt.provider,
 			})
 			require.NoError(t, err)
 			require.NotNil(t, tmpl)
 
-			// 准备模板数据
+			// Prepare template data
 			templateData := &template.TemplateData{
 				CommitMessage:  tt.commitMessage,
 				Branch:         "feature/test",
@@ -190,50 +190,50 @@ func TestE2E_PRCreation_WithTemplate(t *testing.T) {
 				DocsUpdated:    false,
 			}
 
-			// 处理模板
+			// Process template
 			result, err := manager.ProcessTemplate(ctx, tmpl, templateData)
 			require.NoError(t, err)
 
-			// 验证结果包含期望的内容
+			// Verify that the result contains the expected content
 			for _, expected := range tt.expectedContains {
 				assert.Contains(t, result, expected, "Result should contain: %s", expected)
 			}
 
-			// 验证模板变量被正确替换
+			// Verify that template variables are replaced correctly
 			assert.NotContains(t, result, "{{.", "All template variables should be replaced")
 			assert.NotContains(t, result, "[BracketVar]", "All bracket variables should be replaced")
 		})
 	}
 }
 
-// TestE2E_PRTemplate_Integration 测试模板与PR创建的完整集成
+// TestE2E_PRTemplate_Integration tests the full integration of template and PR creation
 func TestE2E_PRTemplate_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping E2E test in short mode")
 	}
 
-	// 检查是否有GitHub CLI
+	// Check if GitHub CLI is available
 	if !isCommandAvailable("gh") {
 		t.Skip("GitHub CLI (gh) not available")
 	}
 
-	// 创建临时目录
+	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "pr-template-integration-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// 设置git仓库
+	// Initialize git repository
 	ctx := context.Background()
 	err = setupGitRepo(tmpDir)
 	require.NoError(t, err)
 
-	// 切换目录
+	// Change directory
 	oldWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(oldWd) }()
 	require.NoError(t, os.Chdir(tmpDir))
 
-	// 创建GitHub PR模板
+	// Create GitHub PR template
 	githubDir := filepath.Join(tmpDir, ".github")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))
 
@@ -264,29 +264,29 @@ func TestE2E_PRTemplate_Integration(t *testing.T) {
 		0644,
 	))
 
-	// 创建测试文件
+	// Create test file
 	require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 	runCommand(t, "git", "add", ".")
 	runCommand(t, "git", "commit", "-m", "initial commit")
 
-	// 创建feature分支
+	// Create feature branch
 	runCommand(t, "git", "checkout", "-b", "fix/issue-42")
 
-	// 修改文件
+	// Modify file
 	require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {\n\t// Fixed issue #42\n}\n"), 0644))
 	runCommand(t, "git", "add", ".")
 
-	// 使用catmit提交（这里我们模拟核心逻辑）
+	// Use catmit to commit (here we simulate the core logic)
 	commitMessage := "fix: resolve memory leak in worker\n\nThis fixes issue #42 where workers were not releasing memory properly."
 
-	// 创建模板管理器
+	// Create template manager
 	manager := template.NewDefaultManager(tmpDir)
 
-	// 加载模板
+	// Load template
 	tmpl, err := manager.LoadTemplate(ctx, &provider.RemoteInfo{Provider: "github"})
 	require.NoError(t, err)
 
-	// 准备数据
+	// Prepare data
 	templateData := &template.TemplateData{
 		CommitMessage: commitMessage,
 		CommitTitle:   "fix: resolve memory leak in worker",
@@ -300,11 +300,11 @@ func TestE2E_PRTemplate_Integration(t *testing.T) {
 		DocsUpdated:   true,
 	}
 
-	// 处理模板
+	// Process template
 	prBody, err := manager.ProcessTemplate(ctx, tmpl, templateData)
 	require.NoError(t, err)
 
-	// 验证PR body
+	// Verify PR body
 	assert.Contains(t, prBody, "# Pull Request: fix: resolve memory leak in worker")
 	assert.Contains(t, prBody, "This fixes issue #42")
 	assert.Contains(t, prBody, "- [x] Bug fix")
@@ -315,7 +315,7 @@ func TestE2E_PRTemplate_Integration(t *testing.T) {
 // Helper functions
 
 func extractIssueFromMessage(message string) string {
-	// 简单的issue提取逻辑
+	// Simple issue extraction logic
 	if containsString(message, "#123") {
 		return "123"
 	}

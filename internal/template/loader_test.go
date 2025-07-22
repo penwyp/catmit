@@ -121,7 +121,7 @@ Closes #{{.IssueNumber}}
 					return err
 				}
 
-				// 创建多个模板
+				// Create multiple templates
 				templates := map[string]string{
 					"bug_fix.md": "# Bug Fix\n\n{{.Description}}",
 					"feature.md": "# Feature\n\n{{.Description}}",
@@ -141,7 +141,7 @@ Closes #{{.IssueNumber}}
 			},
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				// 应该加载找到的第一个模板
+				// Should load the first found template
 				assert.NotEmpty(t, tmpl.Content)
 				assert.Contains(t, tmpl.Content, "{{.Description}}")
 			},
@@ -180,17 +180,17 @@ Closes #{{.IssueNumber}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建临时目录
+			// Create temporary directory
 			tmpDir, err := os.MkdirTemp("", "template-test-*")
 			require.NoError(t, err)
 			defer os.RemoveAll(tmpDir)
 
-			// 执行设置
+			// Execute setup
 			if tt.setup != nil {
 				require.NoError(t, tt.setup(tmpDir))
 			}
 
-			// 创建加载器并加载模板
+			// Create loader and load template
 			loader := NewFileLoader(tmpDir)
 			tmpl, err := loader.Load(context.Background(), tt.provider)
 
@@ -210,12 +210,12 @@ Closes #{{.IssueNumber}}
 }
 
 func TestFileLoader_ListTemplates(t *testing.T) {
-	// 创建临时目录
+	// Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "template-list-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// 设置多个模板
+	// Setup multiple templates
 	githubDir := filepath.Join(tmpDir, ".github", "PULL_REQUEST_TEMPLATE")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))
 
@@ -230,14 +230,14 @@ func TestFileLoader_ListTemplates(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// 列出模板
+	// List templates
 	loader := NewFileLoader(tmpDir)
 	list, err := loader.ListTemplates(context.Background(), "github")
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 3)
 
-	// 验证所有模板都被找到
+	// Verify all templates are found
 	names := make(map[string]bool)
 	for _, tmpl := range list {
 		names[tmpl.Name] = true
@@ -249,7 +249,7 @@ func TestFileLoader_ListTemplates(t *testing.T) {
 }
 
 func TestCachedLoader(t *testing.T) {
-	// 创建临时目录和模板
+	// Create temporary directory and template
 	tmpDir, err := os.MkdirTemp("", "cached-loader-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
@@ -261,28 +261,28 @@ func TestCachedLoader(t *testing.T) {
 	originalContent := "# Original Template"
 	require.NoError(t, os.WriteFile(templatePath, []byte(originalContent), 0644))
 
-	// 创建缓存加载器
+	// Create cached loader
 	fileLoader := NewFileLoader(tmpDir)
 	cachedLoader := NewCachedLoader(fileLoader)
 
-	// 第一次加载
+	// First load
 	tmpl1, err := cachedLoader.Load(context.Background(), "github")
 	assert.NoError(t, err)
 	assert.Equal(t, originalContent, tmpl1.Content)
 
-	// 修改文件内容
+	// Modify file content
 	newContent := "# Modified Template"
 	require.NoError(t, os.WriteFile(templatePath, []byte(newContent), 0644))
 
-	// 第二次加载（应该从缓存获取）
+	// Second load (should get from cache)
 	tmpl2, err := cachedLoader.Load(context.Background(), "github")
 	assert.NoError(t, err)
 	assert.Equal(t, originalContent, tmpl2.Content)
 
-	// 清除缓存
+	// Clear cache
 	cachedLoader.ClearCache()
 
-	// 第三次加载（应该获取新内容）
+	// Third load (should get new content)
 	tmpl3, err := cachedLoader.Load(context.Background(), "github")
 	assert.NoError(t, err)
 	assert.Equal(t, newContent, tmpl3.Content)

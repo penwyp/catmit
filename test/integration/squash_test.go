@@ -106,10 +106,10 @@ func TestSquash_Integration(t *testing.T) {
 }
 
 func TestSquash_ChineseIntegration(t *testing.T) {
-	// Create mock client
+	// Create mock client for Chinese response
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Return Chinese response
+			// Return a mock response in Chinese
 			response := `{
 				"choices": [{
 					"message": {
@@ -123,21 +123,21 @@ func TestSquash_ChineseIntegration(t *testing.T) {
 		}),
 	}
 
-	// Create squash instance (Chinese mode)
+	// Create squash instance in Chinese mode
 	s := squash.New(mockClient, "zh")
 
-	// Test input
+	// Test input messages in Chinese
 	messages := []string{
 		"feat: 添加用户认证",
 		"fix: 修复登录错误",
 		"docs: 更新认证文档",
 	}
 
-	// Execute generation
+	// Execute commit message generation
 	ctx := context.Background()
 	result, err := s.Generate(ctx, messages)
 
-	// Validate result
+	// Validate the generated result
 	assert.NoError(t, err)
 	assert.Contains(t, result, "feat: 实现完整的认证系统")
 	assert.Contains(t, result, "添加基于 JWT 的用户认证功能")

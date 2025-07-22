@@ -367,7 +367,7 @@ D  dist/bundle.js`
 		summary, err := parseGitStatusPorcelain(output)
 		require.NoError(t, err)
 		require.Equal(t, "main", summary.BranchName)
-		// 只有main.go应该被保留，其他两个被过滤
+		// Only main.go should be retained, the other two should be filtered out
 		require.Len(t, summary.Files, 1)
 		require.Equal(t, "main.go", summary.Files[0].Path)
 	})

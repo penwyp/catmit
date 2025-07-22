@@ -363,7 +363,7 @@ func extractIssueNumber(text string) string {
 	return ""
 }
 
-// detectTestsAdded detects if tests were added
+// detectTestsAdded checks whether any test files were added or if the commit message indicates tests were added.
 func (p *TemplateProcessor) detectTestsAdded(data *TemplateData) bool {
 	for _, file := range data.ChangedFiles {
 		if strings.Contains(file, "_test.go") ||
@@ -374,7 +374,7 @@ func (p *TemplateProcessor) detectTestsAdded(data *TemplateData) bool {
 		}
 	}
 
-	// Check commit message
+	// Check if the commit message contains test-related keywords
 	lowerMsg := strings.ToLower(data.CommitMessage)
 	return strings.Contains(lowerMsg, "test") ||
 		strings.Contains(lowerMsg, "测试")
