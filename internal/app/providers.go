@@ -145,7 +145,16 @@ func (d *defaultCommitter) Commit(ctx context.Context, message string) error {
 }
 
 func (d *defaultCommitter) Push(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "git", "push")
+	// 获取当前分支名
+	branchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchOutput, err := branchCmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(errors.ErrTypeGit, "failed to get current branch name\nOutput: %s", err, string(branchOutput))
+	}
+	branchName := strings.TrimSpace(string(branchOutput))
+	
+	// 执行 git push origin <branch_name>
+	cmd := exec.CommandContext(ctx, "git", "push", "origin", branchName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
