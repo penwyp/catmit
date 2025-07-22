@@ -185,7 +185,25 @@ func run(cmd *cobra.Command, args []string) error {
 			// This is handled inside workflow, but just in case
 			return nil
 		}
-		return err
+
+		// Check error type to determine if help should be shown
+		errType := errors.GetType(err)
+		switch errType {
+		case errors.ErrTypeGit, errors.ErrTypeNetwork, errors.ErrTypeAuth,
+			errors.ErrTypeTimeout, errors.ErrTypeLLM, errors.ErrTypeProvider,
+			errors.ErrTypePR, errors.ErrTypeExternal:
+			// Runtime/execution errors - don't show help, just show error message
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			errors.HandleFatal(err)
+		case errors.ErrTypeConfig, errors.ErrTypeValidation:
+			// Configuration/validation errors - show help as it may be useful
+			return err
+		default:
+			// Unknown errors - default to not showing help to avoid noise
+			cmd.SilenceUsage = true
+			return err
+		}
 	}
 
 	return nil
