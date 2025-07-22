@@ -58,6 +58,12 @@ var (
 )
 
 func init() {
+	// Disable automatic completion command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	
+	// Disable automatic help command
+	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+
 	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "commit message language (ISO 639-1)")
 	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
 	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
@@ -97,6 +103,12 @@ func init() {
 
 	authCmd.AddCommand(authStatusCmd)
 	rootCmd.AddCommand(authCmd)
+
+	// Disable Cobra's auto-generated completion command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	
+	// Disable Cobra's auto-generated help command
+	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 }
 
 
