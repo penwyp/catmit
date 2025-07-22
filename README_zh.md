@@ -250,6 +250,12 @@ catmit squash --lang zh
 # 自定义超时时间
 catmit squash --timeout 60
 
+# 使用交互式变基合并未推送的提交
+catmit squash --rebase
+catmit squash -r  # 简写
+# 与其他选项组合使用
+catmit squash --rebase --no-confirm --lang zh
+
 # 示例工作流：
 $ catmit squash
 # 打开默认编辑器输入提交信息
@@ -263,6 +269,14 @@ feat: 实现完整的认证系统
 - 更新认证相关文档
 
 ✓ 已复制到剪贴板
+
+# 变基工作流示例：
+$ catmit squash --rebase
+# 分析未推送的提交
+# 使用 AI 生成合并的提交信息
+# 执行交互式变基并创建备份分支
+# ✓ 变基成功完成
+# 备份分支: backup-feature-branch-20250122-123456
 ```
 
 ### 🚀 Pull Request 创建

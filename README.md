@@ -250,6 +250,12 @@ catmit squash --lang zh
 # Custom timeout
 catmit squash --timeout 60
 
+# Squash unpushed commits using interactive rebase
+catmit squash --rebase
+catmit squash -r  # shorthand
+# Combine with other options
+catmit squash --rebase --no-confirm --lang zh
+
 # Example workflow:
 $ catmit squash
 # Opens your default editor to input commit messages
@@ -263,6 +269,14 @@ feat: implement complete authentication system
 - Update authentication documentation
 
 ✓ Copied to clipboard
+
+# Example rebase workflow:
+$ catmit squash --rebase
+# Analyzes unpushed commits
+# Generates consolidated commit message using AI
+# Performs interactive rebase with backup branch creation
+# ✓ Rebase completed successfully
+# Backup branch: backup-feature-branch-20250122-123456
 ```
 
 ### 🚀 Pull Request Creation
