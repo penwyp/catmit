@@ -39,9 +39,53 @@
 - 🎯 **高准确率**: 生成上下文相关的提交信息，质量达 95% 以上
 - 🔌 **多种提供商**: 支持 DeepSeek、OpenAI、火山引擎方舟等任何 OpenAI 兼容 API
 
-## 🚀 快速开始
+## 📖 使用方法
 
-### 安装
+### 基本用法
+```bash
+# 交互式模式，带 TUI
+catmit
+
+# 无需确认直接提交
+catmit -y
+
+# 仅预览信息（试运行）
+catmit --dry-run
+
+# 生成中文提交信息
+catmit -l zh
+
+# 设置自定义超时时间（默认：30秒）
+catmit -t 60
+
+# 提供种子文本以获得更好的上下文（通过位置参数）
+catmit "修复用户认证"
+
+# 或使用 --seed 标志（效果相同）
+catmit --seed "修复用户认证"
+```
+
+### 高级用法
+```bash
+# 静默模式（无 TUI，直接输出）
+catmit --dry-run -y
+
+# 组合选项
+catmit -y -l zh -t 60
+
+# 测试你的配置
+catmit --dry-run
+
+# 获取帮助
+catmit --help
+
+# 查看版本
+catmit --version
+```
+
+## 🚀 安装
+
+### 安装方法
 
 #### 使用 Homebrew (macOS/Linux)
 ```bash
@@ -62,7 +106,7 @@ go install github.com/penwyp/catmit@latest
 catmit --version
 ```
 
-### 配置
+### 快速配置
 
 1. **选择你的 LLM 提供商**（参见下方的 [LLM 提供商配置](#-llm-提供商配置)）
 2. **为你选择的提供商设置环境变量**
@@ -237,6 +281,8 @@ catmit --version
 ```
 
 ### 🔀 合并提交信息
+
+#### 基础合并模式（编辑器模式）
 ```bash
 # 将多个提交信息合并为一个（打开编辑器）
 catmit squash
@@ -249,6 +295,9 @@ catmit squash --lang zh
 
 # 自定义超时时间
 catmit squash --timeout 60
+
+# 使用追加模式获得更好的控制台输出
+catmit squash --append-mode
 
 # 示例工作流：
 $ catmit squash
@@ -264,6 +313,31 @@ feat: 实现完整的认证系统
 
 ✓ 已复制到剪贴板
 ```
+
+#### 交互式变基模式
+```bash
+# 使用交互式变基合并未推送的提交
+catmit squash --rebase
+catmit squash -r  # 简写
+
+# 与其他选项组合使用
+catmit squash --rebase --no-confirm --lang zh
+
+# 示例工作流：
+$ catmit squash --rebase
+# 分析未推送的提交
+# 使用 AI 生成合并的提交信息
+# 执行交互式变基并创建备份分支
+# ✓ 变基完成成功
+# 备份分支：backup-feature-branch-20250122-123456
+```
+
+**变基模式功能：**
+- 🔄 **智能分析**：自动检测未推送的提交
+- 🧠 **AI 生成信息**：从多个提交中创建有意义的提交信息
+- 🛡️ **安全第一**：在进行更改前创建备份分支
+- 🎯 **TUI 界面**：交互式终端界面用于确认和监控
+- ⚡ **基础分支检测**：自动检测 main/master 作为基础分支
 
 ### 🚀 Pull Request 创建
 ```bash
@@ -283,7 +357,7 @@ catmit auth status
 **支持的 PR 平台：**
 - ✅ GitHub（通过 `gh` CLI）
 - ✅ GitLab（通过 `glab` CLI）
-- 🚧 Gitea（即将推出）
+- ✅ Gitea（通过 `tea` CLI）
 
 **要求：**
 - GitHub：必须安装并认证 `gh` CLI
@@ -292,6 +366,9 @@ catmit auth status
 - GitLab：必须安装并认证 `glab` CLI
   - 安装：`brew install glab` 或访问 [gitlab.com/gitlab-org/cli](https://gitlab.com/gitlab-org/cli)
   - 认证：`glab auth login`
+- Gitea：必须安装并认证 `tea` CLI
+  - 安装：`brew install tea` 或访问 [gitea.com/gitea/tea](https://gitea.com/gitea/tea)
+  - 认证：`tea login add`
 
 ### 📝 PR 模板支持
 
