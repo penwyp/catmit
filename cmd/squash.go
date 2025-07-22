@@ -11,11 +11,15 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/penwyp/catmit/internal/app"
+	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/logger"
+	"github.com/penwyp/catmit/internal/rebase"
 	"github.com/penwyp/catmit/internal/squash"
 	"github.com/penwyp/catmit/internal/ui"
+	"github.com/penwyp/catmit/pkg/githistory"
 	"github.com/penwyp/catmit/pkg/llm"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 	"golang.org/x/term"
 )
 
@@ -35,6 +39,7 @@ var (
 	squashLang       string
 	squashTimeout    int
 	squashAppendMode bool
+	squashRebase     bool
 )
 
 var squashCmd = &cobra.Command{
@@ -63,19 +68,10 @@ func init() {
 	squashCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
 	squashCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
 	squashCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
+	squashCmd.Flags().BoolVarP(&squashRebase, "rebase", "r", false, "Modify local commit history by squashing unpushed commits")
 }
 
 func runSquash(cmd *cobra.Command, args []string) error {
-	// 默认使用编辑器模式
-	messages, err := getMessagesFromEditor()
-	if err != nil {
-		return fmt.Errorf("failed to get messages from editor: %w", err)
-	}
-
-	if len(messages) < 2 {
-		return fmt.Errorf("at least 2 commit messages are required")
-	}
-
 	// Initialize logger first
 	appLogger, err := logger.New(flagDebug)
 	if err != nil {
@@ -86,16 +82,31 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	// Create dependencies
 	deps := app.NewDependencies(appLogger, flagDebug)
 
-	// 创建 squash 实例
-	// 创建一个包装器，将 llm.Client 适配为 squash.ClientInterface
+	// Create LLM client adapter
 	llmClient := &clientAdapter{client: deps.GetClient()}
-
-	squashInstance := squash.New(llmClient, squashLang)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(squashTimeout)*time.Second)
 	defer cancel()
 
-	// 如果是 no-confirm 模式，直接生成并输出
+	// Handle rebase mode
+	if squashRebase {
+		return runRebaseSquash(ctx, llmClient, appLogger)
+	}
+
+	// Default editor mode
+	messages, err := getMessagesFromEditor()
+	if err != nil {
+		return fmt.Errorf("failed to get messages from editor: %w", err)
+	}
+
+	if len(messages) < 2 {
+		return fmt.Errorf("at least 2 commit messages are required")
+	}
+
+	// Create squash instance
+	squashInstance := squash.New(llmClient, squashLang)
+
+	// Handle no-confirm mode
 	if squashNoConfirm {
 		result, err := squashInstance.Generate(ctx, messages)
 		if err != nil {
@@ -104,7 +115,7 @@ func runSquash(cmd *cobra.Command, args []string) error {
 
 		fmt.Println(result)
 
-		// 尝试复制到剪贴板
+		// Try to copy to clipboard
 		if err := clipboard.WriteAll(result); err == nil {
 			fmt.Fprintln(os.Stderr, "✓ Copied to clipboard")
 		}
@@ -112,7 +123,7 @@ func runSquash(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// TUI 模式
+	// TUI mode
 	model := ui.NewSquashModel(squashInstance, messages, squashAppendMode)
 	if err := model.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
@@ -195,4 +206,70 @@ func readMessagesFromStdin() ([]string, error) {
 		}
 	}
 	return messages, scanner.Err()
+}
+
+func runRebaseSquash(ctx context.Context, llmClient squash.ClientInterface, logger *zap.Logger) error {
+	// Create git runner
+	runner := git.NewRunnerWithLogger(flagDebug, logger)
+	
+	// Create git history manager
+	history := githistory.New(runner)
+	
+	// Create rebase workflow config
+	config := rebase.Config{
+		BaseBranch: "main", // TODO: Make this configurable or auto-detect
+		Language:   squashLang,
+		Logger:     logger,
+	}
+	
+	// Create rebase workflow
+	workflow := rebase.New(history, llmClient, config)
+	
+	// Handle no-confirm mode differently
+	if squashNoConfirm {
+		// Analyze the repository
+		analysis, err := workflow.Analyze(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to analyze repository: %w", err)
+		}
+		
+		if !analysis.CanRebase {
+			fmt.Println(analysis.Message)
+			return nil
+		}
+		
+		// Generate commit message
+		message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
+		if err != nil {
+			return fmt.Errorf("failed to generate commit message: %w", err)
+		}
+		
+		fmt.Println("Generated commit message:")
+		fmt.Println(message)
+		
+		// Execute rebase
+		fmt.Println("\nExecuting rebase...")
+		if err := workflow.ExecuteRebase(ctx, analysis, message); err != nil {
+			return fmt.Errorf("rebase failed: %w", err)
+		}
+		
+		fmt.Println("✓ Rebase completed successfully")
+		return nil
+	}
+	
+	// TUI mode
+	model := ui.NewRebaseModel(workflow, squashAppendMode)
+	if err := model.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+	
+	// If user accepted and rebase was successful
+	if model.IsAccepted() {
+		fmt.Println("\n✓ Rebase completed successfully")
+		if backupBranch := model.GetBackupBranch(); backupBranch != "" {
+			fmt.Printf("Backup branch: %s\n", backupBranch)
+		}
+	}
+	
+	return nil
 }
