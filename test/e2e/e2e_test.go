@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// initGitRepo 创建临时 Git 仓库并返回路径。
+// initGitRepo creates a temporary Git repository and returns its path.
 func initGitRepo(t *testing.T) string {
 	dir := t.TempDir()
 	run := func(args ...string) {
@@ -25,11 +25,11 @@ func initGitRepo(t *testing.T) string {
 		}
 	}
 	run("init")
-	// 配置用户信息避免 commit 失败
+	// Configure user info to avoid commit failure
 	run("config", "user.email", "test@example.com")
 	run("config", "user.name", "tester")
 
-	// 初始提交
+	// Initial commit
 	_ = os.WriteFile(filepath.Join(dir, "README.md"), []byte("init"), 0644)
 	run("add", "README.md")
 	run("commit", "-m", "chore: init")
@@ -40,7 +40,7 @@ func initGitRepo(t *testing.T) string {
 func TestE2E_HappyPathYes(t *testing.T) {
 	bin := buildBinary(t)
 
-	// Mock API server 返回成功
+	// Mock API server returns success
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"feat(test): add file"}}]}`))
@@ -48,7 +48,7 @@ func TestE2E_HappyPathYes(t *testing.T) {
 	defer server.Close()
 
 	repo := initGitRepo(t)
-	// 创建文件并 stage
+	// Create file and stage it
 	_ = os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content"), 0644)
 	_ = exec.Command("git", "-C", repo, "add", "file.txt").Run()
 
@@ -65,7 +65,7 @@ func TestE2E_HappyPathYes(t *testing.T) {
 	err := cmd.Run()
 	require.NoError(t, err, out.String())
 
-	// 检查最新 commit message
+	// Check latest commit message
 	logCmd := exec.Command("git", "-C", repo, "log", "-1", "--pretty=%s")
 	logOut, _ := logCmd.Output()
 	require.Contains(t, string(logOut), "feat(test): add file")
@@ -93,7 +93,7 @@ func TestE2E_DryRun(t *testing.T) {
 	require.NoError(t, err, out.String())
 	require.Contains(t, out.String(), "feat(test): add file")
 
-	// 确认没有 commit
+	// Ensure no commit was made
 	logCmd := exec.Command("git", "-C", repo, "log", "--pretty=%s")
 	logOut, _ := logCmd.Output()
 	require.NotContains(t, string(logOut), "feat(test): add file")
@@ -153,7 +153,7 @@ func TestE2E_SeedPriority(t *testing.T) {
 
 func TestE2E_Timeout(t *testing.T) {
 	bin := buildBinary(t)
-	// Mock server 延迟 2s
+	// Mock server delays 2s
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		w.WriteHeader(200)

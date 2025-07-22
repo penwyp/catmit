@@ -47,25 +47,25 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// Runner 抽象出命令执行器，方便在单元测试中注入 Mock。
-// 实际运行时使用 exec.Command 实现。
+// Runner abstracts the command executor, making it easy to inject a mock for unit testing.
+// In production, this is implemented using exec.Command.
 //
-// 返回值约定：成功时输出字节数组，错误时返回非 nil error。
-// 日志输出由调用方处理。
+// Return convention: On success, returns output as a byte slice; on error, returns a non-nil error.
+// Logging is handled by the caller.
 //
-// NOTE: 目前仅支持同步返回，后续可扩展为流式读取。
+// NOTE: Currently only supports synchronous return, can be extended to streaming in the future.
 type Runner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
-// FileStatus 表示文件的Git状态信息
+// FileStatus represents the Git status information of a file.
 type FileStatus struct {
 	// Existing fields
-	Path        string // 文件路径
-	IndexStatus rune   // 暂存区状态 (M, A, D, R, C等)
-	WorkStatus  rune   // 工作区状态 (M, A, D, R, C等)
-	IsRenamed   bool   // 是否为重命名
-	OldPath     string // 重命名前的路径(如果适用)
+	Path        string // File path
+	IndexStatus rune   // Index status (M, A, D, R, C, etc.)
+	WorkStatus  rune   // Worktree status (M, A, D, R, C, etc.)
+	IsRenamed   bool   // Whether the file is renamed
+	OldPath     string // Old path before rename (if applicable)
 
 	// New enhanced fields for Phase 2
 	Priority        int    // Priority score (1-100, lower is higher priority)
@@ -76,10 +76,10 @@ type FileStatus struct {
 	FileSize        int64  // File size in bytes (for untracked files)
 }
 
-// FileStatusSummary 文件状态摘要，包含分支信息和文件状态列表
+// FileStatusSummary is a summary of file status, including branch info and file status list.
 type FileStatusSummary struct {
-	BranchName string       // 当前分支名
-	Files      []FileStatus // 文件状态列表
+	BranchName string       // Current branch name
+	Files      []FileStatus // List of file statuses
 }
 
 // CacheEntry represents a cached git command result with metadata.

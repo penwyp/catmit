@@ -9,7 +9,7 @@ import (
 	"github.com/penwyp/catmit/pkg/gitinfo"
 )
 
-// CollectorInterface 定义collector接口，用于获取Git数据
+// CollectorInterface defines the collector interface for obtaining Git data
 type CollectorInterface interface {
 	FileStatusSummary(ctx context.Context) (*gitinfo.FileStatusSummary, error)
 	ComprehensiveDiff(ctx context.Context) (string, error)
@@ -18,28 +18,28 @@ type CollectorInterface interface {
 	ChangedFiles(ctx context.Context) ([]string, error)
 }
 
-// TokenBudget 定义token预算配置
+// TokenBudget defines the token budget configuration
 type TokenBudget struct {
-	MaxTokens       int // 最大token数
-	ReservedTokens  int // 为系统prompt等预留的token数
-	AvailableTokens int // 可用于diff内容的token数
+	MaxTokens       int // Maximum number of tokens
+	ReservedTokens  int // Tokens reserved for system prompt, etc.
+	AvailableTokens int // Tokens available for diff content
 }
 
-// Builder 负责构建发送给 LLM 的 Prompt 文本。
-// 支持语言注入、token预算控制与智能diff截断。
+// Builder is responsible for constructing the Prompt text sent to the LLM.
+// Supports language injection, token budget control, and smart diff truncation.
 type Builder struct {
-	lang        string      // ISO 639-1 语言代码，例如 "en", "zh"
-	diffLimit   int         // Diff 最大长度（字节），0 表示不限制
-	truncMarker string      // 截断标记，可自定义，便于测试
-	tokenBudget TokenBudget // Token预算配置
+	lang        string      // ISO 639-1 language code, e.g., "en", "zh"
+	diffLimit   int         // Maximum diff length (bytes), 0 means no limit
+	truncMarker string      // Truncation marker, customizable for testing
+	tokenBudget TokenBudget // Token budget configuration
 }
 
-// NewBuilder 创建 Prompt Builder。
-// diffLimit == 0 表示不对 diff 做截断。
+// NewBuilder creates a Prompt Builder.
+// diffLimit == 0 means no truncation for diff.
 func NewBuilder(lang string, diffLimit int) *Builder {
-	// 验证语言代码
+	// Validate language code
 	if lang != "" && lang != "en" && lang != "zh" {
-		// 警告：不支持的语言，默认使用英文
+		// Warning: unsupported language, default to English
 		lang = "en"
 	}
 	return &Builder{
@@ -47,23 +47,23 @@ func NewBuilder(lang string, diffLimit int) *Builder {
 		diffLimit:   diffLimit,
 		truncMarker: "(diff truncated)",
 		tokenBudget: TokenBudget{
-			MaxTokens:       8000, // 默认预算
-			ReservedTokens:  2000, // 为系统prompt和其他信息预留
-			AvailableTokens: 6000, // 可用于diff内容
+			MaxTokens:       8000, // Default budget
+			ReservedTokens:  2000, // Reserved for system prompt and other info
+			AvailableTokens: 6000, // Available for diff content
 		},
 	}
 }
 
-// NewBuilderWithTokenBudget 创建带有指定token预算的Prompt Builder
+// NewBuilderWithTokenBudget creates a Prompt Builder with a specified token budget
 func NewBuilderWithTokenBudget(lang string, diffLimit int, maxTokens int) *Builder {
-	// 验证token预算
+	// Validate token budget
 	if maxTokens < 1000 {
-		maxTokens = 1000 // 最小预算
+		maxTokens = 1000 // Minimum budget
 	}
 	if maxTokens > 100000 {
-		maxTokens = 100000 // 最大限制
+		maxTokens = 100000 // Maximum limit
 	}
-	reservedTokens := maxTokens / 4 // 预留25%的token
+	reservedTokens := maxTokens / 4 // Reserve 25% of tokens
 	return &Builder{
 		lang:        lang,
 		diffLimit:   diffLimit,
@@ -76,29 +76,29 @@ func NewBuilderWithTokenBudget(lang string, diffLimit int, maxTokens int) *Build
 	}
 }
 
-// estimateTokens 估算文本的token数量
-// 简化算法：1个token约等于4个字符（英文），2个字符（中文）
+// estimateTokens estimates the number of tokens in the text
+// Simplified algorithm: 1 token ≈ 4 English chars, 2 Chinese chars
 func estimateTokens(text string) int {
 	charCount := len(text)
-	// 简化估算：平均每个token 3个字符
+	// Simplified estimate: average 1 token per 3 chars
 	return (charCount + 2) / 3
 }
 
-// smartTruncateDiff 智能截断单个文件的diff
-// 如果diff太大，使用头尾保留法
+// smartTruncateDiff intelligently truncates a single file's diff
+// If the diff is too large, use head-tail retention
 func (b *Builder) smartTruncateDiff(diff string, maxTokens int) string {
 	if estimateTokens(diff) <= maxTokens {
 		return diff
 	}
 
 	lines := strings.Split(diff, "\n")
-	if len(lines) <= 20 { // 小于20行，直接返回
+	if len(lines) <= 20 { // Less than 20 lines, return as is
 		return diff
 	}
 
-	// 计算头尾行数，保留关键信息
-	headLines := maxTokens / 6 // 约1/3的token用于头部
-	tailLines := maxTokens / 6 // 约1/3的token用于尾部
+	// Calculate number of head and tail lines to retain key info
+	headLines := maxTokens / 6 // About 1/3 of tokens for head
+	tailLines := maxTokens / 6 // About 1/3 of tokens for tail
 
 	if headLines > len(lines)/3 {
 		headLines = len(lines) / 3
@@ -114,16 +114,16 @@ func (b *Builder) smartTruncateDiff(diff string, maxTokens int) string {
 		head, headLines, tailLines, tail)
 }
 
-// BuildSystemPrompt 构建系统提示词，包含角色定义、任务说明、格式规则和示例。
-// 根据 docs/prompt-analyze.md 最佳实践，遵循"大师级"prompt模板结构。
+// BuildSystemPrompt constructs the system prompt, including role definition, task description, format rules, and examples.
+// Follows "master-level" prompt template structure as per docs/prompt-analyze.md best practices.
 func (b *Builder) BuildSystemPrompt() string {
-	// ROLE - 角色与身份设定
+	// ROLE - Role and identity setting
 	rolePrompt := "You are an expert software engineer who writes concise, high-quality Git commit messages following the Conventional Commits specification."
 
-	// TASK - 任务描述
+	// TASK - Task description
 	taskPrompt := "Generate a Git commit message for the provided code changes."
 
-	// 语言指令
+	// Language instruction
 	var langInst string
 	switch strings.ToLower(b.lang) {
 	case "zh":
@@ -132,36 +132,36 @@ func (b *Builder) BuildSystemPrompt() string {
 		langInst = "The commit message MUST be in English."
 	}
 
-	// INSTRUCTIONS & RULES - 格式与规则
+	// INSTRUCTIONS & RULES - Format and rules
 	formatRules := `# INSTRUCTIONS & RULES
 1. **Format**: MUST follow Conventional Commits: <type>(<scope>): <subject>
 2. **Type**: Choose from feat, fix, refactor, chore, docs, style, test
 3. **Subject**: Use imperative mood, max 50 chars, no period at the end
 4. **Body**: If needed, explain the 'why', not the 'how', after a blank line`
 
-	// EXAMPLE - 示例 (Few-Shot Learning)
+	// EXAMPLE - Example (Few-Shot Learning)
 	examples := `# EXAMPLE
 - **Diff**: + return sessionStorage.getItem('token'); - return localStorage.getItem('token');
 - **Commit**: refactor(auth): use sessionStorage for token storage`
 
-	// YOUR RESPONSE - 输出要求
+	// YOUR RESPONSE - Output requirement
 	outputReq := `# YOUR RESPONSE
 Generate ONLY the commit message text.`
 
 	return strings.Join([]string{rolePrompt, taskPrompt, langInst, formatRules, examples, outputReq}, "\n\n")
 }
 
-// BuildUserPrompt 构建用户提示词，包含上下文数据（分支、文件、提交历史、diff）。
-// 根据 docs/prompt-analyze.md 最佳实践，用户提示词应包含实际数据。
+// BuildUserPrompt constructs the user prompt, including contextual data (branch, files, commit history, diff).
+// According to docs/prompt-analyze.md best practices, user prompt should include real data.
 func (b *Builder) BuildUserPrompt(seed string, diff string, commits []string, branch string, files []string) string {
 	var parts []string
 
-	// 种子文本
+	// Seed text
 	if seed != "" {
 		parts = append(parts, "Seed: "+seed)
 	}
 
-	// 上下文信息
+	// Context info
 	if branch != "" {
 		parts = append(parts, "Branch: "+branch)
 	}
@@ -172,14 +172,14 @@ func (b *Builder) BuildUserPrompt(seed string, diff string, commits []string, br
 		parts = append(parts, "Recent commits:\n"+strings.Join(commits, "\n"))
 	}
 
-	// 处理 diff 截断
+	// Handle diff truncation
 	diffPart := diff
 	if b.diffLimit > 0 && len(diff) > b.diffLimit {
 		half := b.diffLimit / 2
 		diffPart = diff[:half] + "\n" + b.truncMarker + "\n" + diff[len(diff)-half:]
 	}
 
-	// 添加 diff
+	// Add diff
 	if diffPart != "" {
 		parts = append(parts, "Git diff:\n```diff\n"+diffPart+"\n```")
 	}
@@ -191,30 +191,30 @@ func (b *Builder) BuildUserPrompt(seed string, diff string, commits []string, br
 	return strings.Join(parts, "\n\n")
 }
 
-// BuildUserPromptWithBudget 使用token预算和文件优先级构建智能的用户提示词
-// 实现文档建议的智能数据预处理和token预算控制
+// BuildUserPromptWithBudget constructs an intelligent user prompt using token budget and file priority
+// Implements smart data preprocessing and token budget control as suggested in documentation
 func (b *Builder) BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error) {
 	// Convert the interface to CollectorInterface
 	col := collector.(CollectorInterface)
 	var parts []string
 
-	// 种子文本
+	// Seed text
 	if seed != "" {
 		parts = append(parts, "Seed: "+seed)
 	}
 
-	// 获取文件状态摘要
+	// Get file status summary
 	summary, err := col.FileStatusSummary(ctx)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "failed to get file status summary", err)
 	}
 
-	// 分支信息
+	// Branch info
 	if summary.BranchName != "" {
 		parts = append(parts, "Branch: "+summary.BranchName)
 	}
 
-	// 构建文件摘要
+	// Build file summary
 	if len(summary.Files) > 0 {
 		var fileSummary []string
 		for _, file := range summary.Files {
@@ -231,13 +231,13 @@ func (b *Builder) BuildUserPromptWithBudget(ctx context.Context, collector inter
 		parts = append(parts, "Summary of Staged Files:\n"+strings.Join(fileSummary, "\n"))
 	}
 
-	// 获取最近的提交历史
+	// Get recent commit history
 	commits, err := col.RecentCommits(ctx, 3)
 	if err == nil && len(commits) > 0 {
 		parts = append(parts, "Recent commits:\n"+strings.Join(commits, "\n"))
 	}
 
-	// 使用token预算控制的diff内容
+	// Diff content controlled by token budget
 	diffContent, err := b.buildBudgetedDiff(ctx, col, summary.Files)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "failed to build diff content", err)
@@ -254,29 +254,29 @@ func (b *Builder) BuildUserPromptWithBudget(ctx context.Context, collector inter
 	return strings.Join(parts, "\n\n"), nil
 }
 
-// buildBudgetedDiff 根据token预算和文件优先级构建diff内容
+// buildBudgetedDiff constructs diff content based on token budget and file priority
 func (b *Builder) buildBudgetedDiff(ctx context.Context, collector CollectorInterface, files []gitinfo.FileStatus) (string, error) {
 	if len(files) == 0 {
 		return "", nil
 	}
 
-	// 获取完整的diff
+	// Get the full diff
 	fullDiff, err := collector.ComprehensiveDiff(ctx)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "failed to get diff", err)
 	}
 
-	// 如果diff很小，直接返回
+	// If the diff is small, return as is
 	if estimateTokens(fullDiff) <= b.tokenBudget.AvailableTokens {
 		return fullDiff, nil
 	}
 
-	// 超出预算，使用智能截断
+	// Exceeds budget, use smart truncation
 	return b.smartTruncateDiff(fullDiff, b.tokenBudget.AvailableTokens), nil
 }
 
-// Build 生成最终 Prompt（保持向后兼容）。
-// 已废弃：建议使用 BuildSystemPrompt() 和 BuildUserPrompt() 分别构建。
+// Build generates the final Prompt (kept for backward compatibility).
+// Deprecated: use BuildSystemPrompt() and BuildUserPrompt() separately.
 func (b *Builder) Build(seed string, diff string, commits []string, branch string, files []string) string {
 	system := b.BuildSystemPrompt()
 	user := b.BuildUserPrompt(seed, diff, commits, branch, files)

@@ -17,36 +17,36 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockHTTPClient 用于测试的 HTTP 客户端适配器
+// MockHTTPClient is a mock HTTP client adapter for testing
 type MockHTTPClient struct {
 	handler http.HandlerFunc
 }
 
 func (m *MockHTTPClient) GenerateCommitMessage(ctx context.Context, prompt string) (string, error) {
-	// 创建一个测试服务器
+	// Create a test server
 	server := httptest.NewServer(m.handler)
 	defer server.Close()
 
-	// 构建请求
+	// Build request
 	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, nil)
 	if err != nil {
 		return "", err
 	}
 
-	// 发送请求
+	// Send request
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	// 解析响应
+	// Parse response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 
-	// 简单的 JSON 解析（仅用于测试）
+	// Simple JSON parsing (for test only)
 	var result struct {
 		Choices []struct {
 			Message struct {
@@ -67,10 +67,10 @@ func (m *MockHTTPClient) GenerateCommitMessage(ctx context.Context, prompt strin
 }
 
 func TestSquash_Integration(t *testing.T) {
-	// 创建 mock 客户端
+	// Create mock client
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 返回模拟响应
+			// Return mock response
 			response := `{
 				"choices": [{
 					"message": {
@@ -84,21 +84,21 @@ func TestSquash_Integration(t *testing.T) {
 		}),
 	}
 
-	// 创建 squash 实例
+	// Create squash instance
 	s := squash.New(mockClient, "en")
 
-	// 测试输入
+	// Test input
 	messages := []string{
 		"feat: add user authentication",
 		"fix: resolve login error on mobile",
 		"docs: update authentication guide",
 	}
 
-	// 执行生成
+	// Execute generation
 	ctx := context.Background()
 	result, err := s.Generate(ctx, messages)
 
-	// 验证结果
+	// Validate result
 	assert.NoError(t, err)
 	assert.Contains(t, result, "feat: implement complete authentication system")
 	assert.Contains(t, result, "Add user authentication with JWT support")
@@ -106,10 +106,10 @@ func TestSquash_Integration(t *testing.T) {
 }
 
 func TestSquash_ChineseIntegration(t *testing.T) {
-	// 创建 mock 客户端
+	// Create mock client
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 返回中文响应
+			// Return Chinese response
 			response := `{
 				"choices": [{
 					"message": {
@@ -123,28 +123,28 @@ func TestSquash_ChineseIntegration(t *testing.T) {
 		}),
 	}
 
-	// 创建 squash 实例（中文模式）
+	// Create squash instance (Chinese mode)
 	s := squash.New(mockClient, "zh")
 
-	// 测试输入
+	// Test input
 	messages := []string{
 		"feat: 添加用户认证",
 		"fix: 修复登录错误",
 		"docs: 更新认证文档",
 	}
 
-	// 执行生成
+	// Execute generation
 	ctx := context.Background()
 	result, err := s.Generate(ctx, messages)
 
-	// 验证结果
+	// Validate result
 	assert.NoError(t, err)
 	assert.Contains(t, result, "feat: 实现完整的认证系统")
 	assert.Contains(t, result, "添加基于 JWT 的用户认证功能")
 }
 
 func TestSquash_ErrorHandling(t *testing.T) {
-	// 创建返回错误的 mock 客户端
+	// Create mock client that returns error
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -152,27 +152,27 @@ func TestSquash_ErrorHandling(t *testing.T) {
 		}),
 	}
 
-	// 创建 squash 实例
+	// Create squash instance
 	s := squash.New(mockClient, "en")
 
-	// 测试输入
+	// Test input
 	messages := []string{
 		"feat: add feature",
 		"fix: fix bug",
 	}
 
-	// 执行生成
+	// Execute generation
 	ctx := context.Background()
 	_, err := s.Generate(ctx, messages)
 
-	// 验证错误
+	// Validate error
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate commit message")
 }
 
-// TestSquash_UIModel 测试 TUI 模型的基本行为
+// TestSquash_UIModel tests the basic behavior of the TUI model
 func TestSquash_UIModel(t *testing.T) {
-	// 创建 mock 客户端
+	// Create mock client
 	mockResponse := "feat: test commit message"
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,69 +196,69 @@ func TestSquash_UIModel(t *testing.T) {
 		"fix: fix bug",
 	}
 
-	// 创建 UI 模型
+	// Create UI model
 	model := ui.NewSquashModel(s, messages, false)
 
-	// 测试初始化
+	// Test initialization
 	initCmd := model.Init()
 	assert.NotNil(t, initCmd)
 
-	// 测试视图渲染
+	// Test view rendering
 	view := model.View()
 	assert.Contains(t, view, "Squashing Commit Messages")
 	assert.Contains(t, view, "Generating consolidated commit message")
 }
 
-// TestSquash_ClipboardIntegration 测试剪贴板功能
+// TestSquash_ClipboardIntegration tests clipboard functionality
 func TestSquash_ClipboardIntegration(t *testing.T) {
-	// 跳过 CI 环境（可能没有剪贴板支持）
+	// Skip in CI environment (clipboard may not be supported)
 	if os.Getenv("CI") == "true" {
 		t.Skip("Skipping clipboard test in CI environment")
 	}
 
-	// 保存原始剪贴板内容
+	// Save original clipboard content
 	originalContent, _ := clipboard.ReadAll()
 	defer func() {
-		// 恢复原始剪贴板内容
+		// Restore original clipboard content
 		_ = clipboard.WriteAll(originalContent)
 	}()
 
 	testContent := "feat: test clipboard integration"
 
-	// 写入测试内容
+	// Write test content
 	err := clipboard.WriteAll(testContent)
 	if err != nil {
 		t.Skip("Clipboard not available on this system")
 	}
 
-	// 读取并验证
+	// Read and validate
 	readContent, err := clipboard.ReadAll()
 	assert.NoError(t, err)
 	assert.Equal(t, testContent, readContent)
 }
 
-// TestSquash_NoConfirmMode 测试 --no-confirm 模式的输出
+// TestSquash_NoConfirmMode tests output in --no-confirm mode
 func TestSquash_NoConfirmMode(t *testing.T) {
-	// 捕获标准输出
+	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	// 模拟生成的 commit message
+	// Simulate generated commit message
 	expectedMessage := "feat: consolidated commit message"
 
-	// 输出消息（模拟 --no-confirm 模式的行为）
+	// Output message (simulate --no-confirm mode behavior)
 	fmt.Println(expectedMessage)
 
-	// 恢复标准输出
+	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
 
-	// 读取输出
+	// Read output
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
-	// 验证输出
+	// Validate output
 	assert.Contains(t, output, expectedMessage)
 }
