@@ -38,8 +38,17 @@ func (a *authGitRunnerAdapter) GetRemotes(ctx context.Context) ([]string, error)
 }
 
 func (a *authGitRunnerAdapter) GetRemoteURL(ctx context.Context, remote string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", remote)
+	// First check if we have a catmit-specific remote URL for testing
+	catmitKey := "catmit.remote." + remote + ".url"
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", catmitKey)
 	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		return strings.TrimSpace(string(output)), nil
+	}
+
+	// Fall back to normal remote URL
+	cmd = exec.CommandContext(ctx, "git", "remote", "get-url", remote)
+	output, err = cmd.Output()
 	if err != nil {
 		return "", err
 	}

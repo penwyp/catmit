@@ -205,7 +205,7 @@ func HandleFatal(err error) {
 
 	// Determine exit code based on error type
 	exitCode := 1
-	if IsRetryable(err) {
+	if GetType(err) == ErrTypeTimeout {
 		exitCode = 124 // Timeout exit code
 	}
 

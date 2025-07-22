@@ -269,7 +269,15 @@ func (d *defaultCommitter) NeedsPush(ctx context.Context) (bool, error) {
 
 // GitRunnerAdapter also implements pr.GitRunner interface
 func (a *GitRunnerAdapter) GetRemoteURL(ctx context.Context, remote string) (string, error) {
-	output, err := a.runner.Run(ctx, "git", "remote", "get-url", remote)
+	// First check if we have a catmit-specific remote URL for testing
+	catmitKey := "catmit.remote." + remote + ".url"
+	output, err := a.runner.Run(ctx, "git", "config", "--get", catmitKey)
+	if err == nil && len(output) > 0 {
+		return strings.TrimSpace(output), nil
+	}
+
+	// Fall back to normal remote URL
+	output, err = a.runner.Run(ctx, "git", "remote", "get-url", remote)
 	if err != nil {
 		return "", err
 	}

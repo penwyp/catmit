@@ -353,6 +353,10 @@ func (w *Workflow) generateCommitMessage(ctx context.Context) (string, error) {
 
 	message, err := client.GetCommitMessage(apiCtx, systemPrompt, userPrompt)
 	if err != nil {
+		// Preserve timeout error type
+		if errors.Is(err, errors.ErrLLMTimeout) {
+			return "", errors.Wrap(errors.ErrTypeTimeout, "failed to get commit message from LLM", err)
+		}
 		return "", errors.Wrap(errors.ErrTypeLLM, "failed to get commit message from LLM", err)
 	}
 

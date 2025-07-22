@@ -23,18 +23,37 @@ func mockGitHubCLI(t *testing.T, responses map[string]string) string {
 
 	script := `#!/bin/bash
 args="$@"
+echo "gh mock called with: $args" >&2
 case "$args" in
   "version")
     echo 'gh version 2.40.0 (2024-01-15)'
     exit 0
     ;;
 `
+	// Add exact matches first
 	for args, response := range responses {
-		script += fmt.Sprintf(`  "%s")
+		if !strings.HasPrefix(args, "pr create --title") {
+			script += fmt.Sprintf(`  "%s")
     echo '%s'
     exit 0
     ;;
 `, args, response)
+		}
+	}
+	
+	// Add pattern matches for pr create commands with title
+	for args, response := range responses {
+		if strings.HasPrefix(args, "pr create --title") {
+			// Extract the title part for pattern matching
+			titleParts := strings.SplitN(args, " --body", 2)
+			if len(titleParts) > 0 {
+				script += fmt.Sprintf(`  "%s"*)
+    echo '%s'
+    exit 0
+    ;;
+`, titleParts[0], response)
+			}
+		}
 	}
 
 	script += `  *)
@@ -104,6 +123,18 @@ func setupPRTestRepo(t *testing.T, remoteURL string) string {
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
+	// Also set the fetch URL to prevent authentication prompts
+	cmd = exec.Command("git", "config", "remote.origin.url", bareDir)
+	cmd.Dir = dir
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	// Keep the original URL for provider detection
+	cmd = exec.Command("git", "config", "catmit.remote.origin.url", remoteURL)
+	cmd.Dir = dir
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
 	// Get current branch name
 	cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = dir
@@ -148,7 +179,7 @@ func TestE2E_PRCreation_GitHub(t *testing.T) {
 	// Mock GitHub CLI
 	ghMock := mockGitHubCLI(t, map[string]string{
 		"auth status": "Logged in to github.com as testuser",
-		"pr create --fill --base main --draft=false": "https://github.com/owner/repo/pull/123",
+		"pr create --title [Feature] feat: add new feature for testing PR creation --body feat: add new feature for testing PR creation --base master": "https://github.com/owner/repo/pull/123",
 	})
 
 	repo := setupPRTestRepo(t, "https://github.com/owner/repo.git")
@@ -294,10 +325,10 @@ esac
 func TestE2E_PRCreation_NoChanges(t *testing.T) {
 	bin := buildBinary(t)
 
-	// Mock GitHub CLI
+	// Mock GitHub CLI - use a partial match for the command since the body is large
 	ghMock := mockGitHubCLI(t, map[string]string{
 		"auth status": "Logged in to github.com as testuser",
-		"pr create --fill --base main --draft=false": "https://github.com/owner/repo/pull/456",
+		"pr create --title PR from feature-branch --body ### 📝 Change Type": "https://github.com/owner/repo/pull/456",
 	})
 
 	repo := setupPRTestRepo(t, "https://github.com/owner/repo.git")
