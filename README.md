@@ -83,203 +83,6 @@ catmit --help
 catmit --version
 ```
 
-## 🚀 Installation
-
-### Installation Methods
-
-#### Using Homebrew (macOS/Linux)
-```bash
-brew tap penwyp/catmit
-brew install catmit
-```
-
-#### Using Go
-```bash
-go install github.com/penwyp/catmit@latest
-```
-
-#### Download Binary
-Download the latest release from [GitHub Releases](https://github.com/penwyp/catmit/releases) for your platform.
-
-#### Verify Installation
-```bash
-catmit --version
-```
-
-### Quick Setup
-
-1. **Choose your LLM provider** (see [LLM Provider Configuration](#-llm-provider-configuration) below)
-2. **Set environment variables** for your chosen provider
-3. **Make some changes and stage them:**
-   ```bash
-   git add .
-   ```
-4. **Generate and commit:**
-   ```bash
-   catmit
-   ```
-
-## 🔌 LLM Provider Configuration
-
-catmit supports multiple LLM providers through three environment variables. Configure them based on your preferred provider:
-
-### 🎯 DeepSeek (Default & Recommended)
-```bash
-# Required
-export CATMIT_LLM_API_KEY="sk-your-deepseek-api-key"
-
-# Optional (these are the defaults)
-export CATMIT_LLM_API_URL="https://api.deepseek.com/v1/chat/completions"
-export CATMIT_LLM_MODEL="deepseek-chat"
-```
-
-**Get your API key:** [DeepSeek Console](https://platform.deepseek.com/api_keys)
-
-### 🌋 Volcengine Ark
-```bash
-# Required
-export CATMIT_LLM_API_KEY="your-volcengine-api-key"
-export CATMIT_LLM_API_URL="https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-export CATMIT_LLM_MODEL="deepseek-v3-250324"
-```
-
-**Get your API key:** [Volcengine Ark Console](https://console.volcengine.com/ark)
-
-### 🤖 OpenAI
-```bash
-# Required
-export CATMIT_LLM_API_KEY="sk-your-openai-api-key"
-export CATMIT_LLM_API_URL="https://api.openai.com/v1/chat/completions"
-export CATMIT_LLM_MODEL="gpt-4"
-```
-
-**Get your API key:** [OpenAI API Keys](https://platform.openai.com/api-keys)
-
-### 🔧 Other OpenAI-Compatible Providers
-```bash
-# Required - adjust for your provider
-export CATMIT_LLM_API_KEY="your-api-key"
-export CATMIT_LLM_API_URL="https://your-provider.com/v1/chat/completions"
-export CATMIT_LLM_MODEL="your-model-name"
-```
-
-### Environment Variables Reference
-
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `CATMIT_LLM_API_KEY` | API key for your chosen provider | ✅ Yes | - |
-| `CATMIT_LLM_API_URL` | OpenAI-compatible API endpoint | ❌ No | `https://api.deepseek.com/v1/chat/completions` |
-| `CATMIT_LLM_MODEL` | Model name for completions | ❌ No | `deepseek-chat` |
-| `CATMIT_CONFIG_PATH` | Path to configuration file | ❌ No | `~/.config/catmit/config.yaml` |
-
-### Provider Mapping Configuration
-
-catmit automatically detects git hosting providers through a configuration file. The default configuration maps common git hosts to their respective platforms:
-
-**Configuration File Location**: `~/.config/catmit/providers.yaml`
-
-This file is automatically created on first run with default mappings. You can customize it to add your own git hosting services:
-
-```yaml
-# Default provider mappings
-hosts:
-  github.com: github
-  gitlab.com: gitlab
-  bitbucket.org: bitbucket
-  # Add custom enterprise hosts
-  git.company.com: github    # GitHub Enterprise
-  gitlab.internal.com: gitlab # GitLab self-hosted
-```
-
-**Features**:
-- 🔍 Auto-detection of PR provider based on git remote URL
-- 🔄 Hot-reload: Changes take effect immediately without restart
-- 🏢 Enterprise support: Map your internal git hosts to supported providers
-- 🎯 Override with `--pr-provider` flag when needed
-
-### Configuration File Support
-
-catmit supports YAML configuration files for advanced customization:
-
-**Configuration File Location**: `~/.config/catmit/config.yaml`
-
-```yaml
-# LLM Configuration (overrides environment variables)
-llm:
-  api_key: "sk-xxxx"
-  api_url: "https://api.deepseek.com/v1/chat/completions"
-  model: "deepseek-chat"
-
-# PR Templates
-pr:
-  template: |
-    ## Summary
-    {{ .CommitMessage }}
-    
-    ## Type of Change
-    - [ ] Bug fix
-    - [ ] New feature
-    - [ ] Breaking change
-    
-    ## Testing
-    - [ ] Tests pass locally
-
-# Commit Preferences
-commit:
-  language: "en"  # or "zh" for Chinese
-  timeout: 30     # seconds
-```
-
-**Features**:
-- 🔧 Override environment variables with config file
-- 📝 Custom PR templates with Go template syntax
-- 🔄 Hot-reload configuration changes
-- 🌍 Set default language and timeout preferences
-
-## 📖 Usage
-
-### Basic Usage
-```bash
-# Interactive mode with TUI
-catmit
-
-# Auto-commit without confirmation
-catmit -y
-
-# Preview message only (dry run)
-catmit --dry-run
-
-# Generate in Chinese
-catmit -l zh
-
-# Set custom timeout (default: 30s)
-catmit -t 60
-
-# Provide seed text for better context (via positional argument)
-catmit "fix user authentication"
-
-# Or use the --seed flag (same effect)
-catmit --seed "fix user authentication"
-```
-
-### Advanced Usage
-```bash
-# Silent mode (no TUI, direct output)
-catmit --dry-run -y
-
-# Combine options
-catmit -y -l zh -t 60
-
-# Test your configuration
-catmit --dry-run
-
-# Get help
-catmit --help
-
-# Check version
-catmit --version
-```
-
 ### 🔀 Squash Commits
 
 #### Basic Squash (Editor Mode)
@@ -499,6 +302,160 @@ $ catmit
 ✅ Commit this message? [Y/n]: y
 🎉 Committed successfully!
 ```
+
+## 🚀 Installation
+
+### Installation Methods
+
+#### Using Homebrew (macOS/Linux)
+```bash
+brew tap penwyp/catmit
+brew install catmit
+```
+
+#### Using Go
+```bash
+go install github.com/penwyp/catmit@latest
+```
+
+#### Download Binary
+Download the latest release from [GitHub Releases](https://github.com/penwyp/catmit/releases) for your platform.
+
+#### Verify Installation
+```bash
+catmit --version
+```
+
+### Quick Setup
+
+1. **Choose your LLM provider** (see [LLM Provider Configuration](#-llm-provider-configuration) below)
+2. **Set environment variables** for your chosen provider
+3. **Make some changes and stage them:**
+   ```bash
+   git add .
+   ```
+4. **Generate and commit:**
+   ```bash
+   catmit
+   ```
+
+## 🔌 LLM Provider Configuration
+
+catmit supports multiple LLM providers through three environment variables. Configure them based on your preferred provider:
+
+### 🎯 DeepSeek (Default & Recommended)
+```bash
+# Required
+export CATMIT_LLM_API_KEY="sk-your-deepseek-api-key"
+
+# Optional (these are the defaults)
+export CATMIT_LLM_API_URL="https://api.deepseek.com/v1/chat/completions"
+export CATMIT_LLM_MODEL="deepseek-chat"
+```
+
+**Get your API key:** [DeepSeek Console](https://platform.deepseek.com/api_keys)
+
+### 🌋 Volcengine Ark
+```bash
+# Required
+export CATMIT_LLM_API_KEY="your-volcengine-api-key"
+export CATMIT_LLM_API_URL="https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+export CATMIT_LLM_MODEL="deepseek-v3-250324"
+```
+
+**Get your API key:** [Volcengine Ark Console](https://console.volcengine.com/ark)
+
+### 🤖 OpenAI
+```bash
+# Required
+export CATMIT_LLM_API_KEY="sk-your-openai-api-key"
+export CATMIT_LLM_API_URL="https://api.openai.com/v1/chat/completions"
+export CATMIT_LLM_MODEL="gpt-4"
+```
+
+**Get your API key:** [OpenAI API Keys](https://platform.openai.com/api-keys)
+
+### 🔧 Other OpenAI-Compatible Providers
+```bash
+# Required - adjust for your provider
+export CATMIT_LLM_API_KEY="your-api-key"
+export CATMIT_LLM_API_URL="https://your-provider.com/v1/chat/completions"
+export CATMIT_LLM_MODEL="your-model-name"
+```
+
+### Environment Variables Reference
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `CATMIT_LLM_API_KEY` | API key for your chosen provider | ✅ Yes | - |
+| `CATMIT_LLM_API_URL` | OpenAI-compatible API endpoint | ❌ No | `https://api.deepseek.com/v1/chat/completions` |
+| `CATMIT_LLM_MODEL` | Model name for completions | ❌ No | `deepseek-chat` |
+| `CATMIT_CONFIG_PATH` | Path to configuration file | ❌ No | `~/.config/catmit/config.yaml` |
+
+### Provider Mapping Configuration
+
+catmit automatically detects git hosting providers through a configuration file. The default configuration maps common git hosts to their respective platforms:
+
+**Configuration File Location**: `~/.config/catmit/providers.yaml`
+
+This file is automatically created on first run with default mappings. You can customize it to add your own git hosting services:
+
+```yaml
+# Default provider mappings
+hosts:
+  github.com: github
+  gitlab.com: gitlab
+  bitbucket.org: bitbucket
+  # Add custom enterprise hosts
+  git.company.com: github    # GitHub Enterprise
+  gitlab.internal.com: gitlab # GitLab self-hosted
+```
+
+**Features**:
+- 🔍 Auto-detection of PR provider based on git remote URL
+- 🔄 Hot-reload: Changes take effect immediately without restart
+- 🏢 Enterprise support: Map your internal git hosts to supported providers
+- 🎯 Override with `--pr-provider` flag when needed
+
+### Configuration File Support
+
+catmit supports YAML configuration files for advanced customization:
+
+**Configuration File Location**: `~/.config/catmit/config.yaml`
+
+```yaml
+# LLM Configuration (overrides environment variables)
+llm:
+  api_key: "sk-xxxx"
+  api_url: "https://api.deepseek.com/v1/chat/completions"
+  model: "deepseek-chat"
+
+# PR Templates
+pr:
+  template: |
+    ## Summary
+    {{ .CommitMessage }}
+    
+    ## Type of Change
+    - [ ] Bug fix
+    - [ ] New feature
+    - [ ] Breaking change
+    
+    ## Testing
+    - [ ] Tests pass locally
+
+# Commit Preferences
+commit:
+  language: "en"  # or "zh" for Chinese
+  timeout: 30     # seconds
+```
+
+**Features**:
+- 🔧 Override environment variables with config file
+- 📝 Custom PR templates with Go template syntax
+- 🔄 Hot-reload configuration changes
+- 🌍 Set default language and timeout preferences
+
 
 ## 🏗️ How It Works
 
