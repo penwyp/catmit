@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockProviderDetector 模拟Provider检测器
+// MockProviderDetector mocks the Provider detector
 type MockProviderDetector struct {
 	mock.Mock
 }
@@ -23,7 +23,7 @@ func (m *MockProviderDetector) DetectFromRemote(ctx context.Context, remoteURL s
 	return args.Get(0).(provider.RemoteInfo), args.Error(1)
 }
 
-// MockCLIDetector 模拟CLI检测器
+// MockCLIDetector mocks the CLI detector
 type MockCLIDetector struct {
 	mock.Mock
 }
@@ -41,7 +41,7 @@ func (m *MockCLIDetector) SuggestInstallCommand(cliName string) []string {
 	return args.Get(0).([]string)
 }
 
-// MockGitRunner 模拟Git命令执行器
+// MockGitRunner mocks the Git command runner
 type MockGitRunner struct {
 	mock.Mock
 }
@@ -59,7 +59,7 @@ func (m *MockGitRunner) GetRemoteURL(ctx context.Context, remote string) (string
 	return args.String(0), args.Error(1)
 }
 
-// TestAuthStatusCommand_Execute 测试auth status命令执行
+// TestAuthStatusCommand_Execute tests the execution of the auth status command
 func TestAuthStatusCommand_Execute(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -181,22 +181,22 @@ func TestAuthStatusCommand_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 设置mock
+			// Set up mocks
 			mockGit := new(MockGitRunner)
 			mockProvider := new(MockProviderDetector)
 			mockCLI := new(MockCLIDetector)
 			tt.setupMocks(mockGit, mockProvider, mockCLI)
 
-			// 创建命令并捕获输出
+			// Create command and capture output
 			var buf bytes.Buffer
 			cmd := NewAuthStatusCommand(mockGit, mockProvider, mockCLI)
 			cmd.SetOut(&buf)
 			cmd.SetErr(&buf)
 
-			// 执行命令
+			// Execute command
 			err := cmd.Execute()
 
-			// 验证结果
+			// Verify result
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -207,7 +207,7 @@ func TestAuthStatusCommand_Execute(t *testing.T) {
 				}
 			}
 
-			// 验证mock调用
+			// Verify mock calls
 			mockGit.AssertExpectations(t)
 			mockProvider.AssertExpectations(t)
 			mockCLI.AssertExpectations(t)
@@ -215,7 +215,7 @@ func TestAuthStatusCommand_Execute(t *testing.T) {
 	}
 }
 
-// TestAuthStatusCommand_FormatTable 测试表格格式化
+// TestAuthStatusCommand_FormatTable tests table formatting
 func TestAuthStatusCommand_FormatTable(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -252,7 +252,7 @@ func TestAuthStatusCommand_FormatTable(t *testing.T) {
 	}
 }
 
-// TestAuthStatusCommand_ColorOutput 测试彩色输出
+// TestAuthStatusCommand_ColorOutput tests colored output
 func TestAuthStatusCommand_ColorOutput(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -288,7 +288,7 @@ func TestAuthStatusCommand_ColorOutput(t *testing.T) {
 	}
 }
 
-// formatAuthStatusWithColor 格式化带颜色的认证状态 (test helper)
+// formatAuthStatusWithColor formats the authentication status with color (test helper)
 func formatAuthStatusWithColor(status RemoteAuthStatus) string {
 	if status.Authenticated {
 		return color.GreenString(status.Status)

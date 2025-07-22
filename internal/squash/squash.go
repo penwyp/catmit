@@ -31,18 +31,18 @@ Rules:
 `
 )
 
-// ClientInterface 定义了 squash 需要的客户端接口
+// ClientInterface defines the client interface required by squash
 type ClientInterface interface {
 	GenerateCommitMessage(ctx context.Context, prompt string) (string, error)
 }
 
-// Squash 提供合并多个 commit messages 的功能
+// Squash provides functionality to merge multiple commit messages
 type Squash struct {
 	client ClientInterface
 	lang   string
 }
 
-// New 创建一个新的 Squash 实例
+// New creates a new Squash instance
 func New(client ClientInterface, lang string) *Squash {
 	return &Squash{
 		client: client,
@@ -50,66 +50,66 @@ func New(client ClientInterface, lang string) *Squash {
 	}
 }
 
-// Generate 生成合并后的 commit message
+// Generate generates a consolidated commit message from multiple commit messages
 func (s *Squash) Generate(ctx context.Context, messages []string) (string, error) {
-	// 验证输入
+	// Validate input
 	if len(messages) < 2 {
 		return "", fmt.Errorf("at least 2 commit messages are required")
 	}
 
-	// 准备 prompt
+	// Prepare prompt
 	prompt := s.buildPrompt(messages)
 
-	// 调用 LLM
+	// Call LLM
 	response, err := s.client.GenerateCommitMessage(ctx, prompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate commit message: %w", err)
 	}
 
-	// 清理输出，确保没有不需要的前缀
+	// Clean output to ensure no unnecessary prefixes
 	cleaned := cleanCommitMessage(response)
 	return cleaned, nil
 }
 
-// buildPrompt 构建 LLM prompt
+// buildPrompt constructs the LLM prompt
 func (s *Squash) buildPrompt(messages []string) string {
-	// 选择语言模板
+	// Select language template
 	template := squashPrompt
 	if s.lang == "zh" {
 		template += "\nOutput as Chinese."
 	}
-	// 格式化 commit messages
+	// Format commit messages
 	formattedMessages := ""
 	for i, msg := range messages {
 		formattedMessages += fmt.Sprintf("%d. %s\n", i+1, strings.TrimSpace(msg))
 	}
 
-	// 替换模板中的占位符
+	// Replace placeholder in template
 	prompt := strings.Replace(template, "{{.CommitMessages}}", formattedMessages, 1)
 
 	return prompt
 }
 
-// ValidateMessages 验证输入的 commit messages
+// ValidateMessages validates the input commit messages
 func (s *Squash) ValidateMessages(messages []string) error {
 	if len(messages) < 2 {
 		return fmt.Errorf("at least 2 commit messages are required")
 	}
 
-	// 检查每个 message 是否为空
+	// Check if any message is empty
 	for i, msg := range messages {
 		if strings.TrimSpace(msg) == "" {
 			return fmt.Errorf("commit message %d is empty", i+1)
 		}
 	}
 
-	// 检查总长度（粗略的 token 估算）
+	// Check total length (rough token estimation)
 	totalLength := 0
 	for _, msg := range messages {
 		totalLength += len(msg)
 	}
 
-	// 假设平均每个字符约 0.25 个 token，留出足够空间给 prompt 和响应
+	// Assume each character is about 0.25 tokens, leave enough space for prompt and response
 	if totalLength > 12000 { // ~3000 tokens
 		return fmt.Errorf("total input is too long, please reduce the number or length of messages")
 	}
@@ -117,9 +117,9 @@ func (s *Squash) ValidateMessages(messages []string) error {
 	return nil
 }
 
-// cleanCommitMessage 清理 commit message，移除可能的前缀
+// cleanCommitMessage cleans the commit message and removes possible prefixes
 func cleanCommitMessage(message string) string {
-	// 移除常见的 AI 前缀
+	// Remove common AI prefixes
 	prefixes := []string{
 		"Here's the consolidated commit message:",
 		"Here is the consolidated commit message:",
@@ -128,7 +128,7 @@ func cleanCommitMessage(message string) string {
 		"Here's the commit message:",
 		"Here is the commit message:",
 		"The commit message is:",
-		// 中文版本
+		// Chinese versions
 		"合并后的提交信息：",
 		"这是合并后的提交信息：",
 		"提交信息：",
@@ -138,16 +138,15 @@ func cleanCommitMessage(message string) string {
 
 	cleaned := strings.TrimSpace(message)
 
-	// 尝试移除各种前缀
+	// Try to remove various prefixes (case-insensitive)
 	for _, prefix := range prefixes {
-		// 不区分大小写的检查
 		if strings.HasPrefix(strings.ToLower(cleaned), strings.ToLower(prefix)) {
 			cleaned = strings.TrimSpace(cleaned[len(prefix):])
 			break
 		}
 	}
 
-	// 如果消息被引号包围，去掉引号
+	// If the message is surrounded by quotes, remove them
 	if len(cleaned) > 2 {
 		firstChar := cleaned[0]
 		lastChar := cleaned[len(cleaned)-1]
@@ -158,7 +157,7 @@ func cleanCommitMessage(message string) string {
 		}
 	}
 
-	// 最后再次清理空白
+	// Final trim of whitespace
 	cleaned = strings.TrimSpace(cleaned)
 
 	return cleaned

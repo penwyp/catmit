@@ -1,0 +1,1 @@
+Use English for all logs/comments/docs.

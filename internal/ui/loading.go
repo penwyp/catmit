@@ -10,12 +10,12 @@ import (
 	"github.com/penwyp/catmit/pkg/gitinfo"
 )
 
-// Stage 表示进度阶段
+// Stage represents the progress stage
 type Stage int
 
 const (
 	StageCollect    Stage = iota
-	StagePreprocess       // 新增：智能数据预处理阶段
+	StagePreprocess       // New: intelligent data preprocessing stage
 	StagePrompt
 	StageQuery
 	StageDone
@@ -42,9 +42,9 @@ type clientInterface interface {
 	GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 }
 
-// LoadingModel 在执行耗时步骤时展示 Spinner
-// 完成后通过 tea.Quit 退出，将 message 或 err 写回自身字段
-// 依赖注入接口，便于测试。
+// LoadingModel displays a spinner during time-consuming steps.
+// After completion, it exits via tea.Quit, and writes message or err back to its own fields.
+// Dependencies are injected for easier testing.
 
 type LoadingModel struct {
 	stage   Stage
@@ -67,6 +67,7 @@ type LoadingModel struct {
 	err     error
 }
 
+// NewLoadingModel creates a new LoadingModel with injected dependencies and initial settings.
 func NewLoadingModel(ctx context.Context, col collectorInterface, pb promptInterface, cli clientInterface, seed, lang string, apiTimeout time.Duration) *LoadingModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
@@ -85,12 +86,12 @@ func NewLoadingModel(ctx context.Context, col collectorInterface, pb promptInter
 	}
 }
 
-// Init 启动第一个阶段
+// Init starts the first stage.
 func (m *LoadingModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, collectCmd(m.collector, m.ctx))
 }
 
-// Update 处理消息
+// Update handles messages.
 func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -104,47 +105,47 @@ func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case diffCollectedMsg:
-		// 检查是否需要延迟过渡到预处理阶段
+		// Check if we need to delay transition to preprocessing stage
 		elapsed := time.Since(m.stageStartTime)
 		if elapsed < m.minStageDelay {
-			// 需要延迟，使用 tea.Tick 延迟剩余时间
+			// Need to delay, use tea.Tick to delay the remaining time
 			remaining := m.minStageDelay - elapsed
 			return m, tea.Tick(remaining, func(time.Time) tea.Msg {
 				return delayedPreprocessMsg{originalMsg: msg}
 			})
 		}
-		// 已经达到最小显示时间，直接过渡
+		// Minimum display time reached, transition directly
 		m.stage = StagePreprocess
-		m.stageStartTime = time.Now() // 重置计时器
+		m.stageStartTime = time.Now() // Reset timer
 		return m, preprocessCmd(m.collector, m.ctx)
 	case preprocessDoneMsg:
-		// 检查是否需要延迟过渡到Prompt构建阶段
+		// Check if we need to delay transition to prompt building stage
 		elapsed := time.Since(m.stageStartTime)
 		if elapsed < m.minStageDelay {
-			// 需要延迟，使用 tea.Tick 延迟剩余时间
+			// Need to delay, use tea.Tick to delay the remaining time
 			remaining := m.minStageDelay - elapsed
 			return m, tea.Tick(remaining, func(time.Time) tea.Msg {
 				return delayedPromptMsg{originalMsg: msg}
 			})
 		}
-		// 已经达到最小显示时间，直接过渡
+		// Minimum display time reached, transition directly
 		m.stage = StagePrompt
 		return m, buildSmartPromptCmd(m.promptBuild, m.collector, m.ctx, m.seed)
 	case delayedPreprocessMsg:
-		// 延迟时间已到，现在可以过渡到预处理阶段
+		// Delay is over, now transition to preprocessing stage
 		m.stage = StagePreprocess
-		m.stageStartTime = time.Now() // 重置计时器
+		m.stageStartTime = time.Now() // Reset timer
 		return m, preprocessCmd(m.collector, m.ctx)
 	case delayedPromptMsg:
-		// 延迟时间已到，现在可以过渡到Prompt构建阶段
+		// Delay is over, now transition to prompt building stage
 		m.stage = StagePrompt
 		return m, buildSmartPromptCmd(m.promptBuild, m.collector, m.ctx, m.seed)
 	case smartPromptBuiltMsg:
-		// 智能prompt构建完成，进入Query阶段
+		// Smart prompt built, enter Query stage
 		m.stage = StageQuery
 		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
 	case promptBuiltMsg:
-		// 传统prompt构建完成，进入Query阶段（fallback路径）
+		// Traditional prompt built, enter Query stage (fallback path)
 		m.stage = StageQuery
 		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
 	case queryDoneMsg:
@@ -156,13 +157,13 @@ func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, tea.Quit
 	}
-	// 默认交给 spinner 处理其他消息
+	// By default, let spinner handle other messages
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
 	return m, cmd
 }
 
-// View 根据阶段显示文字
+// View displays text according to the current stage.
 func (m *LoadingModel) View() string {
 	// Define colors for different stages
 	var statusStyle lipgloss.Style
@@ -189,12 +190,12 @@ func (m *LoadingModel) View() string {
 	return m.spinner.View() + " " + statusStyle.Render(status)
 }
 
-// IsDone 返回结果
+// IsDone returns the result.
 func (m *LoadingModel) IsDone() (string, error) {
 	return m.message, m.err
 }
 
-// ---------------- tea.Msg 定义 ----------------
+// ---------------- tea.Msg definitions ----------------
 
 type diffCollectedMsg struct {
 	diff    string
@@ -203,7 +204,7 @@ type diffCollectedMsg struct {
 	files   []string
 }
 
-// 新增：预处理完成消息
+// New: message for preprocessing done
 type preprocessDoneMsg struct {
 	summary *gitinfo.FileStatusSummary
 }
@@ -213,13 +214,13 @@ type promptBuiltMsg struct {
 	userPrompt   string
 }
 
-// 新增：智能prompt构建完成消息
+// New: message for smart prompt built
 type smartPromptBuiltMsg struct {
 	systemPrompt string
 	userPrompt   string
 }
 
-// 新增：延迟过渡消息类型
+// New: message type for delayed transition
 type delayedPreprocessMsg struct {
 	originalMsg diffCollectedMsg
 }
@@ -232,7 +233,7 @@ type queryDoneMsg struct{ message string }
 
 type errorMsg struct{ err error }
 
-// ---------------- Cmd 实现 --------------------
+// ---------------- Cmd implementations --------------------
 
 func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
@@ -251,27 +252,27 @@ func collectCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	}
 }
 
-// 预处理命令，获取文件状态摘要
+// Preprocessing command, get file status summary
 func preprocessCmd(col collectorInterface, ctx context.Context) tea.Cmd {
 	return func() tea.Msg {
-		// 尝试使用新的FileStatusSummary方法
+		// Try to use the new FileStatusSummary method
 		summary, err := col.FileStatusSummary(ctx)
 		if err != nil {
-			// 如果新方法失败，可能collector没有实现新接口，返回错误
+			// If the new method fails, maybe collector does not implement the new interface, return error
 			return errorMsg{err}
 		}
 		return preprocessDoneMsg{summary: summary}
 	}
 }
 
-// 智能prompt构建命令，使用token预算控制
+// Smart prompt building command, using token budget control
 func buildSmartPromptCmd(pb promptInterface, col collectorInterface, ctx context.Context, seed string) tea.Cmd {
 	return func() tea.Msg {
-		// 尝试使用新的BuildUserPromptWithBudget方法
+		// Try to use the new BuildUserPromptWithBudget method
 		systemPrompt := pb.BuildSystemPrompt()
 		userPrompt, err := pb.BuildUserPromptWithBudget(ctx, col, seed)
 		if err != nil {
-			// 如果新方法失败，fallback到传统方法
+			// If the new method fails, fallback to traditional method
 			return errorMsg{err}
 		}
 		return smartPromptBuiltMsg{systemPrompt: systemPrompt, userPrompt: userPrompt}

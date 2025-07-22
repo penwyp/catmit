@@ -12,12 +12,12 @@ import (
 )
 
 func TestDefaultManager_LoadTemplate(t *testing.T) {
-	// 创建临时目录
+	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "manager-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// 创建GitHub模板
+	// Create GitHub template
 	githubDir := filepath.Join(tmpDir, ".github")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))
 
@@ -36,7 +36,7 @@ func TestDefaultManager_LoadTemplate(t *testing.T) {
 		0644,
 	))
 
-	// 创建GitLab模板
+	// Create GitLab template
 	gitlabDir := filepath.Join(tmpDir, ".gitlab", "merge_request_templates")
 	require.NoError(t, os.MkdirAll(gitlabDir, 0755))
 
@@ -94,7 +94,7 @@ Closes #{{.IssueNumber}}
 			},
 			wantErr: false,
 			validate: func(t *testing.T, tmpl *Template) {
-				// 应该回退到GitHub模板
+				// Should fallback to GitHub template
 				assert.Equal(t, "bitbucket", tmpl.Provider)
 				assert.Contains(t, tmpl.Content, "## Description")
 			},
@@ -120,12 +120,12 @@ Closes #{{.IssueNumber}}
 }
 
 func TestDefaultManager_ProcessTemplate(t *testing.T) {
-	// 创建临时目录
+	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "process-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// 创建模板
+	// Create template
 	githubDir := filepath.Join(tmpDir, ".github")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))
 
@@ -151,13 +151,13 @@ func TestDefaultManager_ProcessTemplate(t *testing.T) {
 
 	manager := NewDefaultManager(tmpDir)
 
-	// 加载模板
+	// Load template
 	tmpl, err := manager.LoadTemplate(context.Background(), &provider.RemoteInfo{
 		Provider: "github",
 	})
 	require.NoError(t, err)
 
-	// 准备数据
+	// Prepare data
 	data := &TemplateData{
 		CommitMessage: "feat: add new feature\n\nThis implements the new feature",
 		CommitTitle:   "feat: add new feature",
@@ -167,11 +167,11 @@ func TestDefaultManager_ProcessTemplate(t *testing.T) {
 		DocsUpdated:   false,
 	}
 
-	// 处理模板
+	// Process template
 	result, err := manager.ProcessTemplate(context.Background(), tmpl, data)
 	assert.NoError(t, err)
 
-	// 验证结果
+	// Validate result
 	assert.Contains(t, result, "# feat: add new feature")
 	assert.Contains(t, result, "Files changed: 2")
 	assert.Contains(t, result, "- feature.go")
@@ -181,7 +181,7 @@ func TestDefaultManager_ProcessTemplate(t *testing.T) {
 }
 
 func TestConfigurableManager(t *testing.T) {
-	// 创建主目录和自定义目录
+	// Create main directory and custom directory
 	mainDir, err := os.MkdirTemp("", "main-dir-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(mainDir)
@@ -190,7 +190,7 @@ func TestConfigurableManager(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(customDir)
 
-	// 在主目录创建默认模板
+	// Create default template in main directory
 	githubDir := filepath.Join(mainDir, ".github")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))
 	require.NoError(t, os.WriteFile(
@@ -199,7 +199,7 @@ func TestConfigurableManager(t *testing.T) {
 		0644,
 	))
 
-	// 在自定义目录创建自定义模板
+	// Create custom template in custom directory
 	customGithubDir := filepath.Join(customDir, ".github")
 	require.NoError(t, os.MkdirAll(customGithubDir, 0755))
 	require.NoError(t, os.WriteFile(
@@ -208,7 +208,7 @@ func TestConfigurableManager(t *testing.T) {
 		0644,
 	))
 
-	// 创建配置
+	// Create config
 	config := &ManagerConfig{
 		TemplateDirs:    []string{customDir},
 		DefaultProvider: "github",
@@ -217,7 +217,7 @@ func TestConfigurableManager(t *testing.T) {
 
 	manager := NewConfigurableManager(mainDir, config)
 
-	// 加载模板（应该优先使用自定义目录）
+	// Load template (should prefer custom directory)
 	tmpl, err := manager.LoadTemplate(context.Background(), &provider.RemoteInfo{
 		Provider: "github",
 	})
@@ -228,25 +228,25 @@ func TestConfigurableManager(t *testing.T) {
 }
 
 func TestFindRepositoryRoot(t *testing.T) {
-	// 创建临时目录结构
+	// Create temporary directory structure
 	tmpDir, err := os.MkdirTemp("", "repo-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// 创建git目录
+	// Create .git directory
 	gitDir := filepath.Join(tmpDir, ".git")
 	require.NoError(t, os.MkdirAll(gitDir, 0755))
 
-	// 创建子目录
+	// Create subdirectory
 	subDir := filepath.Join(tmpDir, "sub", "dir")
 	require.NoError(t, os.MkdirAll(subDir, 0755))
 
-	// 保存当前目录
+	// Save current working directory
 	oldWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(oldWd) }()
 
-	// 测试从子目录查找
+	// Test finding from subdirectory
 	require.NoError(t, os.Chdir(subDir))
 
 	root, err := FindRepositoryRoot()
@@ -260,7 +260,7 @@ func TestFindRepositoryRoot(t *testing.T) {
 
 	assert.Equal(t, expectedPath, actualPath)
 
-	// 测试不在git仓库中
+	// Test not in a git repository
 	noGitDir, err := os.MkdirTemp("", "no-git-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(noGitDir)
@@ -285,7 +285,7 @@ func TestCreateTemplateData(t *testing.T) {
 	assert.Equal(t, 3, data.FilesCount)
 	assert.Len(t, data.FileStats, 3)
 
-	// 验证文件统计初始化
+	// Validate file stats initialization
 	for _, file := range files {
 		stat, ok := data.FileStats[file]
 		assert.True(t, ok)
@@ -308,14 +308,14 @@ func TestEnrichTemplateData(t *testing.T) {
 	assert.Equal(t, "origin", data.Remote)
 	assert.Equal(t, "main", data.BaseBranch)
 
-	// 测试已有BaseBranch时不覆盖
+	// Test that existing BaseBranch is not overwritten
 	data2 := &TemplateData{
 		BaseBranch: "develop",
 	}
 	EnrichTemplateData(data2, info)
 	assert.Equal(t, "develop", data2.BaseBranch)
 
-	// 测试nil info
+	// Test nil info
 	data3 := &TemplateData{}
 	EnrichTemplateData(data3, nil)
 	assert.Equal(t, "main", data3.BaseBranch)

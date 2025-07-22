@@ -256,19 +256,19 @@ func TestPreprocessData(t *testing.T) {
 
 	processor.preprocessData(data)
 
-	// 验证提交消息分离
+	// Verify commit message separation
 	assert.Equal(t, "fix: resolve memory leak in worker", data.CommitTitle)
 	assert.Contains(t, data.CommitBody, "This fixes issue #123")
 
-	// 验证文件统计
+	// Verify file statistics
 	assert.Equal(t, 3, data.FilesCount)
 	assert.Equal(t, 160, data.AddedLines)
 	assert.Equal(t, 25, data.DeletedLines)
 
-	// 验证issue号提取
+	// Verify issue number extraction
 	assert.Equal(t, "PROJ-456", data.IssueNumber)
 
-	// 验证特殊标记检测
+	// Verify special marker detection
 	assert.True(t, data.TestsAdded)
 	assert.True(t, data.DocsUpdated)
 	assert.False(t, data.BreakingChange)
@@ -284,7 +284,7 @@ func TestExtractIssueNumber(t *testing.T) {
 		{"PROJ-789: add feature", "PROJ-789"},
 		{"fixes JIRA-1234", "JIRA-1234"},
 		{"no issue number here", ""},
-		{"multiple #111 and #222", "111"}, // 返回第一个
+		{"multiple #111 and #222", "111"}, // Return the first one
 	}
 
 	for _, tt := range tests {
@@ -377,9 +377,9 @@ func TestFillChecklist(t *testing.T) {
 
 	result := processor.fillChecklist(content, data)
 
-	// 验证自动勾选
+	// Verify auto-checking
 	assert.Contains(t, result, "- [x] Tests added")
-	assert.Contains(t, result, "- [ ] Tests pass") // 不自动勾选
+	assert.Contains(t, result, "- [ ] Tests pass") // Not auto-checked
 	assert.Contains(t, result, "- [x] Documentation updated")
 	assert.Contains(t, result, "- [ ] Code follows style guidelines")
 	assert.Contains(t, result, "- [x] No breaking changes")
@@ -403,7 +403,7 @@ Line 4`
 
 	result := processor.postprocess(input)
 
-	// 验证多余空行被移除（最多保留2个连续空行）
+	// Verify that excessive blank lines are removed (at most 2 consecutive blank lines are kept)
 	lines := strings.Split(result, "\n")
 	maxEmpty := 0
 	currentEmpty := 0
@@ -425,24 +425,24 @@ Line 4`
 func TestCustomFunctions(t *testing.T) {
 	funcMap := createDefaultFuncMap()
 
-	// 测试 default 函数
+	// Test default function
 	defaultFn := funcMap["default"].(func(interface{}, interface{}) interface{})
 	assert.Equal(t, "default", defaultFn("default", ""))
 	assert.Equal(t, "value", defaultFn("default", "value"))
 
-	// 测试 empty 函数
+	// Test empty function
 	emptyFn := funcMap["empty"].(func(interface{}) bool)
 	assert.True(t, emptyFn(""))
 	assert.True(t, emptyFn([]string{}))
 	assert.False(t, emptyFn("text"))
 	assert.False(t, emptyFn([]string{"item"}))
 
-	// 测试 indent 函数
+	// Test indent function
 	indentFn := funcMap["indent"].(func(int, string) string)
 	result := indentFn(2, "line1\nline2")
 	assert.Equal(t, "  line1\n  line2", result)
 
-	// 测试 list 函数
+	// Test list function
 	listFn := funcMap["list"].(func([]string) string)
 	result = listFn([]string{"item1", "item2"})
 	assert.Equal(t, "- item1\n- item2", result)

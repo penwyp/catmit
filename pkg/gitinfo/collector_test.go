@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockRunner 用于单元测试，按调用顺序返回预设结果。
+// mockRunner is used for unit testing, returning preset results in order of calls.
 type mockRunner struct {
 	outputs [][]byte
 	errs    []error
@@ -245,7 +245,7 @@ func TestSanitizeOutput(t *testing.T) {
 	}
 }
 
-// 测试新增的文件过滤功能
+// TestShouldIgnoreFile tests the new file filtering functionality
 func TestShouldIgnoreFile(t *testing.T) {
 	t.Parallel()
 
@@ -254,24 +254,24 @@ func TestShouldIgnoreFile(t *testing.T) {
 		filePath string
 		expected bool
 	}{
-		// 正常源码文件
+		// Normal source code files
 		{name: "go_file", filePath: "main.go", expected: false},
 		{name: "js_file", filePath: "src/index.js", expected: false},
 		{name: "py_file", filePath: "app.py", expected: false},
 
-		// 锁文件
+		// Lock files
 		{name: "package_lock", filePath: "package-lock.json", expected: true},
 		{name: "yarn_lock", filePath: "yarn.lock", expected: true},
 		{name: "go_sum", filePath: "go.sum", expected: true},
 		{name: "go_mod", filePath: "go.mod", expected: true},
 
-		// 构建产物目录
+		// Build artifacts directories
 		{name: "dist_file", filePath: "dist/bundle.js", expected: true},
 		{name: "build_file", filePath: "build/app.exe", expected: true},
 		{name: "node_modules", filePath: "node_modules/express/index.js", expected: true},
 		{name: "vendor_file", filePath: "vendor/lib.go", expected: true},
 
-		// 二进制文件
+		// Binary files
 		{name: "exe_file", filePath: "app.exe", expected: true},
 		{name: "dll_file", filePath: "lib.dll", expected: true},
 		{name: "so_file", filePath: "lib.so", expected: true},
@@ -279,13 +279,13 @@ func TestShouldIgnoreFile(t *testing.T) {
 		{name: "png_file", filePath: "logo.png", expected: true},
 		{name: "pdf_file", filePath: "doc.pdf", expected: true},
 
-		// 临时文件
+		// Temporary files
 		{name: "log_file", filePath: "app.log", expected: true},
 		{name: "tmp_file", filePath: "temp.tmp", expected: true},
 		{name: "bak_file", filePath: "config.bak", expected: true},
 		{name: "swp_file", filePath: ".file.swp", expected: true},
 
-		// 嵌套路径测试
+		// Nested path tests
 		{name: "nested_build", filePath: "frontend/build/static/js/main.js", expected: true},
 		{name: "nested_source", filePath: "src/components/Button.tsx", expected: false},
 	}
@@ -298,7 +298,7 @@ func TestShouldIgnoreFile(t *testing.T) {
 	}
 }
 
-// 测试git status解析功能
+// TestParseGitStatusPorcelain tests the git status parsing functionality
 func TestParseGitStatusPorcelain(t *testing.T) {
 	t.Parallel()
 
@@ -367,42 +367,42 @@ D  dist/bundle.js`
 		summary, err := parseGitStatusPorcelain(output)
 		require.NoError(t, err)
 		require.Equal(t, "main", summary.BranchName)
-		// 只有main.go应该被保留，其他两个被过滤
+		// Only main.go should be retained, the other two should be filtered out
 		require.Len(t, summary.Files, 1)
 		require.Equal(t, "main.go", summary.Files[0].Path)
 	})
 }
 
-// 测试文件优先级排序
+// TestSortFilesByPriority tests the file priority sorting functionality
 func TestSortFilesByPriority(t *testing.T) {
 	t.Parallel()
 
 	files := []FileStatus{
-		{Path: "README.md", IndexStatus: 'M'},         // 修改的文档文件
-		{Path: "main.go", IndexStatus: 'A'},           // 新增的Go文件
-		{Path: "style.css", IndexStatus: 'M'},         // 修改的CSS文件
-		{Path: "config.json", IndexStatus: 'A'},       // 新增的配置文件
-		{Path: "old.txt", IndexStatus: 'D'},           // 删除的文件
-		{Path: "test/unit_test.go", IndexStatus: 'M'}, // 修改的测试文件
+		{Path: "README.md", IndexStatus: 'M'},         // Modified document file
+		{Path: "main.go", IndexStatus: 'A'},           // New Go file
+		{Path: "style.css", IndexStatus: 'M'},         // Modified CSS file
+		{Path: "config.json", IndexStatus: 'A'},       // New config file
+		{Path: "old.txt", IndexStatus: 'D'},           // Deleted file
+		{Path: "test/unit_test.go", IndexStatus: 'M'}, // Modified test file
 	}
 
 	sorted := sortFilesByPriority(files)
 
-	// 验证排序结果：新增的Go文件应该在最前面
+	// Verify sorting results: new Go file should be first
 	require.Equal(t, "main.go", sorted[0].Path)
 	require.Equal(t, 'A', sorted[0].IndexStatus)
 
-	// 新增的配置文件应该在第二
+	// New config file should be second
 	require.Equal(t, "config.json", sorted[1].Path)
 	require.Equal(t, 'A', sorted[1].IndexStatus)
 
-	// 验证最后几个是低优先级的文件（删除文件和测试文件）
+	// Verify last few are low-priority files (deleted file and test file)
 	lastTwoFiles := []string{sorted[len(sorted)-2].Path, sorted[len(sorted)-1].Path}
-	require.Contains(t, lastTwoFiles, "old.txt")           // 删除文件应该在最后几个
-	require.Contains(t, lastTwoFiles, "test/unit_test.go") // 测试文件也应该在最后几个
+	require.Contains(t, lastTwoFiles, "old.txt")           // Deleted file should be last
+	require.Contains(t, lastTwoFiles, "test/unit_test.go") // Test file should also be last
 }
 
-// 测试FileStatusSummary方法
+// TestCollector_FileStatusSummary tests the FileStatusSummary method
 func TestCollector_FileStatusSummary(t *testing.T) {
 	t.Parallel()
 

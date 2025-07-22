@@ -47,25 +47,25 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// Runner 抽象出命令执行器，方便在单元测试中注入 Mock。
-// 实际运行时使用 exec.Command 实现。
+// Runner abstracts the command executor, making it easy to inject a mock for unit testing.
+// In production, this is implemented using exec.Command.
 //
-// 返回值约定：成功时输出字节数组，错误时返回非 nil error。
-// 日志输出由调用方处理。
+// Return convention: On success, returns output as a byte slice; on error, returns a non-nil error.
+// Logging is handled by the caller.
 //
-// NOTE: 目前仅支持同步返回，后续可扩展为流式读取。
+// NOTE: Currently only supports synchronous return, can be extended to streaming in the future.
 type Runner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
-// FileStatus 表示文件的Git状态信息
+// FileStatus represents the Git status information of a file.
 type FileStatus struct {
 	// Existing fields
-	Path        string // 文件路径
-	IndexStatus rune   // 暂存区状态 (M, A, D, R, C等)
-	WorkStatus  rune   // 工作区状态 (M, A, D, R, C等)
-	IsRenamed   bool   // 是否为重命名
-	OldPath     string // 重命名前的路径(如果适用)
+	Path        string // File path
+	IndexStatus rune   // Index status (M, A, D, R, C, etc.)
+	WorkStatus  rune   // Worktree status (M, A, D, R, C, etc.)
+	IsRenamed   bool   // Whether the file is renamed
+	OldPath     string // Old path before rename (if applicable)
 
 	// New enhanced fields for Phase 2
 	Priority        int    // Priority score (1-100, lower is higher priority)
@@ -76,10 +76,10 @@ type FileStatus struct {
 	FileSize        int64  // File size in bytes (for untracked files)
 }
 
-// FileStatusSummary 文件状态摘要，包含分支信息和文件状态列表
+// FileStatusSummary is a summary of file status, including branch info and file status list.
 type FileStatusSummary struct {
-	BranchName string       // 当前分支名
-	Files      []FileStatus // 文件状态列表
+	BranchName string       // Current branch name
+	Files      []FileStatus // List of file statuses
 }
 
 // CacheEntry represents a cached git command result with metadata.
@@ -158,16 +158,16 @@ func (pc *PerformanceCache) Clear() {
 	pc.cache = make(map[string]*CacheEntry)
 }
 
-// Collector 负责收集 Git 日志与 diff 信息。
-// 通过依赖注入的 Runner 以实现可测试性。
-// 所有方法均以 context 控制生命周期。
+// Collector is responsible for collecting Git logs and diff information.
+// It uses dependency injection of Runner for testability.
+// All methods are controlled by context for lifecycle management.
 //
-// Collector implements the new focused interfaces:
+// Implements focused interfaces:
 // - GitReader: for pure git command execution
 // - ChangeAnalyzer: for high-level change analysis
 // - FileContentProvider: for file content access
 //
-// Phase 3 Enhancement: Added performance optimizations including caching,
+// Phase 3 Enhancement: Performance optimizations including caching,
 // batched operations, memory optimizations, and enhanced error handling.
 type Collector struct {
 	runner      Runner
@@ -175,7 +175,7 @@ type Collector struct {
 	retryConfig *RetryConfig
 }
 
-// New 创建 Collector 实例。
+// New creates a new Collector instance.
 func New(r Runner) *Collector {
 	return &Collector{
 		runner:      r,
@@ -184,7 +184,7 @@ func New(r Runner) *Collector {
 	}
 }
 
-// NewWithCache 创建带有自定义缓存配置的 Collector 实例。
+// NewWithCache creates a Collector instance with custom cache TTL.
 func NewWithCache(r Runner, cacheTTL time.Duration) *Collector {
 	return &Collector{
 		runner:      r,
@@ -193,7 +193,7 @@ func NewWithCache(r Runner, cacheTTL time.Duration) *Collector {
 	}
 }
 
-// NewWithConfig 创建带有自定义配置的 Collector 实例。
+// NewWithConfig creates a Collector instance with custom cache TTL and retry config.
 func NewWithConfig(r Runner, cacheTTL time.Duration, retryConfig *RetryConfig) *Collector {
 	return &Collector{
 		runner:      r,
@@ -202,10 +202,9 @@ func NewWithConfig(r Runner, cacheTTL time.Duration, retryConfig *RetryConfig) *
 	}
 }
 
-// runWithCache executes a git command with caching support
-// Cache key is generated from command name and arguments
+// runWithCache executes a git command with caching support.
+// The cache key is generated from command name and arguments.
 func (c *Collector) runWithCache(ctx context.Context, name string, args ...string) ([]byte, error) {
-	// Generate cache key from command and args
 	cacheKey := name + ":" + strings.Join(args, ":")
 
 	// Try to get from cache first
@@ -226,15 +225,14 @@ func (c *Collector) runWithCache(ctx context.Context, name string, args ...strin
 	return result, err
 }
 
-// ClearCache clears the performance cache
-// Useful for testing or when you need fresh results
+// ClearCache clears the performance cache.
+// Useful for testing or when you need fresh results.
 func (c *Collector) ClearCache() {
 	c.cache.Clear()
 }
 
 // BatchGitOperations represents a batch of git operations that can be executed concurrently.
-// This is particularly useful for operations that are independent of each other,
-// such as getting staged files and untracked files simultaneously.
+// Useful for independent operations, such as getting staged files and untracked files simultaneously.
 //
 // Benefits:
 // - Improved performance through parallel execution
@@ -242,7 +240,7 @@ func (c *Collector) ClearCache() {
 // - Reduced total execution time for multiple git commands
 //
 // Thread Safety:
-// The batch operations use goroutines with WaitGroup synchronization.
+// Uses goroutines with WaitGroup synchronization.
 // Each operation runs in its own goroutine and results are collected safely.
 //
 // Example Usage:
@@ -262,19 +260,19 @@ type BatchGitOperations struct {
 	errors     []error                                      // Errors from operations
 }
 
-// NewBatchGitOperations creates a new batch operations instance
+// NewBatchGitOperations creates a new batch operations instance.
 func NewBatchGitOperations() *BatchGitOperations {
 	return &BatchGitOperations{
 		operations: make([]func(context.Context) (interface{}, error), 0),
 	}
 }
 
-// AddOperation adds a git operation to the batch
+// AddOperation adds a git operation to the batch.
 func (b *BatchGitOperations) AddOperation(op func(context.Context) (interface{}, error)) {
 	b.operations = append(b.operations, op)
 }
 
-// ExecuteBatch executes all operations in the batch concurrently
+// ExecuteBatch executes all operations in the batch concurrently.
 func (b *BatchGitOperations) ExecuteBatch(ctx context.Context) {
 	b.results = make([]interface{}, len(b.operations))
 	b.errors = make([]error, len(b.operations))
@@ -292,18 +290,17 @@ func (b *BatchGitOperations) ExecuteBatch(ctx context.Context) {
 	wg.Wait()
 }
 
-// GetResults returns the results of all operations
+// GetResults returns the results and errors of all operations.
 func (b *BatchGitOperations) GetResults() ([]interface{}, []error) {
 	return b.results, b.errors
 }
 
-// optimizeStringSlice optimizes string slices to reduce memory allocation
+// optimizeStringSlice removes empty strings and duplicates from a string slice to reduce memory allocation.
 func optimizeStringSlice(slice []string) []string {
 	if len(slice) == 0 {
 		return []string{}
 	}
 
-	// Remove empty strings and duplicates
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(slice))
 
@@ -318,17 +315,16 @@ func optimizeStringSlice(slice []string) []string {
 	return result
 }
 
-// ErrNoDiff 表示当前仓库没有待提交的 diff。
-var ErrNoDiff = errors.New(errors.ErrTypeGit, "nothing to commit").WithSuggestion("使用 'git add' 暂存您的更改")
+// ErrNoDiff indicates there is no diff to commit in the current repository.
+var ErrNoDiff = errors.New(errors.ErrTypeGit, "nothing to commit").WithSuggestion("Use 'git add' to stage your changes")
 
 // Enhanced error types for better error handling and categorization.
-// These provide semantic meaning to different types of failures.
 var (
 	ErrGitCommandFailed  = errors.New(errors.ErrTypeGit, "git command failed")
-	ErrInvalidRepository = errors.New(errors.ErrTypeGit, "not a valid git repository").WithSuggestion("请在 Git 仓库中运行此命令")
+	ErrInvalidRepository = errors.New(errors.ErrTypeGit, "not a valid git repository").WithSuggestion("Run this command inside a Git repository")
 	ErrNotGitRepository  = errors.ErrNoGitRepo      // Use predefined error from framework
 	ErrNetworkTimeout    = errors.ErrNetworkTimeout // Use predefined error from framework
-	ErrPermissionDenied  = errors.New(errors.ErrTypeGit, "permission denied").WithSuggestion("检查文件和目录权限")
+	ErrPermissionDenied  = errors.New(errors.ErrTypeGit, "permission denied").WithSuggestion("Check file and directory permissions")
 )
 
 // GitError represents a structured error from git operations with rich context.
@@ -362,23 +358,23 @@ type GitError struct {
 	Timestamp time.Time // When the error occurred
 }
 
-// Error implements the error interface
+// Error implements the error interface.
 func (e *GitError) Error() string {
 	return fmt.Sprintf("git command failed: %s %s (exit code: %d) - %s",
 		e.Command, strings.Join(e.Args, " "), e.ExitCode, e.Context)
 }
 
-// ToCatmitError converts GitError to CatmitError
+// ToCatmitError converts GitError to CatmitError.
 func (e *GitError) ToCatmitError() *errors.CatmitError {
 	return errors.Wrap(errors.ErrTypeGit, e.Error(), e.Cause)
 }
 
-// Unwrap returns the underlying error
+// Unwrap returns the underlying error.
 func (e *GitError) Unwrap() error {
 	return e.Cause
 }
 
-// RetryConfig defines retry behavior for git operations
+// RetryConfig defines retry behavior for git operations.
 type RetryConfig struct {
 	MaxRetries    int
 	InitialDelay  time.Duration
@@ -386,7 +382,7 @@ type RetryConfig struct {
 	BackoffFactor float64
 }
 
-// DefaultRetryConfig provides sensible defaults for retry behavior
+// DefaultRetryConfig provides sensible defaults for retry behavior.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
 		MaxRetries:    3,
@@ -508,28 +504,28 @@ func isNotGitRepositoryError(err error) bool {
 	return false
 }
 
-// 安全验证：确保分支名称和文件路径不包含危险字符
+// Security validation: Ensure branch names and file paths do not contain dangerous characters
 var (
-	// 允许的分支名称格式：字母、数字、短划线、斜杠、点、下划线
+	// Allowed branch name format: letters, numbers, hyphens, slashes, dots, underscores
 	validBranchName = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
-	// 不允许的危险字符模式
+	// Disallowed dangerous character pattern
 	dangerousChars = regexp.MustCompile(`[;&|$\x00-\x1f\x7f-\x9f]`)
 )
 
-// sanitizeOutput 清理输出中的危险字符
+// sanitizeOutput removes dangerous characters from output
 func sanitizeOutput(s string) string {
-	// 移除控制字符和潜在的危险字符
+	// Remove control characters and potentially dangerous characters
 	return dangerousChars.ReplaceAllString(s, "")
 }
 
-// shouldIgnoreFile 判断是否应该忽略某个文件
-// 根据文档建议，过滤锁文件、构建产物、二进制文件等噪音
+// shouldIgnoreFile determines if a file should be ignored
+// Filters out lock files, build artifacts, binaries, and other noise as recommended by documentation
 func shouldIgnoreFile(filePath string) bool {
-	// 标准化路径（使用正斜杠）
+	// Normalize path (use forward slashes)
 	filePath = filepath.ToSlash(filePath)
 	fileName := filepath.Base(filePath)
 
-	// 1. 锁文件和依赖文件
+	// 1. Lock and dependency files
 	lockFiles := []string{
 		"package-lock.json", "yarn.lock", "pnpm-lock.yaml",
 		"go.sum", "go.mod", "composer.lock", "Pipfile.lock",
@@ -541,7 +537,7 @@ func shouldIgnoreFile(filePath string) bool {
 		}
 	}
 
-	// 2. 构建产物目录
+	// 2. Build artifact directories and common noise files
 	buildDirs := []string{
 		"dist/", "build/", "target/", "out/", "bin/",
 		"node_modules/", "vendor/", ".git/",
@@ -554,7 +550,7 @@ func shouldIgnoreFile(filePath string) bool {
 		}
 	}
 
-	// 3. 二进制文件和媒体文件扩展名
+	// 3. Binary and media file extensions
 	ext := strings.ToLower(filepath.Ext(fileName))
 	binaryExts := []string{
 		".exe", ".dll", ".so", ".dylib", ".a", ".lib",
@@ -568,7 +564,7 @@ func shouldIgnoreFile(filePath string) bool {
 		}
 	}
 
-	// 4. 日志文件和临时文件
+	// 4. Log and temporary files
 	if strings.HasSuffix(fileName, ".log") ||
 		strings.HasSuffix(fileName, ".tmp") ||
 		strings.HasSuffix(fileName, ".temp") ||
@@ -581,8 +577,8 @@ func shouldIgnoreFile(filePath string) bool {
 	return false
 }
 
-// parseGitStatusPorcelain 解析 git status --porcelain -b 的输出
-// 返回文件状态摘要信息，包含分支名和文件状态列表
+// parseGitStatusPorcelain parses the output of `git status --porcelain -b`
+// Returns a summary of file statuses, including branch name and file status list
 func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 0 {
@@ -599,10 +595,10 @@ func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 			continue
 		}
 
-		// 解析分支信息 (## branch_name)
+		// Parse branch info (## branch_name)
 		if strings.HasPrefix(line, "## ") {
 			branchInfo := strings.TrimPrefix(line, "## ")
-			// 处理分支名可能包含的跟踪信息 (如 "main...origin/main")
+			// Handle branch names with tracking info (e.g., "main...origin/main")
 			if idx := strings.Index(branchInfo, "..."); idx != -1 {
 				summary.BranchName = branchInfo[:idx]
 			} else {
@@ -611,21 +607,21 @@ func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 			continue
 		}
 
-		// 解析文件状态信息
+		// Parse file status info
 		if len(line) < 3 {
 			continue
 		}
 
 		indexStatus := rune(line[0])
 		workStatus := rune(line[1])
-		filePath := line[3:] // 跳过状态字符和空格
+		filePath := line[3:] // skip status chars and space
 
 		fileStatus := FileStatus{
 			IndexStatus: indexStatus,
 			WorkStatus:  workStatus,
 		}
 
-		// 处理重命名情况 (R100 old_path -> new_path)
+		// Handle rename or copy (R100 old_path -> new_path)
 		if indexStatus == 'R' || indexStatus == 'C' {
 			if idx := strings.Index(filePath, " -> "); idx != -1 {
 				fileStatus.IsRenamed = true
@@ -638,7 +634,7 @@ func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 			fileStatus.Path = filePath
 		}
 
-		// 应用文件过滤逻辑
+		// Apply file filtering logic
 		if !shouldIgnoreFile(fileStatus.Path) {
 			summary.Files = append(summary.Files, fileStatus)
 		}
@@ -647,13 +643,13 @@ func parseGitStatusPorcelain(output string) (*FileStatusSummary, error) {
 	return summary, nil
 }
 
-// RecentCommits 返回最近 n 条 commit 信息（仅 subject 部分）。
+// RecentCommits returns the most recent n commit subjects.
 // Phase 3 Enhancement: Added caching and memory optimization
 func (c *Collector) RecentCommits(ctx context.Context, n int) ([]string, error) {
 	if n <= 0 {
 		return nil, errors.New(errors.ErrTypeValidation, "n must be positive")
 	}
-	// 防止过大的 n 值导致性能问题
+	// Prevent excessively large n values for performance reasons
 	if n > 1000 {
 		return nil, errors.New(errors.ErrTypeValidation, "n too large, maximum is 1000")
 	}
@@ -665,12 +661,12 @@ func (c *Collector) RecentCommits(ctx context.Context, n int) ([]string, error) 
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	// 若 commit 数不足 n，返回实际获取到的数量。
+	// If there are fewer than n commits, return what is available.
 	// Apply memory optimization to the result
 	return optimizeStringSlice(lines), nil
 }
 
-// Diff 收集 staged 与 unstaged diff，若无差异返回 ErrNoDiff。
+// Diff collects both staged and unstaged diffs, returns ErrNoDiff if there are no changes.
 // DEPRECATED: Use ComprehensiveDiff for including untracked files
 //
 // Phase 3 Enhancement: This method now uses ComprehensiveDiff by default
@@ -685,16 +681,14 @@ func (c *Collector) Diff(ctx context.Context) (string, error) {
 	// If comprehensive diff fails, fall back to legacy behavior
 	// This ensures backward compatibility while gradually migrating to new behavior
 	if !errors.Is(err, ErrNoDiff) {
-		// Log the error but continue with fallback
-		// In production, this could be logged for monitoring
-		// fmt.Printf("ComprehensiveDiff failed, falling back to legacy: %v\n", err)
+		// Error is ignored but could be logged in production
 		_ = err // explicitly ignore the error for linting
 	}
 
 	return c.CombinedDiff(ctx)
 }
 
-// BranchName 返回当前 Git 分支名称。
+// BranchName returns the current Git branch name.
 // Phase 3 Enhancement: Added caching for better performance
 func (c *Collector) BranchName(ctx context.Context) (string, error) {
 	// Use cached execution - branch name rarely changes during a session
@@ -703,14 +697,14 @@ func (c *Collector) BranchName(ctx context.Context) (string, error) {
 		return "", errors.Wrap(errors.ErrTypeGit, "git rev-parse failed", err)
 	}
 	branchName := strings.TrimSpace(string(out))
-	// 安全验证：确保分支名称格式合法
+	// Security validation: ensure branch name format is valid
 	if !validBranchName.MatchString(branchName) {
 		return "", errors.New(errors.ErrTypeValidation, fmt.Sprintf("invalid branch name format: %s", sanitizeOutput(branchName)))
 	}
 	return branchName, nil
 }
 
-// ChangedFiles 返回当前 staged 文件列表，已过滤掉不需要的文件类型。
+// ChangedFiles returns the current list of staged files, filtered to exclude unwanted file types.
 // Phase 3 Enhancement: Added batched operations and memory optimization
 func (c *Collector) ChangedFiles(ctx context.Context) ([]string, error) {
 	// Use batched operations to get both staged and untracked files concurrently
@@ -755,8 +749,8 @@ func (c *Collector) ChangedFiles(ctx context.Context) ([]string, error) {
 	return res, nil
 }
 
-// FileStatusSummary 返回详细的文件状态摘要信息
-// 使用 git status --porcelain -b 获取完整的状态信息
+// FileStatusSummary returns a detailed summary of file statuses
+// Uses `git status --porcelain -b` to get complete status information
 // Phase 3 Enhancement: Uses cached execution for better performance
 func (c *Collector) FileStatusSummary(ctx context.Context) (*FileStatusSummary, error) {
 	out, err := c.runWithCache(ctx, "git", "status", "--porcelain", "-b")
@@ -772,56 +766,56 @@ func (c *Collector) FileStatusSummary(ctx context.Context) (*FileStatusSummary, 
 	return summary, nil
 }
 
-// getFilePriority 根据文件状态和类型计算优先级
-// 返回值越小优先级越高
+// getFilePriority calculates the priority of a file based on its status and type
+// Lower return value means higher priority
 func getFilePriority(status FileStatus) int {
-	// 1. 根据Git状态设置基础优先级
+	// 1. Set base priority according to Git status
 	var basePriority int
 	switch status.IndexStatus {
-	case 'A': // 新增文件 - 最高优先级
+	case 'A': // Added file - highest priority
 		basePriority = 10
-	case 'M': // 修改文件 - 高优先级
+	case 'M': // Modified file - high priority
 		basePriority = 20
-	case 'D': // 删除文件 - 中等优先级
+	case 'D': // Deleted file - medium priority
 		basePriority = 30
-	case 'R': // 重命名文件 - 中等优先级
+	case 'R': // Renamed file - medium priority
 		basePriority = 35
-	case 'C': // 复制文件 - 中等优先级
+	case 'C': // Copied file - medium priority
 		basePriority = 40
-	default: // 其他状态 - 较低优先级
+	default: // Other status - lower priority
 		basePriority = 50
 	}
 
-	// 2. 根据文件扩展名调整优先级
+	// 2. Adjust priority based on file extension
 	ext := strings.ToLower(filepath.Ext(status.Path))
 	switch ext {
 	case ".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".rs", ".rb":
-		// 主要编程语言文件 - 优先级提升
+		// Main programming language files - increase priority
 		basePriority -= 5
 	case ".md", ".txt", ".json", ".yaml", ".yml", ".xml":
-		// 配置和文档文件 - 优先级略微提升
+		// Config and documentation files - slightly increase priority
 		basePriority -= 2
 	case ".html", ".css", ".scss", ".less":
-		// 前端文件 - 保持原优先级
+		// Frontend files - keep original priority
 		basePriority += 0
 	default:
-		// 其他文件 - 优先级降低
+		// Other files - decrease priority
 		basePriority += 5
 	}
 
-	// 3. 根据文件路径调整优先级
+	// 3. Adjust priority based on file path
 	if strings.Contains(status.Path, "test") || strings.Contains(status.Path, "spec") {
-		// 测试文件 - 优先级降低
+		// Test files - decrease priority
 		basePriority += 10
 	}
 
 	return basePriority
 }
 
-// sortFilesByPriority 根据优先级对文件进行排序
-// 根据文档建议，优先处理新增文件和修改量小的文件
+// sortFilesByPriority sorts files by priority
+// As recommended, prioritize added files and those with fewer changes
 func sortFilesByPriority(files []FileStatus) []FileStatus {
-	// 创建副本避免修改原始切片
+	// Create a copy to avoid modifying the original slice
 	sorted := make([]FileStatus, len(files))
 	copy(sorted, files)
 
@@ -829,7 +823,7 @@ func sortFilesByPriority(files []FileStatus) []FileStatus {
 		priorityI := getFilePriority(sorted[i])
 		priorityJ := getFilePriority(sorted[j])
 
-		// 优先级相同时，按文件名排序确保一致性
+		// If priorities are equal, sort by file name for consistency
 		if priorityI == priorityJ {
 			return sorted[i].Path < sorted[j].Path
 		}
@@ -1139,15 +1133,15 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 	return combined, nil
 }
 
-// CombinedDiff returns staged and unstaged diffs combined (legacy behavior)
+// CombinedDiff returns the combined staged and unstaged diffs (legacy behavior)
 func (c *Collector) CombinedDiff(ctx context.Context) (string, error) {
-	// --no-ext-diff 避免外部 diff 工具干扰，--cached 获取 staged diff。
+	// --no-ext-diff prevents external diff tools from interfering, --cached gets the staged diff.
 	staged, err := c.runner.Run(ctx, "git", "diff", "--cached", "--no-ext-diff")
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "git diff --cached failed", err)
 	}
 
-	// 未暂存的改动。
+	// Get unstaged changes.
 	unstaged, err := c.runner.Run(ctx, "git", "diff", "--no-ext-diff")
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "git diff failed", err)
@@ -1156,7 +1150,7 @@ func (c *Collector) CombinedDiff(ctx context.Context) (string, error) {
 	combined := string(staged) + string(unstaged)
 	combined = strings.TrimSpace(combined)
 	if combined == "" {
-		// 可能是新文件删除等导致 diff 为空，检查 git status
+		// If the diff is empty (possibly due to new file deletions, etc.), check git status.
 		status, err := c.runner.Run(ctx, "git", "status", "--porcelain")
 		if err != nil {
 			return "", errors.Wrap(errors.ErrTypeGit, "git status --porcelain failed", err)

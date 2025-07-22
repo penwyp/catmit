@@ -1,31 +1,31 @@
 package config
 
-// Config 配置文件结构
+// Config represents the configuration file structure
 type Config struct {
 	Version string                  `json:"version" yaml:"version"`
 	Remotes map[string]RemoteConfig `json:"remotes" yaml:"remotes"`
 }
 
-// RemoteConfig 远程仓库配置
+// RemoteConfig represents the configuration for a remote repository
 type RemoteConfig struct {
-	Provider     string   `json:"provider" yaml:"provider"`             // github, gitlab, gitea等
-	CLITool      string   `json:"cli_tool" yaml:"cli_tool"`             // gh, glab, tea等
-	MinVersion   string   `json:"min_version" yaml:"min_version"`       // CLI工具最低版本要求
-	AuthCommand  string   `json:"auth_command" yaml:"auth_command"`     // 认证命令
-	CreatePRArgs []string `json:"create_pr_args" yaml:"create_pr_args"` // 创建PR的参数
+	Provider     string   `json:"provider" yaml:"provider"`             // github, gitlab, gitea, etc.
+	CLITool      string   `json:"cli_tool" yaml:"cli_tool"`             // gh, glab, tea, etc.
+	MinVersion   string   `json:"min_version" yaml:"min_version"`       // Minimum version required for the CLI tool
+	AuthCommand  string   `json:"auth_command" yaml:"auth_command"`     // Authentication command
+	CreatePRArgs []string `json:"create_pr_args" yaml:"create_pr_args"` // Arguments for creating a PR
 }
 
-// Manager 配置管理器接口
+// Manager is the interface for the configuration manager
 type Manager interface {
-	// Load 加载配置文件
+	// Load loads the configuration file
 	Load() (*Config, error)
 
-	// Save 保存配置文件（原子操作）
+	// Save saves the configuration file (atomic operation)
 	Save(config *Config) error
 
-	// CreateDefaultConfig 创建默认配置
+	// CreateDefaultConfig creates the default configuration
 	CreateDefaultConfig() error
 
-	// UpdateRemote 更新指定remote的配置
+	// UpdateRemote updates the configuration for the specified remote
 	UpdateRemote(host string, config RemoteConfig) error
 }

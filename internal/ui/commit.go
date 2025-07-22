@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// CommitStage 表示commit/push操作的阶段
+// CommitStage represents the stage of commit/push operation
 type CommitStage int
 
 const (
@@ -26,33 +26,33 @@ const (
 	CommitStageDone
 )
 
-// CommitModel 用于显示commit和push操作的进度，保持与ReviewModel一致的视觉风格
+// CommitModel displays the progress of commit and push operations, keeping the same visual style as ReviewModel
 type CommitModel struct {
 	stage      CommitStage
 	message    string // commit message
-	lang       string // 语言设置
-	enablePush bool   // 是否启用push
-	stageAll   bool   // 是否stage all
+	lang       string // language setting
+	enablePush bool   // whether to enable push
+	stageAll   bool   // whether to stage all
 	spinner    spinner.Model
 
-	// 操作接口
+	// operation interface
 	committer commitInterface
 	ctx       context.Context
 
-	// 状态管理
+	// state management
 	err  error
 	done bool
 
-	// 响应式终端尺寸支持
+	// responsive terminal size support
 	terminalWidth  int
 	terminalHeight int
 
-	// 显示控制
-	showDuration   time.Duration // 最终状态显示时长
-	finalStartTime time.Time     // 最终状态开始时间
+	// display control
+	showDuration   time.Duration // duration to show final state
+	finalStartTime time.Time     // start time of final state
 }
 
-// commitInterface 定义commit和push操作接口
+// commitInterface defines the interface for commit and push operations
 type commitInterface interface {
 	Commit(ctx context.Context, message string) error
 	Push(ctx context.Context) error
@@ -62,7 +62,7 @@ type commitInterface interface {
 	NeedsPush(ctx context.Context) (bool, error)
 }
 
-// NewCommitModel 创建新的CommitModel
+// NewCommitModel creates a new CommitModel
 func NewCommitModel(ctx context.Context, committer commitInterface, message, lang string, enablePush, stageAll bool) *CommitModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
@@ -76,18 +76,18 @@ func NewCommitModel(ctx context.Context, committer commitInterface, message, lan
 		spinner:        sp,
 		committer:      committer,
 		ctx:            ctx,
-		terminalWidth:  80,                      // 默认宽度
-		terminalHeight: 24,                      // 默认高度
-		showDuration:   1500 * time.Millisecond, // 最终状态显示1.5秒
+		terminalWidth:  80,                      // default width
+		terminalHeight: 24,                      // default height
+		showDuration:   1500 * time.Millisecond, // show final state for 1.5 seconds
 	}
 }
 
-// Init 实现 tea.Model 接口
+// Init implements tea.Model interface
 func (m *CommitModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.startCommit())
 }
 
-// Update 处理消息
+// Update handles messages
 func (m *CommitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -115,7 +115,7 @@ func (m *CommitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stage = CommitStagePushing
 			return m, m.startPush()
 		} else {
-			// 没有push，直接进入完成状态
+			// No push, go directly to done state
 			m.stage = CommitStageDone
 			m.finalStartTime = time.Now()
 			return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
@@ -142,12 +142,12 @@ func (m *CommitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// calculateContentWidth 计算基于终端宽度的动态内容宽度（复用ReviewModel的逻辑）
+// calculateContentWidth calculates the dynamic content width based on terminal width (reuse logic from ReviewModel)
 func (m *CommitModel) calculateContentWidth() int {
 	const (
-		minWidth = 60  // 最小宽度
-		maxWidth = 120 // 最大宽度
-		margin   = 4   // 左右边距
+		minWidth = 60  // minimum width
+		maxWidth = 120 // maximum width
+		margin   = 4   // left and right margin
 	)
 
 	availableWidth := m.terminalWidth - margin
@@ -162,9 +162,9 @@ func (m *CommitModel) calculateContentWidth() int {
 	return availableWidth
 }
 
-// View 渲染界面（仅返回内容，边框由MainModel统一处理）
+// View renders the UI (returns only the content, border is handled by MainModel)
 func (m *CommitModel) View() string {
-	// 调色板（与ReviewModel保持一致）
+	// Palette (consistent with ReviewModel)
 	const (
 		cGray   = lipgloss.Color("245")
 		cBlue   = lipgloss.Color("39")
@@ -175,25 +175,25 @@ func (m *CommitModel) View() string {
 
 	contentWidth := m.calculateContentWidth()
 
-	// 样式定义
+	// Style definitions
 	titleStyle := lipgloss.NewStyle().Foreground(cWhite).Bold(true)
 
-	// 状态样式
+	// Status styles
 	progressStyle := lipgloss.NewStyle().Foreground(cYellow)
 	successStyle := lipgloss.NewStyle().Foreground(cGreen)
 
-	// 构建内容
+	// Build content
 	var content strings.Builder
 
-	// 显示commit message（截断显示）
+	// Show commit message (truncate if needed)
 	messagePreview := m.message
 	if len(messagePreview) > contentWidth-4 {
 		messagePreview = messagePreview[:contentWidth-7] + "..."
 	}
 	content.WriteString(" " + titleStyle.Render("Message: ") + messagePreview + "\n")
-	content.WriteString("\n") // 空行
+	content.WriteString("\n") // blank line
 
-	// 根据阶段显示状态
+	// Show status based on stage
 	switch m.stage {
 	case CommitStageInit, CommitStageCommitting:
 		statusLine := " " + m.spinner.View() + " " + progressStyle.Render("Committing changes...")
@@ -222,12 +222,12 @@ func (m *CommitModel) View() string {
 	return content.String()
 }
 
-// IsDone 返回操作是否完成
+// IsDone returns whether the operation is finished
 func (m *CommitModel) IsDone() (bool, error) {
 	return m.done, m.err
 }
 
-// --- 命令和消息类型 ---
+// --- Command and message types ---
 
 type commitDoneMsg struct {
 	err error
@@ -239,7 +239,7 @@ type pushDoneMsg struct {
 
 type finalTimeoutMsg struct{}
 
-// startCommit 开始commit操作
+// startCommit starts the commit operation
 func (m *CommitModel) startCommit() tea.Cmd {
 	return func() tea.Msg {
 		m.stage = CommitStageCommitting
@@ -248,7 +248,7 @@ func (m *CommitModel) startCommit() tea.Cmd {
 	}
 }
 
-// startPush 开始push操作
+// startPush starts the push operation
 func (m *CommitModel) startPush() tea.Cmd {
 	return func() tea.Msg {
 		err := m.committer.Push(m.ctx)

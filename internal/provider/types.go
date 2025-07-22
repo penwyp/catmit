@@ -5,38 +5,38 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// RemoteInfo 包含解析后的Git remote信息
+// RemoteInfo contains parsed information from a Git remote URL
 type RemoteInfo struct {
-	Provider string // github, gitlab, gitea, bitbucket, unknown
-	Host     string // 主机名，如 github.com
-	Port     int    // 端口号，0表示默认端口
-	Owner    string // 仓库所有者或组织
-	Repo     string // 仓库名称
-	Protocol string // https, ssh
+	Provider string // Provider type: github, gitlab, gitea, bitbucket, unknown
+	Host     string // Hostname, e.g., github.com
+	Port     int    // Port number, 0 means default port
+	Owner    string // Repository owner or organization
+	Repo     string // Repository name
+	Protocol string // Protocol: https, ssh
 }
 
-// ProbeResult HTTP探测结果
+// ProbeResult represents the result of an HTTP probe
 type ProbeResult struct {
 	IsGitea bool
 	Version string
 	Error   error
 }
 
-// Detector Provider检测器接口
+// Detector is the interface for provider detection
 type Detector interface {
-	// DetectFromRemoteURL 从Git remote URL检测Provider类型
+	// DetectFromRemoteURL detects the provider type from a Git remote URL
 	DetectFromRemoteURL(url string) (*RemoteInfo, error)
 
-	// ProbeHTTP 通过HTTP探测确认Provider类型
+	// ProbeHTTP confirms the provider type via HTTP probing
 	ProbeHTTP(baseURL string) (*ProbeResult, error)
 }
 
-// HTTPProber HTTP探测器接口
+// HTTPProber is the interface for HTTP probing
 type HTTPProber interface {
 	ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 }
 
-// 错误定义
+// Error definitions
 var (
 	ErrProbeTimeout = errors.NewRetryable(errors.ErrTypeTimeout, "probe timeout")
 )

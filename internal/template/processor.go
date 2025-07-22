@@ -11,67 +11,67 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// 预定义错误
+// Predefined errors
 var (
 	ErrProcessingFailed = errors.New(
 		errors.ErrTypeUnknown,
-		"模板处理失败",
+		"Template processing failed",
 	)
 
 	ErrRequiredFieldMissing = errors.New(
 		errors.ErrTypeValidation,
-		"必填字段缺失",
-	).WithSuggestion("请提供所有必填字段的值")
+		"Required field missing",
+	).WithSuggestion("Please provide values for all required fields")
 )
 
-// TemplateProcessor 模板处理器
+// TemplateProcessor handles template processing
 type TemplateProcessor struct {
-	// 自定义函数映射
+	// Custom function map
 	funcMap template.FuncMap
 }
 
-// NewTemplateProcessor 创建模板处理器
+// NewTemplateProcessor creates a new template processor
 func NewTemplateProcessor() *TemplateProcessor {
 	return &TemplateProcessor{
 		funcMap: createDefaultFuncMap(),
 	}
 }
 
-// Process 处理模板，替换变量
+// Process processes the template and replaces variables
 func (p *TemplateProcessor) Process(tmpl *Template, data *TemplateData) (string, error) {
-	// 验证必填项
+	// Validate required fields
 	if err := p.ValidateRequired(tmpl, data); err != nil {
 		return "", err
 	}
 
-	// 预处理数据
+	// Preprocess data
 	p.preprocessData(data)
 
-	// 替换变量
+	// Replace variables
 	processed := tmpl.Content
 
-	// 使用不同的替换策略
+	// Use different replacement strategies
 	processed = p.replaceGoTemplateVars(processed, data)
 	processed = p.replacePlaceholderVars(processed, data)
 	processed = p.fillSections(processed, tmpl, data)
 
-	// 后处理：清理空行等
+	// Postprocess: clean up empty lines, etc.
 	processed = p.postprocess(processed)
 
 	return processed, nil
 }
 
-// ValidateRequired 验证必填项
+// ValidateRequired checks required fields
 func (p *TemplateProcessor) ValidateRequired(tmpl *Template, data *TemplateData) error {
 	var missingFields []string
 
-	// 检查必填变量
+	// Check required variables
 	for _, variable := range tmpl.Variables {
 		if !variable.Required {
 			continue
 		}
 
-		// 检查对应的数据字段是否存在
+		// Check if the corresponding data field exists
 		if p.isFieldEmpty(variable.Name, data) {
 			missingFields = append(missingFields, variable.Name)
 		}
@@ -80,7 +80,7 @@ func (p *TemplateProcessor) ValidateRequired(tmpl *Template, data *TemplateData)
 	if len(missingFields) > 0 {
 		return errors.Wrap(
 			errors.ErrTypeValidation,
-			fmt.Sprintf("缺失必填字段: %s", strings.Join(missingFields, ", ")),
+			fmt.Sprintf("Missing required fields: %s", strings.Join(missingFields, ", ")),
 			nil,
 		)
 	}
@@ -88,9 +88,9 @@ func (p *TemplateProcessor) ValidateRequired(tmpl *Template, data *TemplateData)
 	return nil
 }
 
-// preprocessData 预处理模板数据
+// preprocessData preprocesses template data
 func (p *TemplateProcessor) preprocessData(data *TemplateData) {
-	// 分离提交消息的标题和正文
+	// Split commit message into title and body
 	if data.CommitMessage != "" && data.CommitTitle == "" {
 		lines := strings.Split(data.CommitMessage, "\n")
 		data.CommitTitle = lines[0]
@@ -100,7 +100,7 @@ func (p *TemplateProcessor) preprocessData(data *TemplateData) {
 		}
 	}
 
-	// 计算文件统计
+	// Calculate file statistics
 	if data.FileStats != nil {
 		data.FilesCount = len(data.FileStats)
 		data.AddedLines = 0
@@ -114,7 +114,7 @@ func (p *TemplateProcessor) preprocessData(data *TemplateData) {
 		data.FilesCount = len(data.ChangedFiles)
 	}
 
-	// 从分支名提取issue号
+	// Extract issue number from branch name
 	if data.IssueNumber == "" {
 		data.IssueNumber = extractIssueNumber(data.Branch)
 		if data.IssueNumber == "" {
@@ -122,12 +122,12 @@ func (p *TemplateProcessor) preprocessData(data *TemplateData) {
 		}
 	}
 
-	// 检测特殊标记
+	// Detect special markers
 	lowerMsg := strings.ToLower(data.CommitMessage)
 	data.BreakingChange = strings.Contains(lowerMsg, "breaking") ||
 		strings.Contains(lowerMsg, "!:")
 
-	// 只在未明确设置时自动检测
+	// Only auto-detect if not explicitly set
 	if !data.TestsAdded {
 		data.TestsAdded = p.detectTestsAdded(data)
 	}
@@ -136,44 +136,44 @@ func (p *TemplateProcessor) preprocessData(data *TemplateData) {
 	}
 }
 
-// replaceGoTemplateVars 替换Go模板风格的变量
+// replaceGoTemplateVars replaces Go template style variables
 func (p *TemplateProcessor) replaceGoTemplateVars(content string, data *TemplateData) string {
-	// 创建模板
+	// Create template
 	tmpl, err := template.New("pr").Funcs(p.funcMap).Parse(content)
 	if err != nil {
-		// 如果解析失败，返回原内容
+		// If parsing fails, return original content
 		return content
 	}
 
-	// 执行模板
+	// Execute template
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		// 如果执行失败，返回原内容
+		// If execution fails, return original content
 		return content
 	}
 
 	return buf.String()
 }
 
-// replacePlaceholderVars 替换占位符风格的变量
+// replacePlaceholderVars replaces placeholder style variables
 func (p *TemplateProcessor) replacePlaceholderVars(content string, data *TemplateData) string {
 	replacements := p.createReplacementMap(data)
 
-	// 替换各种格式的占位符
+	// Replace various placeholder formats
 	for key, value := range replacements {
-		// [Variable] 格式
+		// [Variable] format
 		content = strings.ReplaceAll(content, fmt.Sprintf("[%s]", key), value)
 		content = strings.ReplaceAll(content, fmt.Sprintf("[%s]", strings.ToLower(key)), value)
 
-		// <Variable> 格式
+		// <Variable> format
 		content = strings.ReplaceAll(content, fmt.Sprintf("<%s>", key), value)
 		content = strings.ReplaceAll(content, fmt.Sprintf("<%s>", strings.ToLower(key)), value)
 
-		// {Variable} 格式
+		// {Variable} format
 		content = strings.ReplaceAll(content, fmt.Sprintf("{%s}", key), value)
 		content = strings.ReplaceAll(content, fmt.Sprintf("{%s}", strings.ToLower(key)), value)
 
-		// <!-- Variable --> 格式
+		// <!-- Variable --> format
 		content = strings.ReplaceAll(content, fmt.Sprintf("<!-- %s -->", key), value)
 		content = strings.ReplaceAll(content, fmt.Sprintf("<!-- %s -->", strings.ToLower(key)), value)
 	}
@@ -181,26 +181,26 @@ func (p *TemplateProcessor) replacePlaceholderVars(content string, data *Templat
 	return content
 }
 
-// fillSections 填充特定章节
+// fillSections fills specific sections
 func (p *TemplateProcessor) fillSections(content string, tmpl *Template, data *TemplateData) string {
-	// 特殊处理某些章节
+	// Special handling for certain sections
 
-	// 填充测试章节
+	// Fill Testing section
 	if section, exists := tmpl.Sections["Testing"]; exists && section.Content == "" {
 		testingInstructions := p.generateTestingInstructions(data)
 		content = strings.Replace(content, "## Testing\n",
 			fmt.Sprintf("## Testing\n%s\n", testingInstructions), 1)
 	}
 
-	// 填充Checklist
+	// Fill Checklist
 	content = p.fillChecklist(content, data)
 
 	return content
 }
 
-// postprocess 后处理
+// postprocess post-processing
 func (p *TemplateProcessor) postprocess(content string) string {
-	// 移除多余的空行
+	// Remove excessive empty lines
 	lines := strings.Split(content, "\n")
 	var processed []string
 	emptyCount := 0
@@ -220,7 +220,7 @@ func (p *TemplateProcessor) postprocess(content string) string {
 	return strings.Join(processed, "\n")
 }
 
-// isFieldEmpty 检查字段是否为空
+// isFieldEmpty checks if a field is empty
 func (p *TemplateProcessor) isFieldEmpty(fieldName string, data *TemplateData) bool {
 	switch strings.ToLower(fieldName) {
 	case "commitmessage", "commit_message":
@@ -240,11 +240,11 @@ func (p *TemplateProcessor) isFieldEmpty(fieldName string, data *TemplateData) b
 	}
 }
 
-// createReplacementMap 创建替换映射
+// createReplacementMap creates the replacement map
 func (p *TemplateProcessor) createReplacementMap(data *TemplateData) map[string]string {
 	m := make(map[string]string)
 
-	// 基础信息
+	// Basic info
 	m["CommitMessage"] = data.CommitMessage
 	m["CommitTitle"] = data.CommitTitle
 	m["CommitBody"] = data.CommitBody
@@ -256,18 +256,18 @@ func (p *TemplateProcessor) createReplacementMap(data *TemplateData) map[string]
 	m["RepoOwner"] = data.RepoOwner
 	m["RepoName"] = data.RepoName
 
-	// 文件信息
+	// File info
 	m["ChangedFiles"] = strings.Join(data.ChangedFiles, "\n")
 	m["FilesCount"] = strconv.Itoa(data.FilesCount)
 	m["AddedLines"] = strconv.Itoa(data.AddedLines)
 	m["DeletedLines"] = strconv.Itoa(data.DeletedLines)
 
-	// 其他信息
+	// Other info
 	m["ChangesSummary"] = data.ChangesSummary
 	m["IssueNumber"] = data.IssueNumber
 	m["RecentCommits"] = strings.Join(data.RecentCommits, "\n")
 
-	// 布尔值
+	// Boolean values
 	m["BreakingChange"] = strconv.FormatBool(data.BreakingChange)
 	m["TestsAdded"] = strconv.FormatBool(data.TestsAdded)
 	m["DocsUpdated"] = strconv.FormatBool(data.DocsUpdated)
@@ -286,10 +286,10 @@ func titleCase(s string) string {
 	return strings.Join(words, " ")
 }
 
-// createDefaultFuncMap 创建默认的模板函数映射
+// createDefaultFuncMap creates the default template function map
 func createDefaultFuncMap() template.FuncMap {
 	return template.FuncMap{
-		// 字符串处理
+		// String processing
 		"lower":     strings.ToLower,
 		"upper":     strings.ToUpper,
 		"title":     titleCase,
@@ -299,11 +299,11 @@ func createDefaultFuncMap() template.FuncMap {
 		"hasPrefix": strings.HasPrefix,
 		"hasSuffix": strings.HasSuffix,
 
-		// 列表处理
+		// List processing
 		"join":  strings.Join,
 		"split": strings.Split,
 
-		// 条件判断
+		// Conditional
 		"default": func(def, val interface{}) interface{} {
 			if val == nil || val == "" {
 				return def
@@ -324,7 +324,7 @@ func createDefaultFuncMap() template.FuncMap {
 			}
 		},
 
-		// 格式化
+		// Formatting
 		"indent": func(spaces int, s string) string {
 			indent := strings.Repeat(" ", spaces)
 			lines := strings.Split(s, "\n")
@@ -345,13 +345,13 @@ func createDefaultFuncMap() template.FuncMap {
 	}
 }
 
-// extractIssueNumber 从文本中提取issue编号
+// extractIssueNumber extracts the issue number from text
 func extractIssueNumber(text string) string {
-	// 匹配 #123, issue-123, JIRA-123 等格式
+	// Match #123, issue-123, JIRA-123, etc.
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`#(\d+)`),
 		regexp.MustCompile(`(?i)issue[-_]?(\d+)`),
-		regexp.MustCompile(`([A-Z]+-\d+)`), // JIRA格式
+		regexp.MustCompile(`([A-Z]+-\d+)`), // JIRA format
 	}
 
 	for _, pattern := range patterns {
@@ -363,7 +363,7 @@ func extractIssueNumber(text string) string {
 	return ""
 }
 
-// detectTestsAdded 检测是否添加了测试
+// detectTestsAdded checks whether any test files were added or if the commit message indicates tests were added.
 func (p *TemplateProcessor) detectTestsAdded(data *TemplateData) bool {
 	for _, file := range data.ChangedFiles {
 		if strings.Contains(file, "_test.go") ||
@@ -374,13 +374,13 @@ func (p *TemplateProcessor) detectTestsAdded(data *TemplateData) bool {
 		}
 	}
 
-	// 检查提交消息
+	// Check if the commit message contains test-related keywords
 	lowerMsg := strings.ToLower(data.CommitMessage)
 	return strings.Contains(lowerMsg, "test") ||
 		strings.Contains(lowerMsg, "测试")
 }
 
-// detectDocsUpdated 检测是否更新了文档
+// detectDocsUpdated detects if documentation was updated
 func (p *TemplateProcessor) detectDocsUpdated(data *TemplateData) bool {
 	for _, file := range data.ChangedFiles {
 		if strings.HasSuffix(file, ".md") ||
@@ -393,17 +393,17 @@ func (p *TemplateProcessor) detectDocsUpdated(data *TemplateData) bool {
 		}
 	}
 
-	// 检查提交消息
+	// Check commit message
 	lowerMsg := strings.ToLower(data.CommitMessage)
 	return strings.Contains(lowerMsg, "doc") ||
 		strings.Contains(lowerMsg, "文档")
 }
 
-// generateTestingInstructions 生成测试说明
+// generateTestingInstructions generates testing instructions
 func (p *TemplateProcessor) generateTestingInstructions(data *TemplateData) string {
 	var instructions []string
 
-	// 基于文件类型生成测试建议
+	// Generate test suggestions based on file types
 	hasGoFiles := false
 	hasJSFiles := false
 	hasConfigFiles := false
@@ -442,15 +442,15 @@ func (p *TemplateProcessor) generateTestingInstructions(data *TemplateData) stri
 	return strings.Join(instructions, "\n")
 }
 
-// fillChecklist 填充检查列表
+// fillChecklist fills the checklist
 func (p *TemplateProcessor) fillChecklist(content string, data *TemplateData) string {
-	// 查找checkbox模式: - [ ] 或 - [x]
+	// Find checkbox pattern: - [ ] or - [x]
 	checkboxPattern := regexp.MustCompile(`(?m)^(\s*)-\s*\[\s*\]\s*(.+)$`)
 
 	return checkboxPattern.ReplaceAllStringFunc(content, func(match string) string {
 		lower := strings.ToLower(match)
 
-		// 根据条件自动勾选
+		// Auto-check based on conditions
 		shouldCheck := false
 
 		switch {
@@ -461,9 +461,9 @@ func (p *TemplateProcessor) fillChecklist(content string, data *TemplateData) st
 		case strings.Contains(lower, "doc"):
 			shouldCheck = data.DocsUpdated
 		case strings.Contains(lower, "no breaking"):
-			shouldCheck = !data.BreakingChange // 如果没有破坏性变更，勾选
+			shouldCheck = !data.BreakingChange // Check if there is no breaking change
 		case strings.Contains(lower, "lint") || strings.Contains(lower, "format"):
-			shouldCheck = true // 假设已通过lint
+			shouldCheck = true // Assume lint passed
 		}
 
 		if shouldCheck {

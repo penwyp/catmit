@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockCommandRunner 模拟命令执行器
+// MockCommandRunner mocks the command runner
 type MockCommandRunner struct {
 	mock.Mock
 }
@@ -22,7 +22,7 @@ func (m *MockCommandRunner) Run(ctx context.Context, name string, args ...string
 	return argList.Get(0).([]byte), argList.Error(1)
 }
 
-// TestDetector_CheckInstalled 测试CLI工具安装状态检测
+// TestDetector_CheckInstalled tests the CLI tool installation status detection
 func TestDetector_CheckInstalled(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -93,7 +93,7 @@ func TestDetector_CheckInstalled(t *testing.T) {
 	}
 }
 
-// TestDetector_GetVersion 测试获取CLI工具版本
+// TestDetector_GetVersion tests the CLI tool version detection
 func TestDetector_GetVersion(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -184,7 +184,7 @@ func TestDetector_GetVersion(t *testing.T) {
 	}
 }
 
-// TestDetector_CheckAuthStatus 测试认证状态检测
+// TestDetector_CheckAuthStatus tests the authentication status detection
 func TestDetector_CheckAuthStatus(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -273,7 +273,7 @@ func TestDetector_CheckAuthStatus(t *testing.T) {
 	}
 }
 
-// TestDetector_DetectCLI 测试综合CLI检测功能
+// TestDetector_DetectCLI tests the comprehensive CLI detection functionality
 func TestDetector_DetectCLI(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -375,7 +375,7 @@ func TestDetector_DetectCLI(t *testing.T) {
 	}
 }
 
-// TestDetector_SuggestInstallCommand 测试安装命令建议
+// TestDetector_SuggestInstallCommand tests the installation command suggestions
 func TestDetector_SuggestInstallCommand(t *testing.T) {
 	tests := []struct {
 		name             string

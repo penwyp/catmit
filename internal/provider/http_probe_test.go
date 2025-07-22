@@ -116,9 +116,9 @@ func TestProbeHTTP(t *testing.T) {
 }
 
 func TestProbeHTTP_Timeout(t *testing.T) {
-	// 创建一个永不响应的服务器
+	// Create a server that never responds (simulates a hanging server)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 永远阻塞
+		// Block forever
 		<-r.Context().Done()
 	}))
 	defer server.Close()
@@ -136,7 +136,7 @@ func TestProbeHTTP_Timeout(t *testing.T) {
 }
 
 func TestProbeHTTP_NetworkError(t *testing.T) {
-	// 使用一个无效的地址来模拟网络错误
+	// Use an invalid address to simulate a network error
 	prober := NewHTTPProber(WithMaxRetries(2))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -147,7 +147,7 @@ func TestProbeHTTP_NetworkError(t *testing.T) {
 	assert.False(t, result.IsGitea)
 	assert.NotNil(t, result.Error)
 
-	// 检查是否是网络错误
+	// Check if the error is a network error
 	var netErr *net.OpError
 	assert.True(t, errors.As(result.Error, &netErr))
 }
@@ -160,7 +160,7 @@ func TestExponentialBackoff(t *testing.T) {
 		{0, 1 * time.Second},
 		{1, 2 * time.Second},
 		{2, 4 * time.Second},
-		{3, 4 * time.Second}, // 最大4秒
+		{3, 4 * time.Second}, // max 4 seconds
 	}
 
 	for _, tt := range tests {

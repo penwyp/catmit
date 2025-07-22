@@ -11,11 +11,11 @@ import (
 func TestModel_StateTransitions(t *testing.T) {
 	m := NewModel()
 
-	// 初始状态应为 loading
+	// The initial state should be loading
 	require.True(t, m.isLoading)
 	require.False(t, m.isDone)
 
-	// 模拟成功消息
+	// Simulate a successful message
 	msg := GenerateSuccessMsg{Message: "feat: commit"}
 	updated, _ := m.Update(msg)
 	um := updated.(Model)
@@ -23,7 +23,7 @@ func TestModel_StateTransitions(t *testing.T) {
 	require.True(t, um.isDone)
 	require.Equal(t, "feat: commit", um.message)
 
-	// 重置模型，再测试错误流转
+	// Reset the model and test error transition
 	m = NewModel()
 	errMsg := GenerateErrorMsg{Err: errors.New("timeout")}
 	updated, _ = m.Update(errMsg)
@@ -99,5 +99,5 @@ func TestModel_Update_UnknownMessage(t *testing.T) {
 	require.Nil(t, cmd)
 }
 
-// 确保实现 tea.Model 接口
+// Ensure tea.Model interface is implemented
 var _ tea.Model = (*Model)(nil)

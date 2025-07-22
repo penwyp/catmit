@@ -12,42 +12,42 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// 预定义错误
+// Predefined errors
 var (
 	ErrTemplateParseError = errors.New(
 		errors.ErrTypeValidation,
-		"模板解析失败",
+		"Template parsing failed",
 	)
 
 	ErrInvalidTemplate = errors.New(
 		errors.ErrTypeValidation,
-		"无效的模板格式",
-	).WithSuggestion("确保模板是有效的Markdown格式")
+		"Invalid template format",
+	).WithSuggestion("Ensure the template is valid Markdown format")
 )
 
-// 常用的变量模式
+// Common variable patterns
 var (
-	// Go模板风格: {{.Variable}}
+	// Go template style: {{.Variable}}
 	goTemplatePattern = regexp.MustCompile(`\{\{\.(\w+)\}\}`)
 
-	// 占位符风格: [Variable], <Variable>, {Variable}
+	// Placeholder styles: [Variable], <Variable>, {Variable}
 	bracketPattern = regexp.MustCompile(`\[(\w+)\]`)
 	anglePattern   = regexp.MustCompile(`<(\w+)>`)
 	bracePattern   = regexp.MustCompile(`\{(\w+)\}`)
 
-	// Markdown注释风格: <!-- Variable -->
+	// Markdown comment style: <!-- Variable -->
 	commentPattern = regexp.MustCompile(`<!--\s*(\w+)\s*-->`)
 
-	// 变量描述模式: <!-- Variable: Description -->
+	// Variable with description: <!-- Variable: Description -->
 	descriptionPattern = regexp.MustCompile(`<!--\s*(\w+)\s*:\s*(.+?)\s*-->`)
 )
 
-// MarkdownParser 基于goldmark的Markdown解析器
+// MarkdownParser is a Markdown parser based on goldmark
 type MarkdownParser struct {
 	parser goldmark.Markdown
 }
 
-// NewMarkdownParser 创建Markdown解析器
+// NewMarkdownParser creates a Markdown parser
 func NewMarkdownParser() *MarkdownParser {
 	return &MarkdownParser{
 		parser: goldmark.New(
@@ -56,7 +56,7 @@ func NewMarkdownParser() *MarkdownParser {
 	}
 }
 
-// Parse 解析模板内容
+// Parse parses the template content
 func (p *MarkdownParser) Parse(content string) (*Template, error) {
 	if content == "" {
 		return nil, ErrInvalidTemplate
@@ -66,32 +66,32 @@ func (p *MarkdownParser) Parse(content string) (*Template, error) {
 		Content: content,
 	}
 
-	// 提取章节
+	// Extract sections
 	sections, err := p.ExtractSections(content)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrTypeValidation, "模板解析失败", err)
+		return nil, errors.Wrap(errors.ErrTypeValidation, "Template parsing failed", err)
 	}
 	tmpl.Sections = sections
 
-	// 提取变量
+	// Extract variables
 	variables, err := p.ExtractVariables(content)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrTypeValidation, "模板解析失败", err)
+		return nil, errors.Wrap(errors.ErrTypeValidation, "Template parsing failed", err)
 	}
 	tmpl.Variables = variables
 
 	return tmpl, nil
 }
 
-// ExtractSections 提取模板章节
+// ExtractSections extracts template sections
 func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, error) {
 	sections := make(map[string]*Section)
 
-	// 解析Markdown AST
+	// Parse Markdown AST
 	reader := text.NewReader([]byte(content))
 	doc := p.parser.Parser().Parse(reader)
 
-	// 遍历AST查找标题和内容
+	// Traverse AST to find headings and content
 	var currentSection *Section
 	var currentContent bytes.Buffer
 
@@ -102,14 +102,14 @@ func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, e
 
 		switch node := n.(type) {
 		case *ast.Heading:
-			// 保存前一个章节
+			// Save previous section
 			if currentSection != nil {
 				currentSection.Content = strings.TrimSpace(currentContent.String())
 				sections[currentSection.Name] = currentSection
 				currentContent.Reset()
 			}
 
-			// 开始新章节
+			// Start new section
 			headingText := extractText(node, content)
 			currentSection = &Section{
 				Name:     headingText,
@@ -118,7 +118,7 @@ func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, e
 			}
 
 		default:
-			// 收集非标题内容
+			// Collect non-heading content
 			if currentSection != nil {
 				nodeText := extractNodeText(n, content)
 				if nodeText != "" {
@@ -135,13 +135,13 @@ func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, e
 		return nil, errors.Wrap(errors.ErrTypeUnknown, "failed to walk AST", err)
 	}
 
-	// 保存最后一个章节
+	// Save the last section
 	if currentSection != nil {
 		currentSection.Content = strings.TrimSpace(currentContent.String())
 		sections[currentSection.Name] = currentSection
 	}
 
-	// 如果没有明确的章节，将整个内容作为默认章节
+	// If no explicit sections, treat the whole content as a default section
 	if len(sections) == 0 {
 		sections["Content"] = &Section{
 			Name:     "Content",
@@ -154,11 +154,11 @@ func (p *MarkdownParser) ExtractSections(content string) (map[string]*Section, e
 	return sections, nil
 }
 
-// ExtractVariables 提取模板变量
+// ExtractVariables extracts template variables
 func (p *MarkdownParser) ExtractVariables(content string) ([]Variable, error) {
 	variableMap := make(map[string]*Variable)
 
-	// 提取带描述的变量
+	// Extract variables with descriptions
 	matches := descriptionPattern.FindAllStringSubmatch(content, -1)
 	for _, match := range matches {
 		if len(match) >= 3 {
@@ -173,7 +173,7 @@ func (p *MarkdownParser) ExtractVariables(content string) ([]Variable, error) {
 		}
 	}
 
-	// 提取各种格式的变量
+	// Extract variables in various formats
 	patterns := []struct {
 		re  *regexp.Regexp
 		fmt string
@@ -201,7 +201,7 @@ func (p *MarkdownParser) ExtractVariables(content string) ([]Variable, error) {
 		}
 	}
 
-	// 转换为切片
+	// Convert to slice
 	var variables []Variable
 	for _, v := range variableMap {
 		variables = append(variables, *v)
@@ -210,7 +210,7 @@ func (p *MarkdownParser) ExtractVariables(content string) ([]Variable, error) {
 	return variables, nil
 }
 
-// extractText 从AST节点提取文本
+// extractText extracts text from an AST node
 func extractText(node ast.Node, source string) string {
 	var text bytes.Buffer
 
@@ -224,7 +224,7 @@ func extractText(node ast.Node, source string) string {
 				text.WriteString(extractText(n, source))
 			}
 		default:
-			// 递归处理其他节点
+			// Recursively process other nodes
 			text.WriteString(extractText(child, source))
 		}
 	}
@@ -232,7 +232,7 @@ func extractText(node ast.Node, source string) string {
 	return strings.TrimSpace(text.String())
 }
 
-// extractNodeText 提取节点的完整文本
+// extractNodeText extracts the full text of a node
 func extractNodeText(node ast.Node, source string) string {
 	switch n := node.(type) {
 	case *ast.Text:
@@ -266,7 +266,7 @@ func extractNodeText(node ast.Node, source string) string {
 	}
 }
 
-// isRequiredSection 判断章节是否必填
+// isRequiredSection determines if a section is required
 func isRequiredSection(name string) bool {
 	requiredNames := []string{
 		"description",
@@ -287,9 +287,9 @@ func isRequiredSection(name string) bool {
 	return false
 }
 
-// isRequiredVariable 判断变量是否必填
+// isRequiredVariable determines if a variable is required
 func isRequiredVariable(name string, content string) bool {
-	// 检查是否在必填标记附近
+	// Check if required marker is near the variable
 	requiredMarkers := []string{
 		"required",
 		"必填",
@@ -300,31 +300,31 @@ func isRequiredVariable(name string, content string) bool {
 	lowerContent := strings.ToLower(content)
 	lowerName := strings.ToLower(name)
 
-	// 查找变量周围的文本
+	// Search for required markers around the variable
 	for _, marker := range requiredMarkers {
-		// 检查变量前后是否有必填标记
+		// Check if required marker is before or after the variable
 		patterns := []string{
 			fmt.Sprintf("%s.*%s", marker, lowerName),
 			fmt.Sprintf("%s.*%s", lowerName, marker),
 			fmt.Sprintf("%s %s", marker, lowerName),
 			fmt.Sprintf("%s %s", lowerName, marker),
-			// 处理带尖括号的情况
+			// Handle angle bracket case
 			fmt.Sprintf("%s <%s>", marker, lowerName),
 			fmt.Sprintf("<%s> %s", lowerName, marker),
-			// 处理带星号包围的情况
+			// Handle surrounded by asterisks
 			fmt.Sprintf("%s **%s**", marker, lowerName),
 			fmt.Sprintf("**%s** %s", lowerName, marker),
-			// 处理末尾带星号的情况
+			// Handle trailing asterisk
 			fmt.Sprintf("%s*", lowerName),
-			// 处理 Required: {{.Var}} 格式
+			// Handle Required: {{.Var}} format
 			fmt.Sprintf("%s: {{.%s}}", marker, lowerName),
 			fmt.Sprintf("%s：{{.%s}}", marker, lowerName),
-			// 处理 {{.Var}} *required* 格式
+			// Handle {{.Var}} *required* format
 			fmt.Sprintf("{{.%s}} *%s*", lowerName, marker),
-			// 处理 必填: [Var] 格式
+			// Handle Required: [Var] format
 			fmt.Sprintf("%s: [%s]", marker, lowerName),
 			fmt.Sprintf("%s：[%s]", marker, lowerName),
-			// 处理 * <Var> 格式
+			// Handle * <Var> format
 			fmt.Sprintf("* <%s>", lowerName),
 		}
 
@@ -335,7 +335,7 @@ func isRequiredVariable(name string, content string) bool {
 		}
 	}
 
-	// 某些变量名默认必填
+	// Some variable names are always required
 	requiredVars := []string{
 		"description",
 		"summary",
@@ -353,28 +353,28 @@ func isRequiredVariable(name string, content string) bool {
 	return false
 }
 
-// SimpleParser 简单的模板解析器（用于快速解析）
+// SimpleParser is a simple template parser (for quick parsing)
 type SimpleParser struct{}
 
-// NewSimpleParser 创建简单解析器
+// NewSimpleParser creates a simple parser
 func NewSimpleParser() *SimpleParser {
 	return &SimpleParser{}
 }
 
-// Parse 解析模板内容
+// Parse parses the template content
 func (s *SimpleParser) Parse(content string) (*Template, error) {
 	tmpl := &Template{
 		Content: content,
 	}
 
-	// 简单的章节提取（基于Markdown标题）
+	// Simple section extraction (based on Markdown headings)
 	sections, err := s.ExtractSections(content)
 	if err != nil {
 		return nil, err
 	}
 	tmpl.Sections = sections
 
-	// 提取变量
+	// Extract variables
 	variables, err := s.ExtractVariables(content)
 	if err != nil {
 		return nil, err
@@ -384,7 +384,7 @@ func (s *SimpleParser) Parse(content string) (*Template, error) {
 	return tmpl, nil
 }
 
-// ExtractSections 简单提取章节
+// ExtractSections simply extracts sections
 func (s *SimpleParser) ExtractSections(content string) (map[string]*Section, error) {
 	sections := make(map[string]*Section)
 	lines := strings.Split(content, "\n")
@@ -393,16 +393,16 @@ func (s *SimpleParser) ExtractSections(content string) (map[string]*Section, err
 	var currentContent []string
 
 	for _, line := range lines {
-		// 检查是否是标题行
+		// Check if this is a heading line
 		if strings.HasPrefix(line, "#") {
-			// 保存前一个章节
+			// Save previous section
 			if currentSection != nil {
 				currentSection.Content = strings.TrimSpace(strings.Join(currentContent, "\n"))
 				sections[currentSection.Name] = currentSection
 				currentContent = nil
 			}
 
-			// 解析标题级别和文本
+			// Parse heading level and text
 			level := 0
 			for _, ch := range line {
 				if ch == '#' {
@@ -419,12 +419,12 @@ func (s *SimpleParser) ExtractSections(content string) (map[string]*Section, err
 				Required: isRequiredSection(name),
 			}
 		} else if currentSection != nil {
-			// 收集内容
+			// Collect content
 			currentContent = append(currentContent, line)
 		}
 	}
 
-	// 保存最后一个章节
+	// Save the last section
 	if currentSection != nil {
 		currentSection.Content = strings.TrimSpace(strings.Join(currentContent, "\n"))
 		sections[currentSection.Name] = currentSection
@@ -433,7 +433,7 @@ func (s *SimpleParser) ExtractSections(content string) (map[string]*Section, err
 	return sections, nil
 }
 
-// ExtractVariables 简单提取变量
+// ExtractVariables simply extracts variables
 func (s *SimpleParser) ExtractVariables(content string) ([]Variable, error) {
 	return (&MarkdownParser{}).ExtractVariables(content)
 }

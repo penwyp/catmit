@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// realRunner 实际执行系统命令
+// realRunner executes system commands
 type realRunner struct {
 	debug  bool
 	logger *zap.Logger

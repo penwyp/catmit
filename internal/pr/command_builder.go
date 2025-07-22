@@ -8,15 +8,15 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// CommandBuilder PR命令构建器
+// CommandBuilder is a builder for PR commands
 type CommandBuilder struct{}
 
-// NewCommandBuilder 创建新的命令构建器
+// NewCommandBuilder creates a new CommandBuilder instance
 func NewCommandBuilder() *CommandBuilder {
 	return &CommandBuilder{}
 }
 
-// BuildCommand 根据provider构建相应的PR命令
+// BuildCommand builds the corresponding PR command based on the provider
 func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (string, []string, error) {
 	switch provider {
 	case "github":
@@ -26,20 +26,20 @@ func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (strin
 	case "gitlab":
 		return b.BuildGitLabMRCommand(options)
 	default:
-		return "", nil, errors.New(errors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", provider)).WithSuggestion("当前支持 GitHub、GitLab、Gitea 和 Bitbucket")
+		return "", nil, errors.New(errors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", provider)).WithSuggestion("Supported providers: GitHub, GitLab, Gitea, and Bitbucket")
 	}
 }
 
-// BuildGitHubPRCommand 构建GitHub CLI的PR创建命令
+// BuildGitHubPRCommand builds the PR creation command for GitHub CLI
 func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []string, error) {
-	// 验证必需字段
+	// Validate required fields
 	if options.BaseBranch == "" {
 		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("Use --pr-base parameter to specify the base branch")
 	}
 
 	args := []string{"pr", "create"}
 
-	// 如果使用fill选项，其他选项可能不需要
+	// If using fill option, other options may not be needed
 	if options.Fill {
 		args = append(args, "--fill")
 		args = append(args, "--base", options.BaseBranch)
@@ -51,7 +51,7 @@ func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []stri
 		return "gh", args, nil
 	}
 
-	// 标题和正文
+	// Title and body
 	if options.Title != "" {
 		args = append(args, "--title", options.Title)
 	}
@@ -59,25 +59,25 @@ func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []stri
 		args = append(args, "--body", options.Body)
 	}
 
-	// 基础分支
+	// Base branch
 	args = append(args, "--base", options.BaseBranch)
 
-	// 草稿状态
+	// Draft status
 	if options.Draft {
 		args = append(args, "--draft")
 	}
 
-	// 分配人
+	// Assignees
 	if len(options.Assignees) > 0 {
 		args = append(args, "--assignee", strings.Join(options.Assignees, ","))
 	}
 
-	// 标签
+	// Labels
 	if len(options.Labels) > 0 {
 		args = append(args, "--label", strings.Join(options.Labels, ","))
 	}
 
-	// 审查人
+	// Reviewers
 	if len(options.Reviewers) > 0 {
 		args = append(args, "--reviewer", strings.Join(options.Reviewers, ","))
 	}
@@ -85,9 +85,9 @@ func (b *CommandBuilder) BuildGitHubPRCommand(options PROptions) (string, []stri
 	return "gh", args, nil
 }
 
-// BuildGiteaPRCommand 构建tea CLI的PR创建命令
+// BuildGiteaPRCommand builds the PR creation command for tea CLI (Gitea)
 func (b *CommandBuilder) BuildGiteaPRCommand(options PROptions) (string, []string, error) {
-	// 验证必需字段
+	// Validate required fields
 	if options.BaseBranch == "" {
 		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("Use --pr-base parameter to specify the base branch")
 	}
@@ -97,12 +97,12 @@ func (b *CommandBuilder) BuildGiteaPRCommand(options PROptions) (string, []strin
 
 	args := []string{"pr", "create"}
 
-	// 如果有目标仓库信息，添加 --repo 参数
+	// If target repository info is provided, add --repo parameter
 	if options.TargetOwner != "" && options.TargetRepo != "" {
 		args = append(args, "--repo", options.TargetOwner+"/"+options.TargetRepo)
 	}
 
-	// 标题和描述（Gitea使用description而不是body）
+	// Title and description (Gitea uses description instead of body)
 	if options.Title != "" {
 		args = append(args, "--title", options.Title)
 	}
@@ -110,21 +110,21 @@ func (b *CommandBuilder) BuildGiteaPRCommand(options PROptions) (string, []strin
 		args = append(args, "--description", options.Body)
 	}
 
-	// 分支
+	// Branches
 	args = append(args, "--base", options.BaseBranch)
 	args = append(args, "--head", options.HeadBranch)
 
-	// 分配人（Gitea使用assignees）
+	// Assignees (Gitea uses assignees)
 	if len(options.Assignees) > 0 {
 		args = append(args, "--assignees", strings.Join(options.Assignees, ","))
 	}
 
-	// 标签
+	// Labels
 	if len(options.Labels) > 0 {
 		args = append(args, "--labels", strings.Join(options.Labels, ","))
 	}
 
-	// 里程碑
+	// Milestone
 	if options.Milestone != "" {
 		args = append(args, "--milestone", options.Milestone)
 	}
@@ -132,9 +132,9 @@ func (b *CommandBuilder) BuildGiteaPRCommand(options PROptions) (string, []strin
 	return "tea", args, nil
 }
 
-// ParseGitHubPROutput 解析GitHub CLI的输出获取PR URL
+// ParseGitHubPROutput parses the output of GitHub CLI to get the PR URL
 func (b *CommandBuilder) ParseGitHubPROutput(output string) (string, error) {
-	// GitHub PR URL的正则表达式
+	// Regular expression for GitHub PR URL
 	urlRegex := regexp.MustCompile(`https://github\.com/[\w-]+/[\w-]+/pull/\d+`)
 	matches := urlRegex.FindStringSubmatch(output)
 	if len(matches) > 0 {
@@ -143,9 +143,9 @@ func (b *CommandBuilder) ParseGitHubPROutput(output string) (string, error) {
 	return "", errors.New(errors.ErrTypePR, "no PR URL found in output")
 }
 
-// ParseGiteaPROutput 解析tea CLI的输出获取PR URL
+// ParseGiteaPROutput parses the output of tea CLI to get the PR URL
 func (b *CommandBuilder) ParseGiteaPROutput(output string) (string, error) {
-	// Gitea PR URL的正则表达式（更通用，支持各种域名）
+	// Regular expression for Gitea PR URL (more general, supports various domains)
 	urlRegex := regexp.MustCompile(`https?://[^\s]+/pulls?/\d+`)
 	matches := urlRegex.FindStringSubmatch(output)
 	if len(matches) > 0 {
@@ -154,16 +154,16 @@ func (b *CommandBuilder) ParseGiteaPROutput(output string) (string, error) {
 	return "", errors.New(errors.ErrTypePR, "no PR URL found in output")
 }
 
-// ParseGiteaErrorForPRInfo 从tea错误信息中提取PR相关信息
-// 错误格式: "pull request already exists for these targets [id: 840, issue_id: 80, ...]"
+// ParseGiteaErrorForPRInfo extracts PR-related information from tea error output
+// Error format: "pull request already exists for these targets [id: 840, issue_id: 80, ...]"
 func (b *CommandBuilder) ParseGiteaErrorForPRInfo(errorOutput string, remoteHost string, owner string, repo string) (string, error) {
-	// 正则表达式提取issue_id
+	// Regular expression to extract issue_id
 	issueIDRegex := regexp.MustCompile(`issue_id:\s*(\d+)`)
 	matches := issueIDRegex.FindStringSubmatch(errorOutput)
 	if len(matches) > 1 {
 		issueID := matches[1]
-		// 构建PR URL
-		// Gitea的PR URL格式: https://host/owner/repo/pulls/issue_id
+		// Build PR URL
+		// Gitea PR URL format: https://host/owner/repo/pulls/issue_id
 		protocol := "https"
 		if strings.Contains(errorOutput, "http://") {
 			protocol = "http"
@@ -175,16 +175,16 @@ func (b *CommandBuilder) ParseGiteaErrorForPRInfo(errorOutput string, remoteHost
 	return "", errors.New(errors.ErrTypePR, "could not extract issue ID from error message")
 }
 
-// BuildGitLabMRCommand 构建GitLab CLI的MR创建命令
+// BuildGitLabMRCommand builds the MR creation command for GitLab CLI
 func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []string, error) {
-	// 验证必需字段
+	// Validate required fields
 	if options.BaseBranch == "" {
 		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("Use --pr-base parameter to specify the base branch")
 	}
 
 	args := []string{"mr", "create"}
 
-	// 如果使用fill选项，只需提供基础分支
+	// If using fill option, only provide target branch
 	if options.Fill {
 		args = append(args, "--fill")
 		args = append(args, "--target-branch", options.BaseBranch)
@@ -196,7 +196,7 @@ func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []stri
 		return "glab", args, nil
 	}
 
-	// 标题和描述
+	// Title and description
 	if options.Title != "" {
 		args = append(args, "--title", options.Title)
 	}
@@ -204,31 +204,31 @@ func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []stri
 		args = append(args, "--description", options.Body)
 	}
 
-	// 目标分支
+	// Target branch
 	args = append(args, "--target-branch", options.BaseBranch)
 
-	// 草稿状态
+	// Draft status
 	if options.Draft {
 		args = append(args, "--draft")
 	}
 
-	// 分配人
+	// Assignees
 	if len(options.Assignees) > 0 {
 		args = append(args, "--assignee", strings.Join(options.Assignees, ","))
 	}
 
-	// 标签
+	// Labels
 	if len(options.Labels) > 0 {
 		args = append(args, "--label", strings.Join(options.Labels, ","))
 	}
 
-	// 审查人
+	// Reviewers
 	if len(options.Reviewers) > 0 {
 		// GitLab uses --reviewer for reviewers
 		args = append(args, "--reviewer", strings.Join(options.Reviewers, ","))
 	}
 
-	// 里程碑
+	// Milestone
 	if options.Milestone != "" {
 		args = append(args, "--milestone", options.Milestone)
 	}
@@ -239,9 +239,9 @@ func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []stri
 	return "glab", args, nil
 }
 
-// ParseGitLabMROutput 解析glab CLI的输出获取MR URL
+// ParseGitLabMROutput parses the output of glab CLI to get the MR URL
 func (b *CommandBuilder) ParseGitLabMROutput(output string) (string, error) {
-	// GitLab MR URL的正则表达式
+	// Regular expression for GitLab MR URL
 	urlRegex := regexp.MustCompile(`https?://[^\s]+/-/merge_requests/\d+`)
 	matches := urlRegex.FindStringSubmatch(output)
 	if len(matches) > 0 {

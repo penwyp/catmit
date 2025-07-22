@@ -17,10 +17,10 @@ import (
 )
 
 func TestSquashCommand_E2E(t *testing.T) {
-	// 构建二进制文件
+	// Build the binary for testing
 	binPath := buildSquashBinary(t)
 
-	// 设置模拟 LLM 服务器
+	// Set up a mock LLM server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := `{
 			"choices": [{
@@ -35,7 +35,7 @@ func TestSquashCommand_E2E(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// 设置环境变量
+	// Set environment variables
 	env := []string{
 		fmt.Sprintf("CATMIT_LLM_API_KEY=%s", "test-key"),
 		fmt.Sprintf("CATMIT_LLM_API_URL=%s", server.URL),
@@ -91,20 +91,20 @@ fix: fix bug
 			cmd := exec.Command(binPath, tt.args...)
 			cmd.Env = env
 
-			// 设置输入
+			// Set input if provided
 			if tt.input != "" {
 				cmd.Stdin = strings.NewReader(tt.input)
 			}
 
-			// 捕获输出
+			// Capture output
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
 
-			// 执行命令
+			// Run the command
 			err := cmd.Run()
 
-			// 检查结果
+			// Check results
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, stderr.String(), tt.expectedError)
@@ -120,20 +120,20 @@ fix: fix bug
 }
 
 func TestSquashCommand_EditorMode(t *testing.T) {
-	// 跳过 CI 环境
+	// Skip in CI environment
 	if os.Getenv("CI") == "true" {
 		t.Skip("Skipping editor test in CI environment")
 	}
 
-	// 构建二进制文件
+	// Build the binary for testing
 	binPath := buildSquashBinary(t)
 
-	// 创建一个测试编辑器脚本
+	// Create a test editor script
 	editorScript := createTestEditor(t, `feat: add authentication
 fix: resolve login error
 docs: update guide`)
 
-	// 设置模拟 LLM 服务器
+	// Set up a mock LLM server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := `{
 			"choices": [{
@@ -148,7 +148,7 @@ docs: update guide`)
 	}))
 	defer server.Close()
 
-	// 设置环境变量
+	// Set environment variables
 	env := []string{
 		fmt.Sprintf("CATMIT_LLM_API_KEY=%s", "test-key"),
 		fmt.Sprintf("CATMIT_LLM_API_URL=%s", server.URL),
@@ -157,7 +157,7 @@ docs: update guide`)
 		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
 	}
 
-	// 执行命令
+	// Run the command
 	cmd := exec.Command(binPath, "squash", "--no-confirm")
 	cmd.Env = env
 	// Since we're not in a terminal, it will read from stdin
@@ -181,12 +181,12 @@ docs: update guide
 }
 
 func TestSquashCommand_Timeout(t *testing.T) {
-	// 构建二进制文件
+	// Build the binary for testing
 	binPath := buildSquashBinary(t)
 
-	// 设置一个慢响应的服务器
+	// Set up a slow-responding server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 故意延迟超过超时时间
+		// Intentionally delay longer than the timeout
 		select {
 		case <-r.Context().Done():
 			// Context cancelled, return immediately
@@ -198,7 +198,7 @@ func TestSquashCommand_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// 设置环境变量
+	// Set environment variables
 	env := []string{
 		fmt.Sprintf("CATMIT_LLM_API_KEY=%s", "test-key"),
 		fmt.Sprintf("CATMIT_LLM_API_URL=%s", server.URL),
@@ -206,7 +206,7 @@ func TestSquashCommand_Timeout(t *testing.T) {
 		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
 	}
 
-	// 执行命令，设置很短的超时
+	// Run the command with a very short timeout
 	cmd := exec.Command(binPath, "squash", "--no-confirm", "--timeout", "1")
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader("feat: test\nfix: bug\n\n")
@@ -216,12 +216,12 @@ func TestSquashCommand_Timeout(t *testing.T) {
 
 	err := cmd.Run()
 	assert.Error(t, err)
-	// 超时错误可能包含 "context deadline exceeded" 或类似信息
+	// Timeout error may contain "context deadline exceeded" or similar info
 	stderrStr := stderr.String()
 	assert.True(t, strings.Contains(stderrStr, "timeout") || strings.Contains(stderrStr, "deadline"))
 }
 
-// createTestEditor 创建一个测试用的编辑器脚本
+// createTestEditor creates a test editor script
 func createTestEditor(t *testing.T, content string) string {
 	tmpDir := t.TempDir()
 	editorPath := filepath.Join(tmpDir, "test-editor.sh")
@@ -236,7 +236,7 @@ echo "%s" > "$1"
 	return editorPath
 }
 
-// buildSquashBinary 构建测试用的二进制文件
+// buildSquashBinary builds the binary for testing
 func buildSquashBinary(t *testing.T) string {
 	tmpDir := t.TempDir()
 	binPath := filepath.Join(tmpDir, "catmit")

@@ -14,7 +14,7 @@ import (
 	"github.com/penwyp/catmit/internal/squash"
 )
 
-// SquashPhase 表示 squash 流程的阶段
+// SquashPhase represents the phase of the squash workflow
 type SquashPhase int
 
 const (
@@ -23,7 +23,7 @@ const (
 	SquashPhaseDone
 )
 
-// SquashModel 是 squash 命令的 TUI 模型
+// SquashModel is the TUI model for the squash command
 type SquashModel struct {
 	BaseModel
 	squash      *squash.Squash
@@ -35,13 +35,13 @@ type SquashModel struct {
 	accepted    bool // Track if user accepted the result
 }
 
-// squashMsg 用于传递生成的结果
+// squashMsg is used to pass the generated result
 type squashMsg struct {
 	result string
 	err    error
 }
 
-// NewSquashModel 创建一个新的 SquashModel
+// NewSquashModel creates a new SquashModel
 func NewSquashModel(s *squash.Squash, messages []string, appendMode bool) *SquashModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -61,14 +61,14 @@ func NewSquashModel(s *squash.Squash, messages []string, appendMode bool) *Squas
 	return model
 }
 
-// Run 运行 TUI
+// Run runs the TUI
 func (m *SquashModel) Run() error {
 	p := tea.NewProgram(m)
 	_, err := p.Run()
 	return err
 }
 
-// Init 初始化模型
+// Init initializes the model
 func (m *SquashModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
@@ -76,7 +76,7 @@ func (m *SquashModel) Init() tea.Cmd {
 	)
 }
 
-// generateCommitMessage 生成合并后的 commit message
+// generateCommitMessage generates the consolidated commit message
 func (m *SquashModel) generateCommitMessage() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -87,7 +87,7 @@ func (m *SquashModel) generateCommitMessage() tea.Cmd {
 	}
 }
 
-// Update 处理消息
+// Update handles messages
 func (m *SquashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -114,7 +114,7 @@ func (m *SquashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.result = msg.result
 		m.phase = SquashPhaseReviewing
-		// 尝试复制到剪贴板
+		// Try to copy to clipboard
 		if err := clipboard.WriteAll(m.result); err == nil {
 			m.copySuccess = true
 		}
@@ -199,7 +199,7 @@ func (m *SquashModel) renderContent() string {
 	}
 }
 
-// View 渲染视图
+// View renders the view
 func (m *SquashModel) View() string {
 	if m.phase == SquashPhaseDone {
 		return ""
@@ -218,7 +218,7 @@ func (m *SquashModel) View() string {
 	return m.BaseModel.View()
 }
 
-// renderGenerating 渲染生成中的内容
+// renderGenerating renders the content during generation
 func (m *SquashModel) renderGenerating() string {
 	var content []string
 	content = append(content,
@@ -229,7 +229,7 @@ func (m *SquashModel) renderGenerating() string {
 	return strings.Join(content, "\n")
 }
 
-// renderReviewing 渲染审核内容
+// renderReviewing renders the review content
 func (m *SquashModel) renderReviewing() string {
 	resultStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
