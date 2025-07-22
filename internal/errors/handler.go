@@ -91,7 +91,7 @@ func (h *DefaultHandler) HandleWithRetry(ctx context.Context, err error, operati
 	}
 
 	// All retries failed
-	return h.Handle(WrapRetryable(ErrTypeNetwork, fmt.Sprintf("Operation failed after %d retries", h.MaxRetries), lastErr))
+	return h.Handle(WrapRetryable(ErrTypeNetwork, fmt.Sprintf("%d 次重试后失败", h.MaxRetries), lastErr))
 }
 
 // inferErrorType infers the error type based on error content
@@ -125,7 +125,7 @@ func (h *DefaultHandler) inferErrorType(err error) *CatmitError {
 	// API related errors
 	if strings.Contains(errMsg, "api") || strings.Contains(errMsg, "rate limit") {
 		if strings.Contains(errMsg, "rate limit") {
-			return WrapRetryable(ErrTypeLLM, "API rate limit", err).WithSuggestion("Retry later or upgrade your API plan")
+			return WrapRetryable(ErrTypeLLM, "API rate limit exceeded", err).WithSuggestion("Retry later or upgrade your API plan")
 		}
 		return Wrap(ErrTypeLLM, "API error", err)
 	}

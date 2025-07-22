@@ -65,7 +65,7 @@ func (m *modifier) RebaseInteractive(ctx context.Context, base string, commits [
 	_, err = m.runner.Run(ctx, "git", "commit", "-m", newMessage)
 	if err != nil {
 		// Try to recover by resetting back to original HEAD
-		m.runner.Run(ctx, "git", "reset", "--hard", currentHead)
+		_, _ = m.runner.Run(ctx, "git", "reset", "--hard", currentHead)
 		return fmt.Errorf("failed to create new commit: %w", err)
 	}
 	
