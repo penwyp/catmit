@@ -5,35 +5,35 @@ import (
 	"fmt"
 )
 
-// ErrorType 定义错误类型
+// ErrorType defines the type of error
 type ErrorType int
 
 const (
-	// ErrTypeUnknown 未知错误
+	// ErrTypeUnknown unknown error
 	ErrTypeUnknown ErrorType = iota
-	// ErrTypeGit Git 相关错误
+	// ErrTypeGit Git related error
 	ErrTypeGit
-	// ErrTypeProvider Provider 相关错误
+	// ErrTypeProvider provider related error
 	ErrTypeProvider
-	// ErrTypePR PR 创建相关错误
+	// ErrTypePR pull request creation related error
 	ErrTypePR
-	// ErrTypeConfig 配置相关错误
+	// ErrTypeConfig configuration related error
 	ErrTypeConfig
-	// ErrTypeNetwork 网络相关错误
+	// ErrTypeNetwork network related error
 	ErrTypeNetwork
-	// ErrTypeAuth 认证相关错误
+	// ErrTypeAuth authentication related error
 	ErrTypeAuth
-	// ErrTypeTimeout 超时错误
+	// ErrTypeTimeout timeout error
 	ErrTypeTimeout
-	// ErrTypeValidation 验证错误
+	// ErrTypeValidation validation error
 	ErrTypeValidation
-	// ErrTypeLLM LLM API 相关错误
+	// ErrTypeLLM LLM API related error
 	ErrTypeLLM
-	// ErrTypeExternal 外部命令/工具相关错误
+	// ErrTypeExternal external command/tool related error
 	ErrTypeExternal
 )
 
-// CatmitError 统一错误结构
+// CatmitError is the unified error structure
 type CatmitError struct {
 	Type       ErrorType
 	Message    string
@@ -42,7 +42,7 @@ type CatmitError struct {
 	Suggestion string
 }
 
-// Error 实现 error 接口
+// Error implements the error interface
 func (e *CatmitError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
@@ -50,23 +50,23 @@ func (e *CatmitError) Error() string {
 	return e.Message
 }
 
-// Unwrap 支持 errors.Is 和 errors.As
+// Unwrap supports errors.Is and errors.As
 func (e *CatmitError) Unwrap() error {
 	return e.Cause
 }
 
-// WithSuggestion 添加解决建议
+// WithSuggestion adds a suggestion for resolving the error
 func (e *CatmitError) WithSuggestion(suggestion string) *CatmitError {
 	e.Suggestion = suggestion
 	return e
 }
 
-// IsRetryable 检查错误是否可重试
+// IsRetryable checks if the error is retryable
 func (e *CatmitError) IsRetryable() bool {
 	return e.Retryable
 }
 
-// New 创建新的 CatmitError
+// New creates a new CatmitError
 func New(errType ErrorType, message string) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -75,7 +75,7 @@ func New(errType ErrorType, message string) *CatmitError {
 	}
 }
 
-// Newf 创建格式化的新 CatmitError
+// Newf creates a new CatmitError with formatted message
 func Newf(errType ErrorType, format string, args ...interface{}) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -84,7 +84,7 @@ func Newf(errType ErrorType, format string, args ...interface{}) *CatmitError {
 	}
 }
 
-// Wrap 包装已有错误
+// Wrap wraps an existing error
 func Wrap(errType ErrorType, message string, cause error) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -94,7 +94,7 @@ func Wrap(errType ErrorType, message string, cause error) *CatmitError {
 	}
 }
 
-// Wrapf 格式化包装已有错误
+// Wrapf wraps an existing error with formatted message
 func Wrapf(errType ErrorType, format string, cause error, args ...interface{}) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -104,7 +104,7 @@ func Wrapf(errType ErrorType, format string, cause error, args ...interface{}) *
 	}
 }
 
-// NewRetryable 创建可重试错误
+// NewRetryable creates a retryable error
 func NewRetryable(errType ErrorType, message string) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -113,7 +113,7 @@ func NewRetryable(errType ErrorType, message string) *CatmitError {
 	}
 }
 
-// WrapRetryable 包装可重试错误
+// WrapRetryable wraps a retryable error
 func WrapRetryable(errType ErrorType, message string, cause error) *CatmitError {
 	return &CatmitError{
 		Type:      errType,
@@ -123,68 +123,68 @@ func WrapRetryable(errType ErrorType, message string, cause error) *CatmitError 
 	}
 }
 
-// 预定义的常见错误
+// Predefined common errors
 var (
-	// Git 相关错误
+	// Git related errors
 	ErrNoGitRepo       = New(ErrTypeGit, "current directory is not a Git repository").WithSuggestion("Please run this command in a Git repository")
 	ErrNoStagedChanges = New(ErrTypeGit, "no staged changes").WithSuggestion("Use 'git add' to stage your changes")
 	ErrNoBranch        = New(ErrTypeGit, "unable to get current branch").WithSuggestion("Make sure you are on a valid Git branch")
 	ErrGitCommand      = New(ErrTypeGit, "Git command execution failed")
 
-	// Provider 相关错误
+	// Provider related errors
 	ErrProviderNotSupported = New(ErrTypeProvider, "unsupported Git provider").WithSuggestion("Currently supports GitHub, GitLab, Bitbucket and Gitea")
 	ErrProviderDetection    = New(ErrTypeProvider, "unable to detect Git provider").WithSuggestion("Check if your remote repository URL is correct")
 	ErrProviderConfig       = New(ErrTypeConfig, "provider configuration error").WithSuggestion("Check ~/.config/catmit/providers.yaml configuration file")
 
-	// PR 相关错误
+	// PR related errors
 	ErrPRAlreadyExists = New(ErrTypePR, "pull request already exists").WithSuggestion("Visit the existing PR or use a different branch")
 	ErrPRCreation      = New(ErrTypePR, "failed to create pull request")
 	ErrCLINotInstalled = New(ErrTypePR, "required CLI tool is not installed").WithSuggestion("Please install the appropriate CLI tool (gh/glab/tea)")
 	ErrCLINotAuthed    = New(ErrTypeAuth, "CLI tool is not authenticated").WithSuggestion("Run the appropriate auth command (gh auth login, etc.)")
 
-	// 配置相关错误
+	// Configuration related errors
 	ErrConfigNotFound = New(ErrTypeConfig, "configuration file not found")
 	ErrConfigParse    = New(ErrTypeConfig, "failed to parse configuration file").WithSuggestion("Check if the configuration file format is correct")
 	ErrConfigWrite    = New(ErrTypeConfig, "failed to write configuration file")
 	ErrInvalidConfig  = New(ErrTypeConfig, "invalid configuration").WithSuggestion("Refer to the configuration examples in the documentation")
 
-	// 网络相关错误
+	// Network related errors
 	ErrNetworkTimeout = NewRetryable(ErrTypeTimeout, "network request timeout").WithSuggestion("Check your network connection and retry")
 	ErrNetworkFailed  = NewRetryable(ErrTypeNetwork, "network request failed").WithSuggestion("Check your network connection or try again later")
 
-	// LLM 相关错误
+	// LLM related errors
 	ErrLLMAPIKey    = New(ErrTypeLLM, "API Key not set").WithSuggestion("Set the environment variable CATMIT_LLM_API_KEY")
 	ErrLLMRateLimit = NewRetryable(ErrTypeLLM, "API rate limit exceeded").WithSuggestion("Try again later or upgrade your API plan")
 	ErrLLMResponse  = New(ErrTypeLLM, "invalid LLM response format")
 	ErrLLMTimeout   = NewRetryable(ErrTypeTimeout, "LLM request timeout").WithSuggestion("Increase timeout duration or try again later")
 
-	// 验证错误
+	// Validation errors
 	ErrInvalidInput     = New(ErrTypeValidation, "invalid input parameters")
 	ErrMissingParameter = New(ErrTypeValidation, "missing required parameter")
 )
 
-// Is 检查是否为特定错误
+// Is checks if the error is a specific error
 func Is(err error, target error) bool {
 	return errors.Is(err, target)
 }
 
-// As 尝试转换为特定错误类型
+// As tries to convert to a specific error type
 func As(err error, target interface{}) bool {
 	return errors.As(err, target)
 }
 
-// GetType 获取错误类型
+// GetType gets the error type
 func GetType(err error) ErrorType {
 	var catmitErr *CatmitError
 	if errors.As(err, &catmitErr) {
-		// 如果是超时类型，直接返回
+		// If it is a timeout type, return directly
 		if catmitErr.Type == ErrTypeTimeout {
 			return catmitErr.Type
 		}
-		// 递归检查 Cause 链
+		// Recursively check the Cause chain
 		if catmitErr.Cause != nil {
 			causeType := GetType(catmitErr.Cause)
-			// 如果 Cause 是超时类型，返回超时
+			// If the Cause is a timeout type, return timeout
 			if causeType == ErrTypeTimeout {
 				return ErrTypeTimeout
 			}
@@ -194,7 +194,7 @@ func GetType(err error) ErrorType {
 	return ErrTypeUnknown
 }
 
-// IsRetryable 检查错误是否可重试
+// IsRetryable checks if the error is retryable
 func IsRetryable(err error) bool {
 	var catmitErr *CatmitError
 	if errors.As(err, &catmitErr) {
@@ -203,7 +203,7 @@ func IsRetryable(err error) bool {
 	return false
 }
 
-// GetSuggestion 获取错误建议
+// GetSuggestion gets the suggestion for the error
 func GetSuggestion(err error) string {
 	var catmitErr *CatmitError
 	if errors.As(err, &catmitErr) {
@@ -212,7 +212,7 @@ func GetSuggestion(err error) string {
 	return ""
 }
 
-// FormatError 格式化错误输出
+// FormatError formats the error output
 func FormatError(err error) string {
 	var catmitErr *CatmitError
 	if !errors.As(err, &catmitErr) {

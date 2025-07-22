@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Decision 表示用户在 Review 界面的选择
+// Decision represents the user's choice in the Review UI
 type Decision int
 
-// buttonState 定义按钮的索引
+// buttonState defines the index of the buttons
 type buttonState int
 
 const (
@@ -28,26 +28,26 @@ const (
 	buttonCancel
 )
 
-// ReviewModel 用于展示 Commit message 供用户确认 / 编辑。
-// 当 user 按下 a/e/c 时结束程序并返回决策与最终消息。
-// 友好起见，支持上下键切换按钮（简化实现）。
+// ReviewModel is used to display the commit message for user confirmation/editing.
+// When the user presses a/e/c, the program ends and returns the decision and final message.
+// For user-friendliness, supports up/down key to switch buttons (simplified implementation).
 
 type ReviewModel struct {
-	message        string // 当前 commit message
-	lang           string // 语言
-	editing        bool   // 是否处于编辑模式
+	message        string // current commit message
+	lang           string // language
+	editing        bool   // whether in editing mode
 	textInput      textinput.Model
 	decision       Decision
 	done           bool
 	selectedButton buttonState
-	// 响应式终端尺寸支持
-	terminalWidth  int // 终端宽度
-	terminalHeight int // 终端高度
+	// Responsive terminal size support
+	terminalWidth  int // terminal width
+	terminalHeight int // terminal height
 }
 
-// NewReviewModel 创建初始模型。
+// NewReviewModel creates the initial model.
 func NewReviewModel(msg, lang string) *ReviewModel {
-	// 移除 \r 并裁剪首尾空白，避免回车符导致 TUI 渲染异常
+	// Remove \r and trim whitespace to avoid TUI rendering issues caused by carriage returns
 	cleanMsg := strings.TrimSpace(strings.ReplaceAll(msg, "\r", ""))
 
 	ti := textinput.New()
@@ -60,25 +60,25 @@ func NewReviewModel(msg, lang string) *ReviewModel {
 		lang:           lang,
 		editing:        false,
 		textInput:      ti,
-		selectedButton: buttonAccept, // 默认选中 Accept
-		terminalWidth:  80,           // 默认宽度，会通过 WindowSizeMsg 更新
-		terminalHeight: 24,           // 默认高度，会通过 WindowSizeMsg 更新
+		selectedButton: buttonAccept, // Default to Accept selected
+		terminalWidth:  80,           // Default width, will be updated by WindowSizeMsg
+		terminalHeight: 24,           // Default height, will be updated by WindowSizeMsg
 	}
 }
 
-// Init 实现 tea.Model 接口
+// Init implements the tea.Model interface
 func (m *ReviewModel) Init() tea.Cmd { return nil }
 
-// Update 处理按键事件
+// Update handles key events
 func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// 更新终端尺寸
+		// Update terminal size
 		m.terminalWidth = msg.Width
 		m.terminalHeight = msg.Height
 		return m, nil
 	case tea.KeyMsg:
-		// 统一处理 Ctrl+C，无论在哪种模式下都直接取消并退出
+		// Handle Ctrl+C in all modes: always cancel and exit
 		if msg.String() == "ctrl+c" {
 			m.decision = DecisionCancel
 			m.done = true
@@ -86,7 +86,7 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.editing {
-			// 编辑模式下交给 textinput 处理
+			// In editing mode, delegate to textinput
 			var cmd tea.Cmd
 			m.textInput, cmd = m.textInput.Update(msg)
 			switch msg.String() {
@@ -99,9 +99,9 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// 导航和选择逻辑
+		// Navigation and selection logic
 		switch msg.String() {
-		// 切换按钮
+		// Switch buttons
 		case "left", "h", "up", "k":
 			m.selectedButton--
 			if m.selectedButton < buttonAccept {
@@ -112,7 +112,7 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedButton > buttonCancel {
 				m.selectedButton = buttonAccept
 			}
-		// 快捷键
+		// Shortcuts
 		case "a", "A":
 			m.decision = DecisionAccept
 			m.done = true
@@ -124,7 +124,7 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.decision = DecisionCancel
 			m.done = true
 			return m, tea.Quit
-		// 确认选择
+		// Confirm selection
 		case "enter":
 			switch m.selectedButton {
 			case buttonAccept:
@@ -145,18 +145,18 @@ func (m *ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// calculateContentWidth 计算基于终端宽度的动态内容宽度
+// calculateContentWidth calculates the dynamic content width based on terminal width
 func (m *ReviewModel) calculateContentWidth() int {
 	const (
-		minWidth = 60  // 最小宽度
-		maxWidth = 120 // 最大宽度
-		margin   = 4   // 左右边距
+		minWidth = 60  // minimum width
+		maxWidth = 120 // maximum width
+		margin   = 4   // left and right margin
 	)
 
-	// 计算可用宽度（去除边距）
+	// Calculate available width (excluding margin)
 	availableWidth := m.terminalWidth - margin
 
-	// 应用最小和最大宽度约束
+	// Apply min and max width constraints
 	if availableWidth < minWidth {
 		return minWidth
 	}
@@ -167,9 +167,9 @@ func (m *ReviewModel) calculateContentWidth() int {
 	return availableWidth
 }
 
-// View 渲染
+// View renders the UI
 func (m *ReviewModel) View() string {
-	// --- 调色板 ---
+	// --- Palette ---
 	const (
 		cGray   = lipgloss.Color("245")
 		cBlue   = lipgloss.Color("39")
@@ -181,17 +181,17 @@ func (m *ReviewModel) View() string {
 		padding = 1
 	)
 
-	// 动态计算内容宽度
+	// Dynamically calculate content width
 	contentWidth := m.calculateContentWidth()
 
-	// --- 编辑模式 ---
+	// --- Editing mode ---
 	if m.editing {
 		promptStyle := lipgloss.NewStyle().Foreground(cYellow).Bold(true)
 		prompt := promptStyle.Render("Editing commit message (enter to save, esc to cancel):")
 		return fmt.Sprintf("\n%s\n%s\n", prompt, m.textInput.View())
 	}
 
-	// --- 样式定义 ---
+	// --- Style definitions ---
 	borderStyle := lipgloss.NewStyle().Foreground(cBlue)
 	titleStyle := lipgloss.NewStyle().Foreground(cWhite).Bold(true)
 	langStyle := lipgloss.NewStyle().Foreground(cGray)
@@ -199,12 +199,12 @@ func (m *ReviewModel) View() string {
 	commitDescStyle := lipgloss.NewStyle().Foreground(cWhite)
 	commitBodyStyle := lipgloss.NewStyle().Foreground(cGray)
 
-	// --- 辅助函数：行渲染器 ---
+	// --- Helper function: line renderer ---
 	renderLine := func(content string) string {
 		contentDisplayWidth := lipgloss.Width(content)
-		// 处理溢出情况：如果内容太长，进行截断
+		// Handle overflow: truncate if content is too long
 		if contentDisplayWidth > contentWidth {
-			// 使用智能截断，保留重要信息
+			// Use smart truncation to preserve important info
 			truncated := truncateContent(content, contentWidth-3) + "..."
 			content = truncated
 			contentDisplayWidth = lipgloss.Width(content)
@@ -217,15 +217,15 @@ func (m *ReviewModel) View() string {
 		return borderStyle.Render("│") + content + strings.Repeat(" ", linePadding) + borderStyle.Render("│")
 	}
 
-	// --- 辅助函数：按钮渲染器 ---
+	// --- Helper function: button renderer ---
 	renderButton := func(hint, text string, isSelected bool, hintStyle, textStyle, selectedBg lipgloss.Color) string {
 		hStyle := lipgloss.NewStyle().Foreground(hintStyle)
 		tStyle := lipgloss.NewStyle().Foreground(textStyle)
 
 		if isSelected {
-			// 当按钮被选中时，设置高对比度的前景色以确保可读性
+			// When button is selected, set high-contrast foreground for readability
 			fgColor := cBlack
-			// 红色背景上白色文字更清晰
+			// On red background, white text is clearer
 			if selectedBg == cRed {
 				fgColor = cWhite
 			}
@@ -239,7 +239,7 @@ func (m *ReviewModel) View() string {
 		)
 	}
 
-	// --- 构建标题 ---
+	// --- Build title ---
 	titleText := titleStyle.Render("Commit Preview") + langStyle.Render(fmt.Sprintf(" (%s)", m.lang))
 	titlePadding := contentWidth - lipgloss.Width(titleText)
 	if titlePadding < 0 {
@@ -249,11 +249,11 @@ func (m *ReviewModel) View() string {
 		titleText + strings.Repeat(borderStyle.Render("─"), titlePadding-titlePadding/2) +
 		borderStyle.Render("┐")
 
-	// --- 构建消息 Body ---
+	// --- Build message body ---
 	var bodyBuilder strings.Builder
 	lines := strings.Split(m.message, "\n")
 
-	// 渲染第一行 (Subject)
+	// Render first line (Subject)
 	if len(lines) > 0 {
 		parts := strings.SplitN(lines[0], ":", 2)
 		var subject string
@@ -265,11 +265,11 @@ func (m *ReviewModel) View() string {
 		bodyBuilder.WriteString(renderLine(" "+subject) + "\n")
 	}
 
-	// 渲染后续行 (Body)
+	// Render subsequent lines (Body)
 	if len(lines) > 1 {
-		bodyBuilder.WriteString(renderLine("") + "\n") // 空行
+		bodyBuilder.WriteString(renderLine("") + "\n") // blank line
 		bodyText := strings.Join(lines[1:], "\n")
-		// 对 Body 进行自动换行，-2 是为了左右的内边距
+		// Auto-wrap body, -2 for left/right padding
 		wrappedBody := wordWrap(bodyText, contentWidth-2)
 		for _, l := range strings.Split(wrappedBody, "\n") {
 			lineContent := " " + commitBodyStyle.Render(l)
@@ -277,37 +277,37 @@ func (m *ReviewModel) View() string {
 		}
 	}
 
-	// --- 构建可交互按钮 ---
+	// --- Build interactive buttons ---
 	btnAccept := renderButton("[A]", "Accept", m.selectedButton == buttonAccept, cGray, cGreen, cGreen)
 	btnEdit := renderButton("[E]", "Edit", m.selectedButton == buttonEdit, cGray, cYellow, cYellow)
 	btnCancel := renderButton("[C]", "Cancel", m.selectedButton == buttonCancel, cGray, cRed, cRed)
 	buttons := lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, "  ", btnEdit, "  ", btnCancel)
 
-	// 检查按钮是否超出内容宽度，如果超出则调整布局
+	// Check if buttons overflow content width, adjust layout if needed
 	buttonsWidth := lipgloss.Width(buttons)
 	if buttonsWidth > contentWidth-2 { // -2 for padding
-		// 使用紧凑布局
+		// Use compact layout
 		buttons = lipgloss.JoinHorizontal(lipgloss.Top, btnAccept, " ", btnEdit, " ", btnCancel)
 		buttonsWidth = lipgloss.Width(buttons)
 		if buttonsWidth > contentWidth-2 {
-			// 如果仍然太长，使用最紧凑的布局
+			// If still too long, use the most compact layout
 			buttons = btnAccept + " " + btnEdit + " " + btnCancel
 		}
 	}
 
-	// --- 组装 Footer ---
+	// --- Assemble footer ---
 	blankLine := renderLine("")
 	buttonRow := renderLine(" " + buttons)
 	bottomBorder := borderStyle.Render("└" + strings.Repeat("─", contentWidth) + "┘")
 	footer := strings.Join([]string{blankLine, buttonRow, bottomBorder}, "\n")
 
-	// 移除 body 末尾可能存在的多余换行符，避免破坏布局
+	// Remove any trailing newlines from body to avoid breaking layout
 	finalBody := strings.TrimRight(bodyBuilder.String(), "\n")
 
 	return strings.Join([]string{header, finalBody, footer}, "\n")
 }
 
-// IsDone 返回模型是否结束，以及决策和最终消息。
+// IsDone returns whether the model is finished, along with the decision and final message.
 func (m *ReviewModel) IsDone() (bool, Decision, string) {
 	return m.done, m.decision, m.message
 }

@@ -37,7 +37,7 @@ var minVersionRequirements = map[string]string{
 	"gitlab": "1.0.0",
 }
 
-// GitRunner Git命令执行器接口
+// GitRunner interface for running git commands
 type GitRunner interface {
 	GetRemoteURL(ctx context.Context, remote string) (string, error)
 	GetCurrentBranch(ctx context.Context) (string, error)
@@ -45,18 +45,18 @@ type GitRunner interface {
 	GetDefaultBranch(ctx context.Context, remote string) (string, error)
 }
 
-// ProviderDetector Provider检测器接口
+// ProviderDetector interface for detecting provider
 type ProviderDetector interface {
 	DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error)
 }
 
-// CLIDetector CLI检测器接口
+// CLIDetector interface for detecting CLI
 type CLIDetector interface {
 	DetectCLI(ctx context.Context, provider string) (cli.CLIStatus, error)
 	CheckMinVersion(current, minimum string) (bool, error)
 }
 
-// CommandBuilderInterface 命令构建器接口
+// CommandBuilderInterface interface for building commands
 type CommandBuilderInterface interface {
 	BuildCommand(provider string, options PROptions) (string, []string, error)
 	ParseGitHubPROutput(output string) (string, error)
@@ -65,23 +65,23 @@ type CommandBuilderInterface interface {
 	ParseGiteaErrorForPRInfo(errorOutput string, remoteHost string, owner string, repo string) (string, error)
 }
 
-// CommandRunner 命令执行器接口
+// CommandRunner interface for running commands
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
-// Creator PR创建器
+// Creator is the pull request creator
 type Creator struct {
 	git              GitRunner
 	providerDetector ProviderDetector
 	cliDetector      CLIDetector
 	commandBuilder   CommandBuilderInterface
 	commandRunner    CommandRunner
-	templateManager  template.Manager // 可选的模板管理器
-	logger           *zap.Logger      // 可选的日志记录器
+	templateManager  template.Manager // Optional template manager
+	logger           *zap.Logger      // Optional logger
 }
 
-// NewCreator 创建新的PR创建器
+// NewCreator creates a new PR creator
 func NewCreator(
 	git GitRunner,
 	providerDetector ProviderDetector,
@@ -98,21 +98,21 @@ func NewCreator(
 	}
 }
 
-// WithTemplateManager 设置模板管理器
+// WithTemplateManager sets the template manager
 func (c *Creator) WithTemplateManager(tm template.Manager) *Creator {
 	c.templateManager = tm
 	return c
 }
 
-// WithLogger 设置日志记录器
+// WithLogger sets the logger
 func (c *Creator) WithLogger(logger *zap.Logger) *Creator {
 	c.logger = logger
 	return c
 }
 
-// Create 创建PR
+// Create creates a pull request
 func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, error) {
-	// 设置默认值
+	// Set default value for remote if not specified
 	if options.Remote == "" {
 		options.Remote = "origin"
 	}
@@ -124,7 +124,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			zap.Bool("draft", options.Draft))
 	}
 
-	// 获取remote URL
+	// Get remote URL
 	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeGit, "failed to get remote URL", err)
@@ -136,7 +136,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			zap.String("url", remoteURL))
 	}
 
-	// 检测provider
+	// Detect provider
 	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeProvider, "failed to detect provider", err)
@@ -150,28 +150,28 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			zap.String("repo", remoteInfo.Repo))
 	}
 
-	// 检查是否支持的provider
+	// Check if provider is supported
 	if remoteInfo.Provider == "unknown" {
 		return "", errors.ErrProviderNotSupported
 	}
 
-	// 检测CLI状态
+	// Detect CLI status
 	cliStatus, err := c.cliDetector.DetectCLI(ctx, remoteInfo.Provider)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypePR, "failed to detect CLI", err)
 	}
 
-	// 检查CLI是否安装
+	// Check if CLI is installed
 	if !cliStatus.Installed {
 		return "", errors.ErrCLINotInstalled.WithSuggestion(fmt.Sprintf("Please install %s CLI tool", cliStatus.Name))
 	}
 
-	// 检查是否认证
+	// Check if CLI is authenticated
 	if !cliStatus.Authenticated {
 		return "", errors.ErrCLINotAuthed.WithSuggestion(fmt.Sprintf("Please run %s auth login to authenticate", cliStatus.Name))
 	}
 
-	// 检查版本要求
+	// Check version requirements
 	if minVersion, ok := minVersionRequirements[remoteInfo.Provider]; ok {
 		meetsRequirement, err := c.cliDetector.CheckMinVersion(cliStatus.Version, minVersion)
 		if err != nil {
@@ -183,18 +183,18 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		}
 	}
 
-	// 获取基础分支（如果未指定）
+	// Get base branch (if not specified)
 	if options.BaseBranch == "" {
 		defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
 		if err != nil {
-			// 如果获取失败，使用常见的默认值
+			// If failed to get, use common default value
 			options.BaseBranch = "main"
 		} else {
 			options.BaseBranch = defaultBranch
 		}
 	}
 
-	// 获取当前分支（如果需要）
+	// Get current branch (if needed)
 	var headBranch string
 	if options.HeadBranch == "" {
 		headBranch, err = c.git.GetCurrentBranch(ctx)
@@ -208,15 +208,15 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		headBranch = options.HeadBranch
 	}
 
-	// 处理模板（如果启用）
+	// Handle template (if enabled)
 	if options.UseTemplate && c.templateManager != nil {
-		// 尝试加载模板
+		// Try to load template
 		tmpl, err := c.templateManager.LoadTemplate(ctx, &remoteInfo)
 		if err == nil {
-			// 如果成功加载模板，准备模板数据
+			// If template loaded successfully, prepare template data
 			templateData := options.TemplateData
 			if templateData == nil {
-				// 如果没有提供模板数据，创建基础数据
+				// If no template data provided, create basic data
 				templateData = &template.TemplateData{
 					Branch:     headBranch,
 					BaseBranch: options.BaseBranch,
@@ -225,7 +225,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 					RepoName:   remoteInfo.Repo,
 				}
 
-				// 如果有标题和描述，使用它们
+				// Use title and body if provided
 				if options.Title != "" {
 					templateData.CommitTitle = options.Title
 				}
@@ -235,20 +235,20 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 				}
 			}
 
-			// 处理模板
+			// Process template
 			processedBody, err := c.templateManager.ProcessTemplate(ctx, tmpl, templateData)
 			if err == nil {
-				// 成功处理，使用模板生成的内容
+				// If processed successfully, use template-generated content
 				options.Body = processedBody
-				// 如果模板中包含标题，可能需要从中提取
-				// 但通常标题是单独的字段
+				// If template contains title, it may need to be extracted
+				// But usually title is a separate field
 			}
-			// 如果模板处理失败，继续使用原始内容
+			// If template processing fails, continue using original content
 		}
-		// 如果模板加载失败，继续使用原始内容
+		// If template loading fails, continue using original content
 	}
 
-	// 构建PR选项
+	// Build PR options
 	prOptions := PROptions{
 		Title:       options.Title,
 		Body:        options.Body,
@@ -263,15 +263,15 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		TargetRepo:  remoteInfo.Repo,
 	}
 
-	// 如果不是使用 origin，说明可能是跨 fork 的 PR
-	// 获取 origin 的信息作为源仓库
+	// If not using origin, it may be a cross-fork PR
+	// Get origin info as the source repository
 	if options.Remote != "origin" {
 		if c.logger != nil {
 			c.logger.Debug("Cross-fork PR detected, fetching origin info")
 		}
 		originURL, err := c.git.GetRemoteURL(ctx, "origin")
 		if err == nil {
-			// 解析 origin URL 获取源仓库信息
+			// Parse origin URL to get source repo info
 			originInfo, err := c.providerDetector.DetectFromRemote(ctx, originURL)
 			if err == nil {
 				prOptions.SourceOwner = originInfo.Owner
@@ -280,7 +280,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 						zap.String("origin_owner", originInfo.Owner),
 						zap.String("origin_repo", originInfo.Repo))
 				}
-				// 对于 Gitea，需要设置正确的 head 格式
+				// For Gitea, set correct head format
 				if remoteInfo.Provider == "gitea" && prOptions.SourceOwner != "" {
 					prOptions.HeadBranch = prOptions.SourceOwner + ":" + headBranch
 					if c.logger != nil {
@@ -292,7 +292,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		}
 	}
 
-	// 构建命令
+	// Build command
 	if c.logger != nil {
 		c.logger.Debug("Building PR command",
 			zap.String("provider", remoteInfo.Provider),
@@ -314,7 +314,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			zap.Strings("args", args))
 	}
 
-	// 执行命令
+	// Execute command
 	if c.logger != nil {
 		c.logger.Debug("Executing PR command")
 	}
@@ -328,7 +328,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 			zap.String("output", outputStr))
 	}
 
-	// 解析输出获取PR URL
+	// Parse output to get PR URL
 	var prURL string
 	var parseErr error
 
@@ -341,16 +341,16 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		prURL, parseErr = c.commandBuilder.ParseGitLabMROutput(outputStr)
 	}
 
-	// 如果命令执行失败
+	// If command execution failed
 	if err != nil {
-		// 检查是否是PR已存在的情况
+		// Check if PR already exists
 		if strings.Contains(outputStr, "already exists") {
-			// 如果解析到了URL，返回特定的错误
+			// If URL is parsed, return specific error
 			if parseErr == nil && prURL != "" {
 				return "", &ErrPRAlreadyExists{URL: prURL, err: errors.ErrPRAlreadyExists}
 			}
 
-			// 对于Gitea，尝试从错误信息中提取PR信息
+			// For Gitea, try to extract PR info from error message
 			if remoteInfo.Provider == "gitea" {
 				prURL, parseErr := c.commandBuilder.ParseGiteaErrorForPRInfo(outputStr, remoteInfo.Host, remoteInfo.Owner, remoteInfo.Repo)
 				if parseErr == nil && prURL != "" {
@@ -358,7 +358,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 				}
 			}
 
-			// 即使无法解析URL，也返回ErrPRAlreadyExists以便友好提示
+			// Even if URL cannot be parsed, return ErrPRAlreadyExists for user-friendly message
 			return "", &ErrPRAlreadyExists{
 				URL: "",
 				err: errors.Wrapf(errors.ErrTypePR, "PR already exists", errors.New(errors.ErrTypePR, outputStr)),
@@ -367,7 +367,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		return "", errors.Wrapf(errors.ErrTypePR, "failed to create PR\nOutput: %s", err, outputStr)
 	}
 
-	// 如果命令成功且解析到URL
+	// If command succeeded and URL was parsed
 	if parseErr == nil && prURL != "" {
 		if c.logger != nil {
 			c.logger.Debug("PR created successfully",
@@ -376,7 +376,7 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		return prURL, nil
 	}
 
-	// 如果命令成功但解析失败
+	// If command succeeded but parsing failed
 	if parseErr != nil {
 		return "", errors.Wrap(errors.ErrTypePR, fmt.Sprintf("failed to parse PR URL from output\nOutput: %s", outputStr), parseErr)
 	}

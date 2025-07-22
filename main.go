@@ -12,17 +12,17 @@ import (
 	catmitErrors "github.com/penwyp/catmit/internal/errors"
 )
 
-// main 为 CLI 入口，调用 cmd.Execute。
+// main is the CLI entry point, calls cmd.Execute.
 func main() {
-	// 使用 signal.NotifyContext 创建可取消的 Context；
-	// 当收到 Ctrl+C (SIGINT) 或 SIGTERM 时，ctx.Done() 会被触发。
+	// Use signal.NotifyContext to create a cancellable Context;
+	// When Ctrl+C (SIGINT) or SIGTERM is received, ctx.Done() will be triggered.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop() // 释放资源
+	defer stop() // Release resources
 
 	// Execute the root command.
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			// 使用 124 表示超时，符合 CLI 规范
+			// Use 124 to indicate timeout, following CLI conventions
 			log.Println("Timeout exceeded")
 			os.Exit(124)
 		}
@@ -39,7 +39,7 @@ func main() {
 			os.Exit(124)
 		}
 
-		// 标准化错误处理：避免 log.Fatalf，使用 log.Println + os.Exit
+		// Standardized error handling: avoid log.Fatalf, use log.Println + os.Exit
 		log.Printf("catmit error: %v", err)
 		os.Exit(1)
 	}

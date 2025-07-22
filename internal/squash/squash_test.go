@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockClient 是 ClientInterface 的 mock 实现
+// MockClient is a mock implementation of ClientInterface
 type MockClient struct {
 	mock.Mock
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/penwyp/catmit/pkg/gitinfo"
 )
 
-// Phase 表示主模型所处的阶段
+// Phase represents the current phase of the main model
 type Phase int
 
 const (
@@ -25,34 +25,34 @@ const (
 	PhaseDone
 )
 
-// MainModel 统一的单视图模型，管理整个生命周期
+// MainModel is a unified single-view model managing the entire lifecycle
 type MainModel struct {
 	BaseModel
 
-	// 状态管理
+	// State management
 	phase          Phase
 	loadingStage   Stage
 	reviewDecision Decision
 	commitStage    CommitStage
 
-	// UI组件
+	// UI components
 	spinner  spinner.Model
 	textArea textarea.Model
 	editing  bool
 
-	// 数据
+	// Data
 	message string
 	seed    string
 	lang    string
 
-	// 依赖注入
+	// Dependency injection
 	ctx         context.Context
 	collector   collectorInterface
 	promptBuild promptInterface
 	client      clientInterface
 	committer   commitInterface
 
-	// 配置
+	// Configurations
 	enablePush bool
 	stageAll   bool
 	apiTimeout time.Duration
@@ -62,30 +62,30 @@ type MainModel struct {
 	prDraft    bool
 	prProvider string
 
-	// 内部状态
+	// Internal state
 	finalStartTime time.Time
 	showDuration   time.Duration
 
-	// PR预览相关
+	// PR preview related
 	prPreview     *PRPreviewModel
 	prPreviewData PRPreviewData
 	prURL         string
 
-	// 模板相关
-	useTemplate bool // 是否尝试使用模板
+	// Template related
+	useTemplate bool // Whether to try using template
 }
 
-// PRConfig PR配置
+// PRConfig holds PR configuration
 type PRConfig struct {
 	CreatePR    bool
 	Remote      string
 	Base        string
 	Draft       bool
 	Provider    string
-	UseTemplate bool // 是否使用模板
+	UseTemplate bool // Whether to use template
 }
 
-// NewMainModel 创建新的统一模型
+// NewMainModel creates a new unified model
 func NewMainModel(
 	ctx context.Context,
 	col collectorInterface,
@@ -96,7 +96,7 @@ func NewMainModel(
 	apiTimeout time.Duration,
 	enablePush, stageAll, createPR bool,
 ) *MainModel {
-	// 使用默认PR配置
+	// Use default PR config
 	prConfig := PRConfig{
 		CreatePR: createPR,
 		Remote:   "origin",
@@ -107,7 +107,7 @@ func NewMainModel(
 	return NewMainModelWithPRConfig(ctx, col, pb, cli, com, seed, lang, apiTimeout, enablePush, stageAll, prConfig)
 }
 
-// NewMainModelWithPRConfig 创建带PR配置的统一模型
+// NewMainModelWithPRConfig creates a new unified model with PR config
 func NewMainModelWithPRConfig(
 	ctx context.Context,
 	col collectorInterface,
@@ -158,12 +158,12 @@ func NewMainModelWithPRConfig(
 	return m
 }
 
-// Init 启动第一个阶段
+// Init starts the first phase
 func (m *MainModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, collectCmd(m.collector, m.ctx))
 }
 
-// Update 处理消息
+// Update handles messages
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -173,14 +173,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// 全局快捷键处理
+		// Global shortcut handling
 		if msg.String() == "ctrl+c" {
 			m.err = context.Canceled
 			m.done = true
 			return m, tea.Quit
 		}
 
-		// 根据phase处理不同的键盘输入
+		// Handle keyboard input based on phase
 		switch m.phase {
 		case PhaseReview:
 			return m.updateReview(msg)
@@ -193,7 +193,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	// Loading阶段的消息处理
+	// Loading phase message handling
 	case diffCollectedMsg:
 		m.loadingStage = StagePreprocess
 		return m, preprocessCmd(m.collector, m.ctx)
@@ -212,7 +212,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textArea.SetValue(m.message)
 		return m, nil
 
-	// Commit阶段的消息处理
+	// Commit phase message handling
 	case commitDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -221,7 +221,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.commitStage = CommitStageCommitted
 		if m.enablePush {
-			// 添加延迟以确保CommitStageCommitted状态有时间完整渲染
+			// Add delay to ensure CommitStageCommitted state is fully rendered
 			return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
 				return delayedPushMsg{}
 			})
@@ -314,7 +314,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// 处理editing模式下的textarea更新
+	// Handle textarea updates in editing mode during Review phase
 	if m.editing && m.phase == PhaseReview {
 		var cmd tea.Cmd
 		m.textArea, cmd = m.textArea.Update(msg)
@@ -324,7 +324,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateReview 处理Review阶段的键盘输入
+// updateReview handles keyboard input during the Review phase
 func (m *MainModel) updateReview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.editing {
 		switch msg.String() {
@@ -355,16 +355,16 @@ func (m *MainModel) updateReview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// regenerateCommitMessage 触发重新生成commit消息
+// regenerateCommitMessage triggers regeneration of the commit message
 func (m *MainModel) regenerateCommitMessage() tea.Cmd {
-	// 重置状态到加载阶段
+	// Reset state to loading phase
 	m.phase = PhaseLoading
 	m.loadingStage = StagePrompt
-	// 重新构建prompt并查询
+	// Rebuild prompt and query again
 	return buildSmartPromptCmd(m.promptBuild, m.collector, m.ctx, m.seed)
 }
 
-// View 渲染统一的界面
+// View renders the unified interface
 func (m *MainModel) View() string {
 	// Update title based on phase and lang
 	title := m.getPhaseTitle()
@@ -428,11 +428,11 @@ func (m *MainModel) renderContent() string {
 // Action handlers
 func (m *MainModel) handleAccept() tea.Cmd {
 	m.reviewDecision = DecisionAccept
-	// 如果需要创建PR，先进入PR预览阶段
+	// If PR creation is needed, go to PR preview phase first
 	if m.createPR {
 		return m.preparePRPreview()
 	}
-	// 否则直接进入commit阶段
+	// Otherwise, go directly to commit phase
 	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
 		return startCommitPhaseMsg{}
 	})
@@ -455,7 +455,7 @@ func (m *MainModel) handleCancel() tea.Cmd {
 	return tea.Quit
 }
 
-// renderLoadingContent 渲染加载阶段的内容
+// renderLoadingContent renders the content during the loading phase
 func (m *MainModel) renderLoadingContent() string {
 	colors := DefaultColors()
 	var statusStyle lipgloss.Style
@@ -482,7 +482,7 @@ func (m *MainModel) renderLoadingContent() string {
 	return m.spinner.View() + " " + statusStyle.Render(status)
 }
 
-// renderReviewContent 渲染审查阶段的内容
+// renderReviewContent renders the content during the review phase
 func (m *MainModel) renderReviewContent() string {
 	colors := DefaultColors()
 	commitTypeStyle := lipgloss.NewStyle().Foreground(colors.Yellow)
@@ -491,7 +491,7 @@ func (m *MainModel) renderReviewContent() string {
 
 	var content strings.Builder
 
-	// 渲染commit message
+	// Render commit message
 	lines := strings.Split(m.message, "\n")
 	if len(lines) > 0 {
 		parts := strings.SplitN(lines[0], ":", 2)
@@ -516,7 +516,7 @@ func (m *MainModel) renderReviewContent() string {
 	return strings.TrimRight(content.String(), "\n")
 }
 
-// renderEditingContent 渲染编辑模式的内容
+// renderEditingContent renders the content in editing mode
 func (m *MainModel) renderEditingContent() string {
 	colors := DefaultColors()
 	promptStyle := lipgloss.NewStyle().Foreground(colors.Yellow)
@@ -525,7 +525,7 @@ func (m *MainModel) renderEditingContent() string {
 	var content strings.Builder
 	content.WriteString(promptStyle.Render("Edit Commit Message:") + "\n\n")
 
-	// 渲染textarea的每一行
+	// Render each line of the textarea
 	lines := strings.Split(m.textArea.View(), "\n")
 	for _, line := range lines {
 		content.WriteString(line + "\n")
@@ -536,12 +536,12 @@ func (m *MainModel) renderEditingContent() string {
 	return strings.TrimRight(content.String(), "\n")
 }
 
-// renderCommitContent 渲染提交阶段的内容
+// renderCommitContent renders the content during the commit phase
 func (m *MainModel) renderCommitContent() string {
 
 	var content strings.Builder
 
-	// 显示commit message预览
+	// Show commit message preview
 	colors := DefaultColors()
 	titleStyle := lipgloss.NewStyle().Foreground(colors.White).Bold(true)
 	messagePreview := m.message
@@ -556,7 +556,7 @@ func (m *MainModel) renderCommitContent() string {
 	progressStyle := lipgloss.NewStyle().Foreground(colors.Yellow)
 	descStyle := lipgloss.NewStyle().Foreground(colors.White)
 
-	// 根据阶段显示状态
+	// Show status based on commit stage
 	switch m.commitStage {
 	case CommitStageInit, CommitStageCommitting:
 		content.WriteString(m.spinner.View() + " " + progressStyle.Render("Committing changes..."))
@@ -629,7 +629,7 @@ func (m *MainModel) renderCommitContent() string {
 	return content.String()
 }
 
-// getPhaseTitle 获取当前阶段的标题
+// getPhaseTitle gets the title for the current phase
 func (m *MainModel) getPhaseTitle() string {
 	switch m.phase {
 	case PhaseLoading:
@@ -648,10 +648,10 @@ func (m *MainModel) getPhaseTitle() string {
 	}
 }
 
-// startCommit 开始提交
+// startCommit starts the commit process
 func (m *MainModel) startCommit() tea.Cmd {
 	return func() tea.Msg {
-		// 在commit之前，检查是否需要staging并执行
+		// Before commit, check if staging is needed and perform it
 		if m.stageAll && !m.committer.HasStagedChanges(m.ctx) {
 			if err := m.committer.StageAll(m.ctx); err != nil {
 				return commitDoneMsg{err: errors.Wrap(errors.ErrTypeGit, "staging failed", err)}
@@ -662,7 +662,7 @@ func (m *MainModel) startCommit() tea.Cmd {
 	}
 }
 
-// startPush 开始推送
+// startPush starts the push process
 func (m *MainModel) startPush() tea.Cmd {
 	return func() tea.Msg {
 		err := m.committer.Push(m.ctx)
@@ -670,7 +670,7 @@ func (m *MainModel) startPush() tea.Cmd {
 	}
 }
 
-// startCreatePR 开始创建PR
+// startCreatePR starts the pull request creation process
 func (m *MainModel) startCreatePR() tea.Cmd {
 	return func() tea.Msg {
 		prURL, err := m.committer.CreatePullRequest(m.ctx)
@@ -678,12 +678,12 @@ func (m *MainModel) startCreatePR() tea.Cmd {
 	}
 }
 
-// IsDone 返回操作是否完成及相关信息
+// IsDone returns whether the operation is done and related info
 func (m *MainModel) IsDone() (bool, Decision, string, error) {
 	return m.done, m.reviewDecision, m.message, m.err
 }
 
-// GetError 返回错误信息
+// GetError returns the error info
 func (m *MainModel) GetError() error {
 	if m.err == gitinfo.ErrNoDiff {
 		return m.err
@@ -691,15 +691,15 @@ func (m *MainModel) GetError() error {
 	if m.err == context.Canceled {
 		return nil
 	}
-	// 如果commit成功但push失败，不返回错误（因为主要操作已成功）
-	// push失败已经在TUI中显示给用户，不需要再次输出到终端
+	// If commit succeeded but push failed, do not return error (main operation succeeded)
+	// Push failure has already been shown in TUI, no need to output to terminal again
 	if m.commitStage == CommitStagePushFailed {
 		return nil
 	}
 	return m.err
 }
 
-// 消息类型定义
+// Message type definitions
 type delayedPushMsg struct{}
 type delayedCreatePRMsg struct{}
 type startCommitPhaseMsg struct{}
@@ -713,14 +713,14 @@ type createPRDoneMsg struct {
 	prURL string
 }
 
-// preparePRPreview 准备PR预览
+// preparePRPreview prepares the PR preview
 func (m *MainModel) preparePRPreview() tea.Cmd {
 	return func() tea.Msg {
-		// 收集PR预览所需的数据
+		// Collect data needed for PR preview
 		branchName, _ := m.collector.BranchName(m.ctx)
 		changedFiles, _ := m.collector.ChangedFiles(m.ctx)
 
-		// 解析commit message作为PR标题和内容
+		// Parse commit message as PR title and body
 		lines := strings.Split(m.message, "\n")
 		title := lines[0]
 		body := ""
@@ -729,10 +729,10 @@ func (m *MainModel) preparePRPreview() tea.Cmd {
 			body = strings.TrimSpace(body)
 		}
 
-		// 准备文件变更信息
+		// Prepare file change info
 		var fileChanges []FileChange
 		for _, file := range changedFiles {
-			// 简化处理，实际应该从git获取具体的增删行数
+			// Simplified: in practice, should get added/removed lines from git
 			fileChanges = append(fileChanges, FileChange{
 				Path:       file,
 				ChangeType: "modified",
@@ -755,7 +755,7 @@ func (m *MainModel) preparePRPreview() tea.Cmd {
 	}
 }
 
-// renderPRPreviewContent 渲染PR预览内容
+// renderPRPreviewContent renders the PR preview content
 func (m *MainModel) renderPRPreviewContent() string {
 	if m.prPreview == nil {
 		colors := DefaultColors()
@@ -766,7 +766,7 @@ func (m *MainModel) renderPRPreviewContent() string {
 	return m.prPreview.View()
 }
 
-// updatePRPreview 处理PR预览阶段的键盘输入
+// updatePRPreview handles keyboard input during the PR preview phase
 func (m *MainModel) updatePRPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "d", "D":
@@ -775,7 +775,7 @@ func (m *MainModel) updatePRPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter", " ":
-		// 继续到commit阶段
+		// Continue to commit phase
 		return m, tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
 			return startCommitPhaseMsg{}
 		})

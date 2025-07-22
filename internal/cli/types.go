@@ -2,7 +2,7 @@ package cli
 
 import "context"
 
-// Version 语义化版本结构
+// Version represents a semantic version structure
 type Version struct {
 	Major      int
 	Minor      int
@@ -11,16 +11,16 @@ type Version struct {
 	Build      string
 }
 
-// CLIStatus CLI工具状态信息
+// CLIStatus holds the status information of a CLI tool
 type CLIStatus struct {
-	Name          string // CLI名称 (gh, tea等)
-	Installed     bool   // 是否已安装
-	Version       string // 版本号
-	Authenticated bool   // 是否已认证
-	Username      string // 认证的用户名
+	Name          string // CLI name (e.g., gh, tea)
+	Installed     bool   // Whether the CLI is installed
+	Version       string // Version number
+	Authenticated bool   // Whether the CLI is authenticated
+	Username      string // Authenticated username
 }
 
-// CommandRunner 命令执行器接口
+// CommandRunner is the interface for command execution
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// mockCommitter 实现 commitInterface 用于测试
+// mockCommitter implements commitInterface for testing purposes
 type mockCommitter struct {
 	mock.Mock
 }
@@ -142,7 +142,7 @@ func TestCommitModel_PushError(t *testing.T) {
 	pushErr := errors.New("push failed")
 
 	model := NewCommitModel(ctx, committer, "test message", "en", true, false)
-	model.stage = CommitStagePushing // 设置为pushing阶段
+	model.stage = CommitStagePushing // Set to pushing stage
 
 	// Test push error
 	newModel, cmd := model.Update(pushDoneMsg{err: pushErr})
@@ -161,10 +161,10 @@ func TestCommitModel_View(t *testing.T) {
 	// Test view rendering
 	view := model.View()
 
-	// 由于边框现在由MainModel处理，这里只检查内容
+	// Since the border is now handled by MainModel, only check the content here
 	assert.Contains(t, view, "Message:")
 	assert.Contains(t, view, "test: sample commit message")
-	// 不再检查边框字符，因为View()现在只返回内容
+	// No longer check border characters, as View() now only returns content
 }
 
 func TestCommitModel_calculateContentWidth(t *testing.T) {

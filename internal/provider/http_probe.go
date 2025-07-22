@@ -9,31 +9,31 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// httpProber 实现HTTP探测功能
+// httpProber implements HTTP probing functionality
 type httpProber struct {
 	client     *http.Client
 	maxRetries int
 	timeout    time.Duration
 }
 
-// ProberOption 配置选项
+// ProberOption is a configuration option for httpProber
 type ProberOption func(*httpProber)
 
-// WithMaxRetries 设置最大重试次数
+// WithMaxRetries sets the maximum number of retries
 func WithMaxRetries(n int) ProberOption {
 	return func(p *httpProber) {
 		p.maxRetries = n
 	}
 }
 
-// WithTimeout 设置单次请求超时
+// WithTimeout sets the timeout for a single request
 func WithTimeout(d time.Duration) ProberOption {
 	return func(p *httpProber) {
 		p.timeout = d
 	}
 }
 
-// NewHTTPProber 创建新的HTTP探测器
+// NewHTTPProber creates a new HTTP prober
 func NewHTTPProber(opts ...ProberOption) HTTPProber {
 	p := &httpProber{
 		maxRetries: 3,
@@ -51,14 +51,14 @@ func NewHTTPProber(opts ...ProberOption) HTTPProber {
 	return p
 }
 
-// ProbeGitea 探测Gitea API
+// ProbeGitea probes the Gitea API
 func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult {
 	url := baseURL + "/api/v1/version"
 
 	var lastErr error
 	for attempt := 0; attempt <= p.maxRetries; attempt++ {
 		if attempt > 0 {
-			// 计算退避时间
+			// Calculate backoff duration
 			backoff := calculateBackoff(attempt - 1)
 			select {
 			case <-ctx.Done():
@@ -67,7 +67,7 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 					Error:   ctx.Err(),
 				}
 			case <-time.After(backoff):
-				// 继续重试
+				// Continue to retry
 			}
 		}
 
@@ -82,44 +82,44 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 		resp, err := p.client.Do(req)
 		if err != nil {
 			lastErr = err
-			// 网络错误，继续重试
+			// Network error, continue to retry
 			continue
 		}
 		defer resp.Body.Close()
 
-		// 服务器错误（5xx），继续重试
+		// Server error (5xx), continue to retry
 		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
 			lastErr = errors.Newf(errors.ErrTypeExternal, "server error: %d", resp.StatusCode)
 			continue
 		}
 
-		// 其他非200状态码，不重试
+		// Other non-200 status codes, do not retry
 		if resp.StatusCode != http.StatusOK {
 			return ProbeResult{
 				IsGitea: false,
 			}
 		}
 
-		// 解析响应
+		// Parse response
 		var versionInfo struct {
 			Version string `json:"version"`
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
-			// JSON解析错误，不是Gitea
+			// JSON parsing error, not Gitea
 			return ProbeResult{
 				IsGitea: false,
 			}
 		}
 
-		// 成功检测到Gitea
+		// Successfully detected Gitea
 		return ProbeResult{
 			IsGitea: true,
 			Version: versionInfo.Version,
 		}
 	}
 
-	// 所有重试都失败
+	// All retries failed
 	if lastErr != nil {
 		return ProbeResult{
 			IsGitea: false,
@@ -133,7 +133,7 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 	}
 }
 
-// calculateBackoff 计算指数退避时间
+// calculateBackoff calculates exponential backoff duration
 func calculateBackoff(attempt int) time.Duration {
 	base := time.Second
 	maxBackoff := 4 * time.Second

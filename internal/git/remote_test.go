@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockRunner 用于模拟git命令执行
+// MockRunner is used to mock git command execution
 type MockRunner struct {
 	mock.Mock
 }

@@ -2,44 +2,44 @@ package pr
 
 import "github.com/penwyp/catmit/internal/template"
 
-// PROptions PR创建选项
+// PROptions defines options for creating a Pull Request
 type PROptions struct {
-	// 通用字段
-	Title      string // PR标题
-	Body       string // PR描述/正文
-	BaseBranch string // 目标分支（必需）
-	HeadBranch string // 源分支（Gitea必需）
-	Draft      bool   // 是否为草稿PR
+	// Common fields
+	Title      string // PR title
+	Body       string // PR description/body
+	BaseBranch string // Target branch (required)
+	HeadBranch string // Source branch (required for Gitea)
+	Draft      bool   // Whether the PR is a draft
 
-	// 仓库信息（用于跨fork PR）
-	TargetOwner string // 目标仓库所有者
-	TargetRepo  string // 目标仓库名称
-	SourceOwner string // 源仓库所有者（用于fork工作流）
+	// Repository information (for cross-fork PRs)
+	TargetOwner string // Target repository owner
+	TargetRepo  string // Target repository name
+	SourceOwner string // Source repository owner (for fork workflow)
 
-	// 元数据
-	Labels    []string // 标签
-	Assignees []string // 分配人
-	Reviewers []string // 审查人
-	Milestone string   // 里程碑
+	// Metadata
+	Labels    []string // Labels
+	Assignees []string // Assignees
+	Reviewers []string // Reviewers
+	Milestone string   // Milestone
 
-	// 特殊选项
-	Fill bool // GitHub的--fill选项，自动填充标题和描述
+	// Special options
+	Fill bool // GitHub --fill option, auto-fill title and description
 }
 
-// CreateOptions PR创建的高级选项
+// CreateOptions defines advanced options for PR creation
 type CreateOptions struct {
-	Remote     string   // Git remote名称，默认为origin
-	Title      string   // PR标题
-	Body       string   // PR描述
-	BaseBranch string   // 目标分支
-	HeadBranch string   // 源分支（可选，自动检测）
-	Draft      bool     // 是否为草稿
-	Labels     []string // 标签
-	Assignees  []string // 分配人
-	Reviewers  []string // 审查人
-	Fill       bool     // 使用--fill选项
+	Remote     string   // Git remote name, defaults to "origin"
+	Title      string   // PR title
+	Body       string   // PR description
+	BaseBranch string   // Target branch
+	HeadBranch string   // Source branch (optional, auto-detect)
+	Draft      bool     // Whether the PR is a draft
+	Labels     []string // Labels
+	Assignees  []string // Assignees
+	Reviewers  []string // Reviewers
+	Fill       bool     // Use --fill option
 
-	// 模板相关选项
-	UseTemplate  bool                   // 是否使用模板
-	TemplateData *template.TemplateData // 模板数据（如果提供）
+	// Template related options
+	UseTemplate  bool                   // Whether to use a template
+	TemplateData *template.TemplateData // Template data (if provided)
 }

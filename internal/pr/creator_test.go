@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockProviderDetector 模拟Provider检测器
+// MockProviderDetector simulates a Provider detector
 type MockProviderDetector struct {
 	mock.Mock
 }
@@ -22,7 +22,7 @@ func (m *MockProviderDetector) DetectFromRemote(ctx context.Context, remoteURL s
 	return args.Get(0).(provider.RemoteInfo), args.Error(1)
 }
 
-// MockCLIDetector 模拟CLI检测器
+// MockCLIDetector simulates a CLI detector
 type MockCLIDetector struct {
 	mock.Mock
 }
@@ -37,7 +37,7 @@ func (m *MockCLIDetector) CheckMinVersion(current, minimum string) (bool, error)
 	return args.Bool(0), args.Error(1)
 }
 
-// MockCommandBuilder 模拟命令构建器
+// MockCommandBuilder simulates a command builder
 type MockCommandBuilder struct {
 	mock.Mock
 }
@@ -67,7 +67,7 @@ func (m *MockCommandBuilder) ParseGiteaErrorForPRInfo(errorOutput string, remote
 	return args.String(0), args.Error(1)
 }
 
-// MockGitRunner 模拟Git执行器
+// MockGitRunner simulates a Git runner
 type MockGitRunner struct {
 	mock.Mock
 }
@@ -92,7 +92,7 @@ func (m *MockGitRunner) GetDefaultBranch(ctx context.Context, remote string) (st
 	return args.String(0), args.Error(1)
 }
 
-// MockCommandRunner 模拟命令执行器
+// MockCommandRunner simulates a command runner
 type MockCommandRunner struct {
 	mock.Mock
 }
@@ -105,7 +105,7 @@ func (m *MockCommandRunner) Run(ctx context.Context, name string, args ...string
 	return argList.Get(0).([]byte), argList.Error(1)
 }
 
-// TestPRCreator_Create 测试PR创建主流程
+// TestPRCreator_Create tests the main PR creation flow
 func TestPRCreator_Create(t *testing.T) {
 	tests := []struct {
 		name          string

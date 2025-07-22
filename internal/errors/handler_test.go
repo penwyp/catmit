@@ -82,7 +82,7 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 		})
 
 		assert.NotNil(t, result)
-		assert.Equal(t, 0, callCount) // 不应该调用操作函数
+		assert.Equal(t, 0, callCount) // Should not call the operation function
 	})
 
 	t.Run("retryable error - success on retry", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 		result := handler.HandleWithRetry(context.Background(), err, func() error {
 			callCount++
 			if callCount == 2 {
-				return nil // 第二次成功
+				return nil // Succeed on the second attempt
 			}
 			return err
 		})
@@ -121,7 +121,7 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 		})
 
 		assert.NotNil(t, result)
-		assert.Equal(t, 2, callCount) // 初始尝试 + 1次重试
+		assert.Equal(t, 2, callCount) // Initial attempt + 1 retry
 
 		var catmitErr *CatmitError
 		assert.True(t, As(result, &catmitErr))
@@ -137,7 +137,7 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 		err := NewRetryable(ErrTypeNetwork, "network error")
 
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // 立即取消
+		cancel() // Cancel immediately
 
 		result := handler.HandleWithRetry(ctx, err, func() error {
 			return err
@@ -249,7 +249,7 @@ func TestDefaultHandler_getErrorIcon(t *testing.T) {
 		{ErrTypeValidation, "✅"},
 		{ErrTypeLLM, "🤖"},
 		{ErrTypeUnknown, "❌"},
-		{ErrorType(999), "❌"}, // 未知类型
+		{ErrorType(999), "❌"}, // Unknown type
 	}
 
 	handler := &DefaultHandler{}
@@ -262,7 +262,7 @@ func TestDefaultHandler_getErrorIcon(t *testing.T) {
 	}
 }
 
-// 为 ErrorType 添加 String 方法以便测试输出
+// Add String method for ErrorType for test output
 func (e ErrorType) String() string {
 	names := []string{
 		"Unknown", "Git", "Provider", "PR", "Config",

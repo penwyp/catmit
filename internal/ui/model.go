@@ -3,38 +3,38 @@ package ui
 import tea "github.com/charmbracelet/bubbletea"
 
 // ---------------- Message Types ------------------
-// GenerateStartMsg 表示开始生成过程
+// GenerateStartMsg indicates the start of the generation process.
 type GenerateStartMsg struct{}
 
-// GenerateSuccessMsg 表示生成成功，携带 commit message
+// GenerateSuccessMsg indicates successful generation, carrying the commit message.
 type GenerateSuccessMsg struct {
 	Message string
 }
 
-// GenerateErrorMsg 表示生成失败
+// GenerateErrorMsg indicates generation failure.
 type GenerateErrorMsg struct {
 	Err error
 }
 
 // ---------------- Model --------------------------
-// Model 代表 Bubble Tea 状态模型。
-// 仅保留最小字段以通过单元测试；后续可扩展为完整 TUI。
+// Model represents the Bubble Tea state model.
+// Only minimal fields are retained to pass unit tests; can be extended to a full TUI later.
 type Model struct {
-	isLoading bool
-	isDone    bool
-	message   string
-	err       error
+	isLoading bool   // Whether the model is in loading state
+	isDone    bool   // Whether the process is done
+	message   string // The generated commit message
+	err       error  // Error information, if any
 }
 
-// NewModel 返回初始模型，处于 Loading 状态。
+// NewModel returns the initial model in the Loading state.
 func NewModel() Model {
 	return Model{isLoading: true}
 }
 
-// Init 实现 tea.Model 接口，返回 nil 即可。
+// Init implements the tea.Model interface, returns nil as no initial command is needed.
 func (m Model) Init() tea.Cmd { return nil }
 
-// Update 根据不同 Msg 更新模型。
+// Update updates the model based on different Msg types.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case GenerateStartMsg:
@@ -50,12 +50,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isDone = true
 		m.err = msg.Err
 	default:
-		// 其他消息保持原状态
+		// For other messages, keep the original state.
 	}
 	return m, nil
 }
 
-// View 返回当前视图字符串。简化实现，后续完善 TUI。
+// View returns the current view string. Simplified implementation; TUI can be improved later.
 func (m Model) View() string {
 	if m.isLoading {
 		return "Loading..."

@@ -9,13 +9,13 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// configManager 配置文件管理器实现
+// configManager implements the configuration file manager
 type configManager struct {
 	configPath string
-	mu         sync.Mutex // 保护并发写入
+	mu         sync.Mutex // protects concurrent writes
 }
 
-// NewConfigManager 创建新的配置管理器
+// NewConfigManager creates a new configuration manager
 func NewConfigManager(configPath string) (Manager, error) {
 	if configPath == "" {
 		return nil, errors.New(errors.ErrTypeConfig, "config path cannot be empty")
@@ -26,7 +26,7 @@ func NewConfigManager(configPath string) (Manager, error) {
 	}, nil
 }
 
-// Load 加载配置文件
+// Load loads the configuration file
 func (m *configManager) Load() (*Config, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -44,32 +44,32 @@ func (m *configManager) Load() (*Config, error) {
 	return &config, nil
 }
 
-// Save 保存配置文件（原子操作）
+// Save saves the configuration file (atomic operation)
 func (m *configManager) Save(config *Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 序列化配置
+	// Serialize the configuration
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to marshal config", err)
 	}
 
-	// 确保目录存在
+	// Ensure the directory exists
 	dir := filepath.Dir(m.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to create config directory", err)
 	}
 
-	// 原子写入：先写入临时文件，然后重命名
+	// Atomic write: write to a temp file first, then rename
 	tmpFile := m.configPath + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to write temp config file", err)
 	}
 
-	// 原子重命名
+	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
-		// 清理临时文件
+		// Clean up temp file
 		os.Remove(tmpFile)
 		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
@@ -77,7 +77,7 @@ func (m *configManager) Save(config *Config) error {
 	return nil
 }
 
-// CreateDefaultConfig 创建默认配置
+// CreateDefaultConfig creates the default configuration
 func (m *configManager) CreateDefaultConfig() error {
 	defaultConfig := &Config{
 		Version: "1.0.0",
@@ -102,12 +102,12 @@ func (m *configManager) CreateDefaultConfig() error {
 	return m.Save(defaultConfig)
 }
 
-// UpdateRemote 更新指定remote的配置
+// UpdateRemote updates the configuration for the specified remote
 func (m *configManager) UpdateRemote(host string, remoteConfig RemoteConfig) error {
-	// 加载现有配置
+	// Load the existing configuration
 	config, err := m.Load()
 	if err != nil {
-		// 如果配置文件不存在，创建新配置
+		// If the config file does not exist, create a new config
 		if os.IsNotExist(err) {
 			config = &Config{
 				Version: "1.0.0",
@@ -118,9 +118,9 @@ func (m *configManager) UpdateRemote(host string, remoteConfig RemoteConfig) err
 		}
 	}
 
-	// 更新remote配置
+	// Update the remote configuration
 	config.Remotes[host] = remoteConfig
 
-	// 保存配置
+	// Save the configuration
 	return m.Save(config)
 }

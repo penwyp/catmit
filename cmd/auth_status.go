@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// RemoteAuthStatus 远程仓库认证状态
+// RemoteAuthStatus represents the authentication status of a remote repository
 type RemoteAuthStatus struct {
 	Remote        string
 	Provider      string
@@ -23,24 +23,24 @@ type RemoteAuthStatus struct {
 	Authenticated bool
 }
 
-// AuthGitRunner Git命令执行器接口 (for auth commands)
+// AuthGitRunner is the interface for running git commands (for auth commands)
 type AuthGitRunner interface {
 	GetRemotes(ctx context.Context) ([]string, error)
 	GetRemoteURL(ctx context.Context, remote string) (string, error)
 }
 
-// AuthProviderDetector Provider检测器接口 (for auth commands)
+// AuthProviderDetector is the interface for detecting providers (for auth commands)
 type AuthProviderDetector interface {
 	DetectFromRemote(ctx context.Context, remoteURL string) (provider.RemoteInfo, error)
 }
 
-// AuthCLIDetector CLI检测器接口 (for auth commands)
+// AuthCLIDetector is the interface for detecting CLI status (for auth commands)
 type AuthCLIDetector interface {
 	DetectCLI(ctx context.Context, provider string) (cli.CLIStatus, error)
 	SuggestInstallCommand(cliName string) []string
 }
 
-// NewAuthStatusCommand 创建auth status命令
+// NewAuthStatusCommand creates the 'auth status' command
 func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetector, cliDetector AuthCLIDetector) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -49,7 +49,7 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 
-			// 获取所有remotes
+			// Get all remotes
 			remotes, err := git.GetRemotes(ctx)
 			if err != nil {
 				return errors.Wrap(errors.ErrTypeGit, "failed to get git remotes", err)
@@ -60,18 +60,18 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 				return nil
 			}
 
-			// 收集每个remote的认证状态
+			// Collect authentication status for each remote
 			var statuses []RemoteAuthStatus
 			installSuggestions := make(map[string][]string)
 
 			for _, remote := range remotes {
-				// 获取remote URL
+				// Get remote URL
 				url, err := git.GetRemoteURL(ctx, remote)
 				if err != nil {
 					continue
 				}
 
-				// 检测provider
+				// Detect provider
 				info, err := providerDetector.DetectFromRemote(ctx, url)
 				if err != nil {
 					continue
@@ -82,7 +82,7 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 					Provider: info.Provider,
 				}
 
-				// 如果是未知provider
+				// If provider is unknown
 				if info.Provider == "unknown" {
 					status.CLI = "-"
 					status.Status = "Provider not supported"
@@ -92,7 +92,7 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 					continue
 				}
 
-				// 检测CLI状态
+				// Detect CLI status
 				cliStatus, err := cliDetector.DetectCLI(ctx, info.Provider)
 				if err != nil {
 					status.CLI = "-"
@@ -109,7 +109,7 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 					status.Status = "✗ Not installed"
 					status.Version = "-"
 					status.Username = "-"
-					// 收集安装建议
+					// Collect install suggestions
 					suggestions := cliDetector.SuggestInstallCommand(cliStatus.Name)
 					if len(suggestions) > 0 {
 						installSuggestions[cliStatus.Name] = suggestions
@@ -129,11 +129,11 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 				statuses = append(statuses, status)
 			}
 
-			// 输出表格
+			// Output table
 			table := formatAuthStatusTable(statuses)
 			fmt.Fprintln(cmd.OutOrStdout(), table)
 
-			// 输出安装建议
+			// Output install suggestions
 			if len(installSuggestions) > 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "\nInstall with:")
 				for cli, suggestions := range installSuggestions {
@@ -151,18 +151,18 @@ func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetect
 	return cmd
 }
 
-// formatAuthStatusTable 格式化认证状态表格
+// formatAuthStatusTable formats the authentication status table
 func formatAuthStatusTable(statuses []RemoteAuthStatus) string {
 	var sb strings.Builder
 
-	// 使用标准库的tabwriter
+	// Use the standard library's tabwriter
 	w := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', tabwriter.Debug)
 
-	// 打印表头
+	// Print table header
 	fmt.Fprintf(w, "Remote\tProvider\tCLI\tStatus\tVersion\tUser\n")
 	fmt.Fprintf(w, "------\t--------\t---\t------\t-------\t----\n")
 
-	// 打印数据行
+	// Print data rows
 	for _, status := range statuses {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			status.Remote,

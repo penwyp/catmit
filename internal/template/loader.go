@@ -11,20 +11,20 @@ import (
 	"github.com/penwyp/catmit/internal/logger"
 )
 
-// 预定义错误
+// Predefined errors
 var (
 	ErrTemplateNotFound = errors.New(
 		errors.ErrTypeConfig,
-		"PR模板未找到",
-	).WithSuggestion("创建模板文件，如 .github/PULL_REQUEST_TEMPLATE.md")
+		"PR template not found",
+	).WithSuggestion("Create a template file, e.g., .github/PULL_REQUEST_TEMPLATE.md")
 
 	ErrTemplateReadError = errors.NewRetryable(
 		errors.ErrTypeConfig,
-		"读取模板文件失败",
+		"Failed to read template file",
 	)
 )
 
-// templatePaths 定义各个provider的模板搜索路径
+// templatePaths defines the template search paths for each provider
 var templatePaths = map[string][]string{
 	"github": {
 		".github/PULL_REQUEST_TEMPLATE.md",
@@ -55,13 +55,13 @@ var templatePaths = map[string][]string{
 	},
 }
 
-// FileLoader 基于文件系统的模板加载器
+// FileLoader loads templates from the file system
 type FileLoader struct {
-	basePath string // 仓库根目录
+	basePath string // repository root directory
 	log      logger.Logger
 }
 
-// NewFileLoader 创建文件加载器
+// NewFileLoader creates a new file loader
 func NewFileLoader(basePath string) *FileLoader {
 	return &FileLoader{
 		basePath: basePath,
@@ -69,18 +69,18 @@ func NewFileLoader(basePath string) *FileLoader {
 	}
 }
 
-// Load 加载指定provider的模板
+// Load loads the template for the specified provider
 func (l *FileLoader) Load(ctx context.Context, provider string) (*Template, error) {
 	l.log.Debugf("Loading template for provider: %s", provider)
 
-	// 获取该provider的搜索路径
+	// Get the search paths for the provider
 	paths, ok := templatePaths[strings.ToLower(provider)]
 	if !ok {
-		// 未知provider，尝试通用路径
+		// Unknown provider, try generic paths
 		paths = templatePaths["github"]
 	}
 
-	// 遍历搜索路径
+	// Iterate over search paths
 	for _, pathPattern := range paths {
 		select {
 		case <-ctx.Done():
@@ -88,7 +88,7 @@ func (l *FileLoader) Load(ctx context.Context, provider string) (*Template, erro
 		default:
 		}
 
-		// 处理通配符路径
+		// Handle wildcard paths
 		if strings.Contains(pathPattern, "*") {
 			templates, err := l.loadGlobTemplates(pathPattern)
 			if err != nil {
@@ -96,11 +96,11 @@ func (l *FileLoader) Load(ctx context.Context, provider string) (*Template, erro
 				continue
 			}
 			if len(templates) > 0 {
-				// 返回第一个找到的模板（可以后续优化为选择default或让用户选择）
+				// Return the first found template (can be optimized later to select default or let user choose)
 				return templates[0], nil
 			}
 		} else {
-			// 单个文件路径
+			// Single file path
 			tmpl, err := l.loadSingleTemplate(pathPattern)
 			if err != nil {
 				l.log.Debugf("Failed to load template from %s: %v", pathPattern, err)
@@ -113,7 +113,7 @@ func (l *FileLoader) Load(ctx context.Context, provider string) (*Template, erro
 	return nil, ErrTemplateNotFound
 }
 
-// ListTemplates 列出所有可用模板
+// ListTemplates lists all available templates
 func (l *FileLoader) ListTemplates(ctx context.Context, provider string) ([]*Template, error) {
 	l.log.Debugf("Listing templates for provider: %s", provider)
 
@@ -146,11 +146,11 @@ func (l *FileLoader) ListTemplates(ctx context.Context, provider string) ([]*Tem
 		}
 	}
 
-	// 去重：基于文件路径去重（考虑大小写不敏感的文件系统）
+	// Deduplicate: deduplicate based on file path (considering case-insensitive file systems)
 	seen := make(map[string]bool)
 	var uniqueTemplates []*Template
 	for _, tmpl := range allTemplates {
-		// 将路径转换为小写以处理大小写不敏感的文件系统
+		// Convert path to lowercase to handle case-insensitive file systems
 		normalizedPath := strings.ToLower(tmpl.Path)
 		if !seen[normalizedPath] {
 			seen[normalizedPath] = true
@@ -161,39 +161,39 @@ func (l *FileLoader) ListTemplates(ctx context.Context, provider string) ([]*Tem
 	return uniqueTemplates, nil
 }
 
-// loadSingleTemplate 加载单个模板文件
+// loadSingleTemplate loads a single template file
 func (l *FileLoader) loadSingleTemplate(relativePath string) (*Template, error) {
 	fullPath := filepath.Join(l.basePath, relativePath)
 
-	// 检查文件是否存在
+	// Check if file exists
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		return nil, errors.Wrapf(errors.ErrTypeConfig, "template file not found: %s", err, fullPath)
 	}
 
-	// 读取文件内容
+	// Read file content
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrTypeConfig, "读取模板文件失败", err)
+		return nil, errors.Wrap(errors.ErrTypeConfig, "Failed to read template file", err)
 	}
 
-	// 创建模板对象
+	// Create template object
 	tmpl := &Template{
 		Path:    fullPath,
 		Name:    extractTemplateName(relativePath),
 		Content: string(content),
 	}
 
-	// 根据路径推断provider
+	// Infer provider from path
 	tmpl.Provider = inferProviderFromPath(relativePath)
 
 	return tmpl, nil
 }
 
-// loadGlobTemplates 加载匹配通配符的模板文件
+// loadGlobTemplates loads template files matching a wildcard pattern
 func (l *FileLoader) loadGlobTemplates(pattern string) ([]*Template, error) {
 	fullPattern := filepath.Join(l.basePath, pattern)
 
-	// 获取匹配的文件
+	// Get matching files
 	matches, err := filepath.Glob(fullPattern)
 	if err != nil {
 		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to match template files", err)
@@ -202,13 +202,13 @@ func (l *FileLoader) loadGlobTemplates(pattern string) ([]*Template, error) {
 	var templates []*Template
 
 	for _, match := range matches {
-		// 计算相对路径
+		// Calculate relative path
 		relativePath, err := filepath.Rel(l.basePath, match)
 		if err != nil {
 			continue
 		}
 
-		// 读取文件内容
+		// Read file content
 		content, err := os.ReadFile(match)
 		if err != nil {
 			l.log.Debugf("Failed to read template %s: %v", match, err)
@@ -228,13 +228,13 @@ func (l *FileLoader) loadGlobTemplates(pattern string) ([]*Template, error) {
 	return templates, nil
 }
 
-// extractTemplateName 从文件路径提取模板名称
+// extractTemplateName extracts the template name from the file path
 func extractTemplateName(path string) string {
-	// 获取文件名（不含扩展名）
+	// Get file name (without extension)
 	base := filepath.Base(path)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
-	// 规范化名称
+	// Normalize name
 	name = strings.ReplaceAll(name, "_", " ")
 	name = strings.ReplaceAll(name, "-", " ")
 	// Title case each word
@@ -246,7 +246,7 @@ func extractTemplateName(path string) string {
 	}
 	name = strings.Join(words, " ")
 
-	// 如果是默认模板，返回"Default"
+	// If it's a default template, return "Default"
 	if strings.ToLower(name) == "pull request template" ||
 		strings.ToLower(name) == "merge request template" ||
 		strings.ToLower(name) == "pullrequest template" {
@@ -256,7 +256,7 @@ func extractTemplateName(path string) string {
 	return name
 }
 
-// inferProviderFromPath 从路径推断provider类型
+// inferProviderFromPath infers the provider type from the path
 func inferProviderFromPath(path string) string {
 	path = strings.ToLower(path)
 
@@ -270,26 +270,26 @@ func inferProviderFromPath(path string) string {
 	case strings.Contains(path, ".bitbucket"):
 		return "bitbucket"
 	default:
-		// 根据文件名判断
+		// Infer from file name
 		if strings.Contains(path, "merge_request") {
 			return "gitlab"
 		}
 		if strings.Contains(path, "pullrequest") {
 			return "bitbucket"
 		}
-		// 默认假定为GitHub
+		// Default to GitHub
 		return "github"
 	}
 }
 
-// CachedLoader 带缓存的模板加载器
+// CachedLoader is a template loader with cache
 type CachedLoader struct {
 	loader Loader
 	cache  map[string]*Template
 	log    logger.Logger
 }
 
-// NewCachedLoader 创建带缓存的加载器
+// NewCachedLoader creates a new cached loader
 func NewCachedLoader(loader Loader) *CachedLoader {
 	return &CachedLoader{
 		loader: loader,
@@ -298,33 +298,33 @@ func NewCachedLoader(loader Loader) *CachedLoader {
 	}
 }
 
-// Load 加载模板（优先从缓存）
+// Load loads a template (prefer cache)
 func (c *CachedLoader) Load(ctx context.Context, provider string) (*Template, error) {
-	// 检查缓存
+	// Check cache
 	cacheKey := fmt.Sprintf("default:%s", provider)
 	if tmpl, ok := c.cache[cacheKey]; ok {
 		c.log.Debugf("Loading template from cache for provider: %s", provider)
 		return tmpl, nil
 	}
 
-	// 从底层加载器加载
+	// Load from underlying loader
 	tmpl, err := c.loader.Load(ctx, provider)
 	if err != nil {
 		return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load template from underlying loader", err)
 	}
 
-	// 存入缓存
+	// Store in cache
 	c.cache[cacheKey] = tmpl
 	return tmpl, nil
 }
 
-// ListTemplates 列出所有可用模板
+// ListTemplates lists all available templates
 func (c *CachedLoader) ListTemplates(ctx context.Context, provider string) ([]*Template, error) {
-	// 列表操作不使用缓存，总是获取最新
+	// List operation does not use cache, always fetch latest
 	return c.loader.ListTemplates(ctx, provider)
 }
 
-// ClearCache 清除缓存
+// ClearCache clears the cache
 func (c *CachedLoader) ClearCache() {
 	c.cache = make(map[string]*Template)
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// PRPreviewData 包含PR预览所需的数据
+// PRPreviewData contains the data required for PR preview
 type PRPreviewData struct {
 	Title       string
 	Body        string
@@ -19,12 +19,12 @@ type PRPreviewData struct {
 	HasChanges  bool
 	FileChanges []FileChange
 
-	// 模板相关
-	UsingTemplate bool   // 是否使用了模板
-	TemplateName  string // 模板名称
+	// Template related
+	UsingTemplate bool   // Whether a template is used
+	TemplateName  string // Template name
 }
 
-// FileChange 表示文件变更信息
+// FileChange represents file change information
 type FileChange struct {
 	Path       string
 	Additions  int
@@ -32,7 +32,7 @@ type FileChange struct {
 	ChangeType string // "added", "modified", "deleted"
 }
 
-// PRPreviewModel PR预览组件
+// PRPreviewModel is the PR preview component
 type PRPreviewModel struct {
 	data        PRPreviewData
 	styles      UIStyles
@@ -40,7 +40,7 @@ type PRPreviewModel struct {
 	width       int
 }
 
-// NewPRPreviewModel 创建新的PR预览模型
+// NewPRPreviewModel creates a new PR preview model
 func NewPRPreviewModel(data PRPreviewData, styles UIStyles, width int) *PRPreviewModel {
 	return &PRPreviewModel{
 		data:        data,
@@ -50,20 +50,20 @@ func NewPRPreviewModel(data PRPreviewData, styles UIStyles, width int) *PRPrevie
 	}
 }
 
-// ToggleDetails 切换详细信息显示
+// ToggleDetails toggles the display of detailed information
 func (m *PRPreviewModel) ToggleDetails() {
 	m.showDetails = !m.showDetails
 }
 
-// View 渲染PR预览界面
+// View renders the PR preview interface
 func (m *PRPreviewModel) View() string {
 	var content strings.Builder
 
-	// PR标题部分
+	// PR title section
 	titleStyle := m.styles.Title
 	content.WriteString(titleStyle.Render("Pull Request Preview") + "\n\n")
 
-	// 基本信息
+	// Basic information
 	infoStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Gray)
 	content.WriteString(m.renderInfoLine("Provider", m.data.Provider, infoStyle))
 	content.WriteString(m.renderInfoLine("Remote", m.data.Remote, infoStyle))
@@ -75,7 +75,7 @@ func (m *PRPreviewModel) View() string {
 		content.WriteString(m.renderInfoLine("Status", "Draft", draftStyle))
 	}
 
-	// 显示是否使用了模板
+	// Show if a template is used
 	if m.data.UsingTemplate {
 		templateStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Blue)
 		templateName := m.data.TemplateName
@@ -87,11 +87,11 @@ func (m *PRPreviewModel) View() string {
 
 	content.WriteString("\n")
 
-	// PR标题
+	// PR title
 	content.WriteString(m.styles.CommitType.Render("Title: "))
 	content.WriteString(m.styles.CommitDesc.Render(m.data.Title) + "\n\n")
 
-	// PR内容预览
+	// PR body preview
 	if m.data.Body != "" {
 		content.WriteString(m.styles.CommitType.Render("Description:") + "\n")
 		bodyLines := strings.Split(m.data.Body, "\n")
@@ -112,12 +112,12 @@ func (m *PRPreviewModel) View() string {
 		content.WriteString("\n")
 	}
 
-	// 文件变更摘要
+	// File change summary
 	if len(m.data.FileChanges) > 0 {
 		content.WriteString(m.renderFileChanges())
 	}
 
-	// 操作提示
+	// Operation hints
 	hintStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Gray).Italic(true)
 	if !m.showDetails && m.data.Body != "" && len(strings.Split(m.data.Body, "\n")) > 5 {
 		content.WriteString(hintStyle.Render("[D] Show details") + "  ")
@@ -129,19 +129,19 @@ func (m *PRPreviewModel) View() string {
 	return content.String()
 }
 
-// renderInfoLine 渲染信息行
+// renderInfoLine renders an information line
 func (m *PRPreviewModel) renderInfoLine(label, value string, style lipgloss.Style) string {
 	labelStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Gray).Width(10)
 	return labelStyle.Render(label+":") + " " + style.Render(value) + "\n"
 }
 
-// renderFileChanges 渲染文件变更摘要
+// renderFileChanges renders the file change summary
 func (m *PRPreviewModel) renderFileChanges() string {
 	var content strings.Builder
 
 	content.WriteString(m.styles.CommitType.Render("Changes:") + "\n")
 
-	// 统计变更
+	// Count changes
 	totalAdditions := 0
 	totalDeletions := 0
 	for _, fc := range m.data.FileChanges {
@@ -149,7 +149,7 @@ func (m *PRPreviewModel) renderFileChanges() string {
 		totalDeletions += fc.Deletions
 	}
 
-	// 显示摘要
+	// Show summary
 	summaryStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Gray)
 	addStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Green)
 	delStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Red)
@@ -161,7 +161,7 @@ func (m *PRPreviewModel) renderFileChanges() string {
 	content.WriteString(delStyle.Render(fmt.Sprintf("-%d", totalDeletions)))
 	content.WriteString("\n")
 
-	// 显示前几个文件
+	// Show first few files
 	maxFiles := 3
 	if m.showDetails {
 		maxFiles = len(m.data.FileChanges)
@@ -175,13 +175,13 @@ func (m *PRPreviewModel) renderFileChanges() string {
 			break
 		}
 
-		// 文件图标
+		// File icon
 		icon := m.getChangeIcon(fc.ChangeType)
 		iconStyle := m.getChangeStyle(fc.ChangeType)
 
-		// 文件路径（截断过长路径）
+		// File path (truncate long paths)
 		path := fc.Path
-		maxPathLen := m.width - 20 // 留出空间给变更统计
+		maxPathLen := m.width - 20 // Reserve space for change stats
 		if len(path) > maxPathLen {
 			path = "..." + path[len(path)-maxPathLen+3:]
 		}
@@ -191,7 +191,7 @@ func (m *PRPreviewModel) renderFileChanges() string {
 		content.WriteString(" ")
 		content.WriteString(path)
 
-		// 变更统计
+		// Change stats
 		if fc.Additions > 0 || fc.Deletions > 0 {
 			content.WriteString(" ")
 			if fc.Additions > 0 {
@@ -211,7 +211,7 @@ func (m *PRPreviewModel) renderFileChanges() string {
 	return content.String()
 }
 
-// getChangeIcon 获取变更类型图标
+// getChangeIcon gets the icon for the change type
 func (m *PRPreviewModel) getChangeIcon(changeType string) string {
 	switch changeType {
 	case "added":
@@ -225,7 +225,7 @@ func (m *PRPreviewModel) getChangeIcon(changeType string) string {
 	}
 }
 
-// getChangeStyle 获取变更类型样式
+// getChangeStyle gets the style for the change type
 func (m *PRPreviewModel) getChangeStyle(changeType string) lipgloss.Style {
 	switch changeType {
 	case "added":

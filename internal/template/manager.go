@@ -10,7 +10,7 @@ import (
 	"github.com/penwyp/catmit/internal/provider"
 )
 
-// DefaultManager 默认的模板管理器实现
+// DefaultManager is the default implementation of the template manager
 type DefaultManager struct {
 	loader    Loader
 	parser    Parser
@@ -18,7 +18,7 @@ type DefaultManager struct {
 	log       logger.Logger
 }
 
-// NewDefaultManager 创建默认管理器
+// NewDefaultManager creates a new default manager
 func NewDefaultManager(basePath string) *DefaultManager {
 	fileLoader := NewFileLoader(basePath)
 	cachedLoader := NewCachedLoader(fileLoader)
@@ -31,14 +31,14 @@ func NewDefaultManager(basePath string) *DefaultManager {
 	}
 }
 
-// LoadTemplate 根据provider信息加载模板
+// LoadTemplate loads a template based on provider info
 func (m *DefaultManager) LoadTemplate(ctx context.Context, info *provider.RemoteInfo) (*Template, error) {
 	m.log.Debugf("Loading template for provider: %s", info.Provider)
 
-	// 加载原始模板
+	// Load the raw template
 	tmpl, err := m.loader.Load(ctx, info.Provider)
 	if err != nil {
-		// 如果是模板未找到错误，尝试通用模板
+		// If template not found, try the generic template
 		if errors.Is(err, ErrTemplateNotFound) && info.Provider != "github" {
 			m.log.Debugf("Provider-specific template not found, trying generic template")
 			tmpl, err = m.loader.Load(ctx, "github")
@@ -49,13 +49,13 @@ func (m *DefaultManager) LoadTemplate(ctx context.Context, info *provider.Remote
 		}
 	}
 
-	// 解析模板结构
+	// Parse the template structure
 	parsed, err := m.parser.Parse(tmpl.Content)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrTypeValidation, "模板解析失败", err)
+		return nil, errors.Wrap(errors.ErrTypeValidation, "template parsing failed", err)
 	}
 
-	// 合并解析结果
+	// Merge parsing results
 	tmpl.Sections = parsed.Sections
 	tmpl.Variables = parsed.Variables
 	tmpl.Provider = info.Provider
@@ -63,11 +63,11 @@ func (m *DefaultManager) LoadTemplate(ctx context.Context, info *provider.Remote
 	return tmpl, nil
 }
 
-// ProcessTemplate 处理模板，填充变量
+// ProcessTemplate processes the template and fills in variables
 func (m *DefaultManager) ProcessTemplate(ctx context.Context, tmpl *Template, data *TemplateData) (string, error) {
 	m.log.Debugf("Processing template with data")
 
-	// 处理模板
+	// Process the template
 	result, err := m.processor.Process(tmpl, data)
 	if err != nil {
 		return "", err
@@ -76,28 +76,28 @@ func (m *DefaultManager) ProcessTemplate(ctx context.Context, tmpl *Template, da
 	return result, nil
 }
 
-// ConfigurableManager 可配置的模板管理器
+// ConfigurableManager is a configurable template manager
 type ConfigurableManager struct {
 	*DefaultManager
 	config *ManagerConfig
 }
 
-// ManagerConfig 管理器配置
+// ManagerConfig is the configuration for the manager
 type ManagerConfig struct {
-	// TemplateDirs 额外的模板搜索目录
+	// TemplateDirs are additional template search directories
 	TemplateDirs []string
 
-	// DefaultProvider 默认的provider类型
+	// DefaultProvider is the default provider type
 	DefaultProvider string
 
-	// StrictMode 严格模式，必填字段缺失时报错
+	// StrictMode, if true, will error on missing required fields
 	StrictMode bool
 
-	// CustomFunctions 自定义模板函数
+	// CustomFunctions are custom template functions
 	CustomFunctions map[string]interface{}
 }
 
-// NewConfigurableManager 创建可配置的管理器
+// NewConfigurableManager creates a configurable manager
 func NewConfigurableManager(basePath string, config *ManagerConfig) *ConfigurableManager {
 	if config == nil {
 		config = &ManagerConfig{
@@ -112,14 +112,14 @@ func NewConfigurableManager(basePath string, config *ManagerConfig) *Configurabl
 	}
 }
 
-// LoadTemplate 加载模板（支持自定义目录）
+// LoadTemplate loads a template (supports custom directories)
 func (m *ConfigurableManager) LoadTemplate(ctx context.Context, info *provider.RemoteInfo) (*Template, error) {
-	// 首先尝试从自定义目录加载
+	// First, try to load from custom directories
 	for _, dir := range m.config.TemplateDirs {
 		loader := NewFileLoader(dir)
 		tmpl, err := loader.Load(ctx, info.Provider)
 		if err == nil {
-			// 解析模板
+			// Parse the template
 			parsed, err := m.parser.Parse(tmpl.Content)
 			if err != nil {
 				continue
@@ -131,15 +131,15 @@ func (m *ConfigurableManager) LoadTemplate(ctx context.Context, info *provider.R
 		}
 	}
 
-	// 使用默认加载逻辑
+	// Use the default loading logic
 	return m.DefaultManager.LoadTemplate(ctx, info)
 }
 
 // Helper functions
 
-// FindRepositoryRoot 查找仓库根目录
+// FindRepositoryRoot finds the repository root directory
 func FindRepositoryRoot() (string, error) {
-	// 从当前目录开始向上查找.git目录
+	// Start from the current directory and look upwards for a .git directory
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -153,7 +153,7 @@ func FindRepositoryRoot() (string, error) {
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			// 已到达文件系统根目录
+			// Reached the root of the filesystem
 			break
 		}
 		dir = parent
@@ -162,7 +162,7 @@ func FindRepositoryRoot() (string, error) {
 	return "", errors.New(errors.ErrTypeGit, "not in a git repository")
 }
 
-// CreateTemplateData 从各种源创建模板数据
+// CreateTemplateData creates template data from various sources
 func CreateTemplateData(commitMsg string, branch string, changedFiles []string) *TemplateData {
 	data := &TemplateData{
 		CommitMessage: commitMsg,
@@ -172,7 +172,7 @@ func CreateTemplateData(commitMsg string, branch string, changedFiles []string) 
 		FileStats:     make(map[string]*FileStat),
 	}
 
-	// 初始化文件统计
+	// Initialize file statistics
 	for _, file := range changedFiles {
 		data.FileStats[file] = &FileStat{
 			Path: file,
@@ -182,15 +182,15 @@ func CreateTemplateData(commitMsg string, branch string, changedFiles []string) 
 	return data
 }
 
-// EnrichTemplateData 丰富模板数据
+// EnrichTemplateData enriches template data with additional information
 func EnrichTemplateData(data *TemplateData, info *provider.RemoteInfo) {
 	if info != nil {
 		data.RepoOwner = info.Owner
 		data.RepoName = info.Repo
-		data.Remote = "origin" // 默认值，可以从其他地方获取
+		data.Remote = "origin" // Default value, can be obtained elsewhere
 	}
 
-	// 设置默认的基础分支
+	// Set the default base branch if not set
 	if data.BaseBranch == "" {
 		data.BaseBranch = "main"
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ---------------- Mock 实现 ----------------
+// ---------------- Mock Implementation ----------------
 
 type mockCollector struct {
 	diff    string
@@ -123,7 +123,7 @@ func (r *recordCommitter) NeedsPush(ctx context.Context) (bool, error) { return 
 // ------------------------------------------------
 
 func TestRoot_DryRun(t *testing.T) {
-	// 注入 mock 依赖
+	// Inject mock dependencies
 	flagDryRun = false
 	collectorProvider = func() collectorInterface { return mockCollector{diff: "diff", commits: []string{"feat: a"}} }
 	promptProvider = func(lang string) promptInterface { return mockPrompt{} }

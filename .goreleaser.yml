@@ -30,7 +30,7 @@ brews:
       name: homebrew-catmit
     commit_author:
       name: penwyp bot
-      email: bot@example.com
+      email: wu.pen1120@gmail.com
     directory: Formula
     homepage: "https://github.com/penwyp/catmit"
     description: "AI powered commit message generator"

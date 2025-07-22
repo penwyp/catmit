@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCommandBuilder_BuildGitLabMRCommand 测试GitLab MR命令构建
+// TestCommandBuilder_BuildGitLabMRCommand tests GitLab MR command construction
 func TestCommandBuilder_BuildGitLabMRCommand(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -137,7 +137,7 @@ func TestCommandBuilder_BuildGitLabMRCommand(t *testing.T) {
 	}
 }
 
-// TestCommandBuilder_ParseGitLabMROutput 测试解析GitLab MR输出
+// TestCommandBuilder_ParseGitLabMROutput tests parsing of GitLab MR output
 func TestCommandBuilder_ParseGitLabMROutput(t *testing.T) {
 	tests := []struct {
 		name          string

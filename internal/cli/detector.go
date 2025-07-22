@@ -9,12 +9,12 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
-// Detector CLI工具检测器
+// Detector CLI tool detector
 type Detector struct {
 	runner CommandRunner
 }
 
-// NewDetector 创建新的CLI检测器
+// NewDetector creates a new CLI detector
 func NewDetector(runner CommandRunner) *Detector {
 	if runner == nil {
 		runner = &DefaultCommandRunner{}
@@ -22,7 +22,7 @@ func NewDetector(runner CommandRunner) *Detector {
 	return &Detector{runner: runner}
 }
 
-// DefaultCommandRunner 默认命令执行器
+// DefaultCommandRunner default command runner
 type DefaultCommandRunner struct{}
 
 func (r *DefaultCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -30,7 +30,7 @@ func (r *DefaultCommandRunner) Run(ctx context.Context, name string, args ...str
 	return cmd.CombinedOutput()
 }
 
-// CheckInstalled 检查CLI工具是否已安装
+// CheckInstalled checks if the CLI tool is installed
 func (d *Detector) CheckInstalled(ctx context.Context, cliName, checkCommand string) (bool, error) {
 	var err error
 	// Special handling for tea which uses --version as a flag
@@ -40,18 +40,18 @@ func (d *Detector) CheckInstalled(ctx context.Context, cliName, checkCommand str
 		_, err = d.runner.Run(ctx, cliName, checkCommand)
 	}
 	if err != nil {
-		// 如果命令不存在，通常会包含 "command not found" 或 "not found"
+		// If the command does not exist, it usually contains "command not found" or "not found"
 		errStr := err.Error()
 		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "command not found") {
 			return false, nil
 		}
-		// 命令存在但执行失败（如未认证）
+		// The command exists but fails to execute (e.g., not authenticated)
 		return true, nil
 	}
 	return true, nil
 }
 
-// GetVersion 获取CLI工具版本
+// GetVersion gets the CLI tool version
 func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand string, args ...string) (string, error) {
 	var output []byte
 	var err error
@@ -67,7 +67,7 @@ func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand strin
 		return "", errors.Wrap(errors.ErrTypeExternal, "failed to get version", err)
 	}
 
-	// 提取版本号的正则表达式
+	// Regular expression to extract version numbers
 	versionPatterns := []*regexp.Regexp{
 		regexp.MustCompile(`version\s+v?(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
 		regexp.MustCompile(`(\d+\.\d+\.\d+(?:-[^\s]+)?(?:\+[^\s]+)?)`),
@@ -87,67 +87,67 @@ func (d *Detector) GetVersion(ctx context.Context, cliName, versionCommand strin
 	return "", errors.New(errors.ErrTypeValidation, "version not found in output")
 }
 
-// CheckAuthStatus 检查认证状态
+// CheckAuthStatus checks the authentication status
 func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand string, args ...string) (bool, string, error) {
 	cmdArgs := append([]string{authCommand}, args...)
 	output, err := d.runner.Run(ctx, cliName, cmdArgs...)
 
 	outputStr := string(output)
 
-	// GitHub CLI 认证检查
+	// GitHub CLI authentication check
 	if cliName == "gh" {
 		if err != nil && strings.Contains(outputStr, "not logged") {
 			return false, "", nil
 		}
-		// 新的输出格式: "✓ Logged in to github.com account username (keyring)"
+		// New output format: "✓ Logged in to github.com account username (keyring)"
 		userPattern := regexp.MustCompile(`Logged in to .+ account (\w+)`)
 		matches := userPattern.FindStringSubmatch(outputStr)
 		if len(matches) > 1 {
 			return true, matches[1], nil
 		}
-		// 旧的输出格式: "Logged in to github.com as username"
+		// Old output format: "Logged in to github.com as username"
 		userPattern2 := regexp.MustCompile(`Logged in to .+ as (\w+)`)
 		matches2 := userPattern2.FindStringSubmatch(outputStr)
 		if len(matches2) > 1 {
 			return true, matches2[1], nil
 		}
-		// 如果找到 "✓ Logged in" 但没有匹配到用户名，仍然认为已认证
+		// If "✓ Logged in" is found but no username is matched, still consider it authenticated
 		if strings.Contains(outputStr, "✓") && strings.Contains(outputStr, "Logged in") {
 			return true, "", nil
 		}
 	}
 
-	// tea CLI 认证检查
+	// tea CLI authentication check
 	if cliName == "tea" {
 		if err != nil && strings.Contains(outputStr, "No logins") {
 			return false, "", nil
 		}
-		// 解析tea的表格输出 (支持旧的|分隔符和新的Unicode box drawing)
+		// Parse tea's table output (supports old | separator and new Unicode box drawing)
 		lines := strings.Split(outputStr, "\n")
 		for _, line := range lines {
-			// 跳过表头和分隔线
+			// Skip header and separator lines
 			if strings.Contains(line, "NAME") || strings.Contains(line, "──") || strings.Contains(line, "┌") || strings.Contains(line, "└") {
 				continue
 			}
-			// 检查包含实际数据的行
+			// Check lines containing actual data
 			if strings.Contains(line, "│") || strings.Contains(line, "|") {
-				// 统一处理不同的分隔符
+				// Handle different separators uniformly
 				normalizedLine := strings.ReplaceAll(line, "│", "|")
 				parts := strings.Split(normalizedLine, "|")
 
-				// 检查是否是表头行
+				// Check if it's a header line
 				if strings.Contains(line, "USER") || strings.Contains(line, "#") {
 					continue
 				}
 
-				// 旧格式: | # | URL | USER | ACTIVE |
-				// 新格式: │ NAME │ URL │ SSH HOST │ USER │ DEFAULT │
+				// Old format: | # | URL | USER | ACTIVE |
+				// New format: │ NAME │ URL │ SSH HOST │ USER │ DEFAULT │
 				if len(parts) >= 5 {
-					// 查找USER列的位置
+					// Find the position of the USER column
 					userIndex := -1
-					if strings.Contains(outputStr, "SSH HOST") { // 新格式
+					if strings.Contains(outputStr, "SSH HOST") { // New format
 						userIndex = 4 // parts[0]空, parts[1]NAME, parts[2]URL, parts[3]SSH HOST, parts[4]USER
-					} else if strings.Contains(outputStr, "ACTIVE") { // 旧格式
+					} else if strings.Contains(outputStr, "ACTIVE") { // Old format
 						userIndex = 3 // parts[0]空, parts[1]#, parts[2]URL, parts[3]USER, parts[4]ACTIVE
 					}
 
@@ -162,7 +162,7 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 		}
 	}
 
-	// glab CLI 认证检查
+	// glab CLI authentication check
 	if cliName == "glab" {
 		if err != nil && strings.Contains(outputStr, "No accounts configured") {
 			return false, "", nil
@@ -194,9 +194,9 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 	return false, "", nil
 }
 
-// DetectCLI 综合检测CLI工具状态
+// DetectCLI comprehensive CLI detection functionality
 func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, error) {
-	// 根据provider确定CLI工具
+	// Determine the CLI tool based on the provider
 	cliConfig := map[string]struct {
 		name       string
 		versionCmd string
@@ -232,7 +232,7 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 		Name: config.name,
 	}
 
-	// 检查是否安装
+	// Check if installed
 	installed, err := d.CheckInstalled(ctx, config.name, config.versionCmd)
 	if err != nil {
 		return status, err
@@ -243,13 +243,13 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 		return status, nil
 	}
 
-	// 获取版本
+	// Get version
 	version, err := d.GetVersion(ctx, config.name, config.versionCmd)
 	if err == nil {
 		status.Version = version
 	}
 
-	// 检查认证状态
+	// Check authentication status
 	authenticated, username, err := d.CheckAuthStatus(ctx, config.name, config.authCmd, config.authArgs...)
 	if err == nil {
 		status.Authenticated = authenticated
@@ -259,7 +259,7 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 	return status, nil
 }
 
-// SuggestInstallCommand 建议安装命令
+// SuggestInstallCommand suggests installation commands
 func (d *Detector) SuggestInstallCommand(cliName string) []string {
 	installCommands := map[string][]string{
 		"gh": {
@@ -278,7 +278,7 @@ func (d *Detector) SuggestInstallCommand(cliName string) []string {
 	return []string{}
 }
 
-// CheckMinVersion 检查当前版本是否满足最低版本要求
+// CheckMinVersion checks if the current version meets the minimum version requirement
 func (d *Detector) CheckMinVersion(current, minimum string) (bool, error) {
 	return CheckMinVersion(current, minimum)
 }

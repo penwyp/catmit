@@ -8,9 +8,10 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
+// Regular expression for semantic versioning
 var versionRegex = regexp.MustCompile(`^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([^+]+))?(?:\+(.+))?$`)
 
-// ParseVersion 解析语义化版本字符串
+// ParseVersion parses a semantic version string
 func ParseVersion(versionStr string) (Version, error) {
 	if versionStr == "" {
 		return Version{}, errors.New(errors.ErrTypeValidation, "empty version string")
@@ -61,18 +62,18 @@ func ParseVersion(versionStr string) (Version, error) {
 	return v, nil
 }
 
-// CompareVersions 比较两个版本字符串
-// 返回: -1 (v1 < v2), 0 (v1 == v2), 1 (v1 > v2)
+// CompareVersions compares two version strings
+// Returns: -1 (v1 < v2), 0 (v1 == v2), 1 (v1 > v2)
 func CompareVersions(v1Str, v2Str string) int {
 	v1, err1 := ParseVersion(v1Str)
 	v2, err2 := ParseVersion(v2Str)
 
-	// 如果解析失败，简单字符串比较
+	// If parsing fails, fall back to simple string comparison
 	if err1 != nil || err2 != nil {
 		return strings.Compare(v1Str, v2Str)
 	}
 
-	// 比较主版本号
+	// Compare major version
 	if v1.Major != v2.Major {
 		if v1.Major > v2.Major {
 			return 1
@@ -80,7 +81,7 @@ func CompareVersions(v1Str, v2Str string) int {
 		return -1
 	}
 
-	// 比较次版本号
+	// Compare minor version
 	if v1.Minor != v2.Minor {
 		if v1.Minor > v2.Minor {
 			return 1
@@ -88,7 +89,7 @@ func CompareVersions(v1Str, v2Str string) int {
 		return -1
 	}
 
-	// 比较修订版本号
+	// Compare patch version
 	if v1.Patch != v2.Patch {
 		if v1.Patch > v2.Patch {
 			return 1
@@ -96,8 +97,8 @@ func CompareVersions(v1Str, v2Str string) int {
 		return -1
 	}
 
-	// 比较预发布版本
-	// 没有预发布版本的版本高于有预发布版本的
+	// Compare pre-release version
+	// A version without pre-release is considered higher than one with pre-release
 	if v1.PreRelease == "" && v2.PreRelease != "" {
 		return 1
 	}
@@ -105,7 +106,7 @@ func CompareVersions(v1Str, v2Str string) int {
 		return -1
 	}
 
-	// 如果都有预发布版本，进行字符串比较
+	// If both have pre-release, compare them
 	if v1.PreRelease != "" && v2.PreRelease != "" {
 		result := comparePreRelease(v1.PreRelease, v2.PreRelease)
 		if result != 0 {
@@ -113,24 +114,24 @@ func CompareVersions(v1Str, v2Str string) int {
 		}
 	}
 
-	// 构建元数据不影响版本比较
+	// Build metadata does not affect version comparison
 	return 0
 }
 
-// comparePreRelease 比较预发布版本
+// comparePreRelease compares pre-release versions
 func comparePreRelease(pre1, pre2 string) int {
-	// 简化的预发布版本比较
-	// 实际semver规范更复杂，这里做简化处理
+	// Simplified pre-release comparison
+	// Actual semver spec is more complex; this is a simplified approach
 	parts1 := strings.Split(pre1, ".")
 	parts2 := strings.Split(pre2, ".")
 
 	for i := 0; i < len(parts1) && i < len(parts2); i++ {
-		// 尝试数字比较
+		// Try numeric comparison
 		num1, err1 := strconv.Atoi(parts1[i])
 		num2, err2 := strconv.Atoi(parts2[i])
 
 		if err1 == nil && err2 == nil {
-			// 都是数字
+			// Both are numbers
 			if num1 != num2 {
 				if num1 > num2 {
 					return 1
@@ -138,7 +139,7 @@ func comparePreRelease(pre1, pre2 string) int {
 				return -1
 			}
 		} else {
-			// 字符串比较
+			// String comparison
 			cmp := strings.Compare(parts1[i], parts2[i])
 			if cmp != 0 {
 				return cmp
@@ -146,7 +147,7 @@ func comparePreRelease(pre1, pre2 string) int {
 		}
 	}
 
-	// 更多部分的版本号更高
+	// More segments means higher pre-release version
 	if len(parts1) > len(parts2) {
 		return 1
 	}
@@ -157,9 +158,9 @@ func comparePreRelease(pre1, pre2 string) int {
 	return 0
 }
 
-// CheckMinVersion 检查当前版本是否满足最低版本要求
+// CheckMinVersion checks if the current version meets the minimum required version
 func CheckMinVersion(current, minimum string) (bool, error) {
-	// 解析版本以验证格式
+	// Parse versions to validate format
 	_, err := ParseVersion(current)
 	if err != nil {
 		return false, errors.Wrap(errors.ErrTypeValidation, "invalid current version", err)
@@ -170,7 +171,7 @@ func CheckMinVersion(current, minimum string) (bool, error) {
 		return false, errors.Wrap(errors.ErrTypeValidation, "invalid minimum version", err)
 	}
 
-	// 使用比较函数
+	// Use comparison function
 	result := CompareVersions(current, minimum)
 	return result >= 0, nil
 }

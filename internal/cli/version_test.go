@@ -13,7 +13,7 @@ func TestCompareVersions(t *testing.T) {
 		version2 string
 		expected int // -1: v1 < v2, 0: v1 == v2, 1: v1 > v2
 	}{
-		// 标准版本比较
+		// Standard version comparison
 		{
 			name:     "Equal versions",
 			version1: "2.0.0",
@@ -44,7 +44,7 @@ func TestCompareVersions(t *testing.T) {
 			version2: "2.0.0",
 			expected: -1,
 		},
-		// 预发布版本
+		// Pre-release versions
 		{
 			name:     "Pre-release vs stable",
 			version1: "2.0.0-beta.1",
@@ -63,7 +63,7 @@ func TestCompareVersions(t *testing.T) {
 			version2: "2.0.0-beta.1",
 			expected: -1,
 		},
-		// 构建元数据
+		// Build metadata
 		{
 			name:     "Build metadata ignored",
 			version1: "2.0.0+build123",
@@ -76,7 +76,7 @@ func TestCompareVersions(t *testing.T) {
 			version2: "2.0.0-beta.1+build456",
 			expected: 0,
 		},
-		// 带v前缀
+		// With v prefix
 		{
 			name:     "With v prefix",
 			version1: "v2.0.0",
@@ -89,7 +89,7 @@ func TestCompareVersions(t *testing.T) {
 			version2: "2.0.0",
 			expected: 0,
 		},
-		// 边界情况
+		// Edge cases
 		{
 			name:     "Missing patch version",
 			version1: "2.0",

@@ -14,11 +14,11 @@ const (
 	ExitCodeTimeout             = 124 // Standard timeout exit code
 )
 
-// PRError 包含PR操作的错误信息
+// PRError contains PR operation error information
 type PRError struct {
-	Message     string // 用户友好的错误消息
-	Details     string // 详细的错误信息（可选）
-	Suggestion  string // 建议的解决方案
-	ExitCode    int    // 退出码
-	IsRetryable bool   // 是否可以重试
+	Message     string // User-friendly error message
+	Details     string // Detailed error information (optional)
+	Suggestion  string // Suggested solution
+	ExitCode    int    // Exit code
+	IsRetryable bool   // Whether it can be retried
 }

@@ -4,21 +4,24 @@ GOBIN?=$(shell go env GOPATH)/bin
 
 .PHONY: build test lint e2e release clean install
 
-# build: 编译二进制到 bin 目录
+# build: Build binary to bin directory
 build:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(BINARY) ./
 
+# test: Run all unit tests
 test:
 	go test ./...
 
+# lint: Run golangci-lint
 lint:
 	golangci-lint run
 
+# e2e: Run end-to-end tests
 e2e:
 	go test ./test/e2e
 
-# release: 发布指定版本 (用法: make release v0.0.1)
+# release: Release a specific version (usage: make release v0.0.1)
 release:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "Usage: make release v0.0.1"; \
@@ -42,11 +45,11 @@ release:
 	git push origin "$$VERSION"; \
 	echo "Version $$VERSION has been tagged and pushed successfully"
 
-# goreleaser-release: 内部使用的 goreleaser 发布命令
+# goreleaser-release: Internal goreleaser release command
 goreleaser-release:
 	goreleaser release --clean --skip-validate --skip-lint
 
-# install: 安装二进制到 GOBIN
+# install: Install binary to GOBIN
 install: build
 	@echo "Installing $(BINARY) to $(GOBIN)/$(BINARY)"
 	@mkdir -p $(GOBIN)
@@ -54,7 +57,7 @@ install: build
 	@chmod +x $(GOBIN)/$(BINARY)
 	@echo "Installation complete. $(BINARY) is now available at $(GOBIN)/$(BINARY)"
 
-# clean: 删除 bin 目录
+# clean: Remove bin directory
 clean:
 	rm -rf $(BIN_DIR)
 
