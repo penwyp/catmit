@@ -39,9 +39,53 @@
 - 🎯 **High Accuracy**: Generates contextually relevant commit messages with >95% quality
 - 🔌 **Multiple Providers**: Supports DeepSeek, OpenAI, Volcengine Ark, and any OpenAI-compatible API
 
-## 🚀 Quick Start
+## 📖 Usage
 
-### Installation
+### Basic Usage
+```bash
+# Interactive mode with TUI
+catmit
+
+# Auto-commit without confirmation
+catmit -y
+
+# Preview message only (dry run)
+catmit --dry-run
+
+# Generate in Chinese
+catmit -l zh
+
+# Set custom timeout (default: 30s)
+catmit -t 60
+
+# Provide seed text for better context (via positional argument)
+catmit "fix user authentication"
+
+# Or use the --seed flag (same effect)
+catmit --seed "fix user authentication"
+```
+
+### Advanced Usage
+```bash
+# Silent mode (no TUI, direct output)
+catmit --dry-run -y
+
+# Combine options
+catmit -y -l zh -t 60
+
+# Test your configuration
+catmit --dry-run
+
+# Get help
+catmit --help
+
+# Check version
+catmit --version
+```
+
+## 🚀 Installation
+
+### Installation Methods
 
 #### Using Homebrew (macOS/Linux)
 ```bash
@@ -62,7 +106,7 @@ Download the latest release from [GitHub Releases](https://github.com/penwyp/cat
 catmit --version
 ```
 
-### Setup
+### Quick Setup
 
 1. **Choose your LLM provider** (see [LLM Provider Configuration](#-llm-provider-configuration) below)
 2. **Set environment variables** for your chosen provider
@@ -237,6 +281,8 @@ catmit --version
 ```
 
 ### 🔀 Squash Commits
+
+#### Basic Squash (Editor Mode)
 ```bash
 # Consolidate multiple commit messages into one (opens editor)
 catmit squash
@@ -249,6 +295,9 @@ catmit squash --lang zh
 
 # Custom timeout
 catmit squash --timeout 60
+
+# Use append mode for better console output
+catmit squash --append-mode
 
 # Example workflow:
 $ catmit squash
@@ -264,6 +313,31 @@ feat: implement complete authentication system
 
 ✓ Copied to clipboard
 ```
+
+#### Interactive Rebase Mode
+```bash
+# Squash unpushed commits using interactive rebase
+catmit squash --rebase
+catmit squash -r  # shorthand
+
+# Combine with other options
+catmit squash --rebase --no-confirm --lang zh
+
+# Example workflow:
+$ catmit squash --rebase
+# Analyzes unpushed commits
+# Generates consolidated commit message using AI
+# Performs interactive rebase with backup branch creation
+# ✓ Rebase completed successfully
+# Backup branch: backup-feature-branch-20250122-123456
+```
+
+**Rebase Mode Features:**
+- 🔄 **Smart Analysis**: Automatically detects unpushed commits
+- 🧠 **AI-Generated Messages**: Creates meaningful commit messages from multiple commits
+- 🛡️ **Safety First**: Creates backup branches before making changes
+- 🎯 **TUI Interface**: Interactive terminal UI for confirmation and monitoring
+- ⚡ **Base Branch Detection**: Auto-detects main/master as base branch
 
 ### 🚀 Pull Request Creation
 ```bash
@@ -282,8 +356,8 @@ catmit auth status
 
 **Supported PR Platforms:**
 - ✅ GitHub (via `gh` CLI)
-- ✅ GitLab (via `glab` CLI)
-- 🚧 Gitea (coming soon)
+- ✅ GitLab (via `glab` CLI)  
+- ✅ Gitea (via `tea` CLI)
 
 **Requirements:**
 - For GitHub: `gh` CLI must be installed and authenticated
@@ -292,6 +366,9 @@ catmit auth status
 - For GitLab: `glab` CLI must be installed and authenticated
   - Install: `brew install glab` or visit [gitlab.com/gitlab-org/cli](https://gitlab.com/gitlab-org/cli)
   - Authenticate: `glab auth login`
+- For Gitea: `tea` CLI must be installed and authenticated
+  - Install: `brew install tea` or visit [gitea.com/gitea/tea](https://gitea.com/gitea/tea)
+  - Authenticate: `tea login add`
 
 ### 📝 PR Template Support
 
