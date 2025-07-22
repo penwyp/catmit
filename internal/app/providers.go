@@ -66,6 +66,32 @@ func defaultPRCreatorProvider(debug bool, logger *zap.Logger) *pr.Creator {
 	return prCreator
 }
 
+// enhancedPRCreatorProvider returns the enhanced PR creator with LLM support
+func enhancedPRCreatorProvider(debug bool, logger *zap.Logger, llmClient pr.LLMInterface) *pr.EnhancedCreator {
+	gitRunner := &GitRunnerAdapter{runner: git.NewRunnerWithLogger(debug, logger), debug: debug, logger: logger}
+	providerDetector := newDefaultProviderDetector()
+	cliDetector := &DefaultCLIDetector{}
+
+	commandBuilder := pr.NewCommandBuilder()
+	commandRunner := &DefaultCommandRunner{debug: debug, logger: logger}
+
+	enhancedCreator := pr.NewEnhancedCreator(
+		gitRunner,
+		providerDetector,
+		cliDetector,
+		commandBuilder,
+		commandRunner,
+		llmClient,
+	)
+
+	// Set logger for PR creator
+	if logger != nil {
+		enhancedCreator.WithLogger(logger)
+	}
+
+	return enhancedCreator
+}
+
 // GitRunnerAdapter adapts internal/git.Runner to collector.Runner interface
 // Exported for testing
 type GitRunnerAdapter struct {
@@ -81,7 +107,7 @@ func (a *GitRunnerAdapter) Run(ctx context.Context, name string, args ...string)
 
 // defaultCommitter implements git.Committer interface
 type defaultCommitter struct {
-	prCreator  *pr.Creator
+	prCreator  pr.CreatorInterface
 	ctx        context.Context
 	message    string
 	debug      bool
@@ -125,6 +151,21 @@ func newDefaultCommitter(debug bool, logger *zap.Logger, prEnabled bool, prRemot
 
 	return &defaultCommitter{
 		prCreator:  prCreator,
+		debug:      debug,
+		prEnabled:  prEnabled,
+		prRemote:   prRemote,
+		prBase:     prBase,
+		prDraft:    prDraft,
+		prTemplate: prTemplate,
+	}
+}
+
+// newEnhancedCommitter creates a new defaultCommitter with enhanced PR support
+func newEnhancedCommitter(debug bool, logger *zap.Logger, prEnabled bool, prRemote string, prBase string, prDraft bool, prTemplate bool, llmClient pr.LLMInterface) *defaultCommitter {
+	enhancedCreator := enhancedPRCreatorProvider(debug, logger, llmClient)
+
+	return &defaultCommitter{
+		prCreator:  enhancedCreator,
 		debug:      debug,
 		prEnabled:  prEnabled,
 		prRemote:   prRemote,
@@ -385,6 +426,16 @@ func (r *DefaultCommandRunner) Run(ctx context.Context, name string, args ...str
 // This is exported for use in auth commands
 func GetDefaultProviderDetector() pr.ProviderDetector {
 	return newDefaultProviderDetector()
+}
+
+// LLMClientAdapter adapts llm.Client to pr.LLMInterface
+type LLMClientAdapter struct {
+	client *llm.Client
+}
+
+// GetCommitMessage implements pr.LLMInterface
+func (a *LLMClientAdapter) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return a.client.GetCommitMessage(ctx, systemPrompt, userPrompt)
 }
 
 // Test helpers for accessing internal components

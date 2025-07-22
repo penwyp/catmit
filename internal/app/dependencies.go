@@ -73,6 +73,16 @@ func (d *Dependencies) GetCommitter() git.Committer {
 func (d *Dependencies) GetCommitterWithPRConfig(prConfig PRConfig) git.Committer {
 	// Use the providers function to create a PR-enabled committer
 	debug := d.Logger != nil && d.Logger.Core().Enabled(zap.DebugLevel)
+	
+	// Check if we have an LLM client available for enhanced PR creation
+	llmClient := d.GetClient()
+	if llmClient != nil && prConfig.UseTemplate {
+		// Use enhanced committer with LLM support
+		llmAdapter := &LLMClientAdapter{client: llmClient}
+		return newEnhancedCommitter(debug, d.Logger, true, prConfig.Remote, prConfig.BaseBranch, prConfig.Draft, prConfig.UseTemplate, llmAdapter)
+	}
+	
+	// Fall back to default committer
 	return newDefaultCommitter(debug, d.Logger, true, prConfig.Remote, prConfig.BaseBranch, prConfig.Draft, prConfig.UseTemplate)
 }
 
