@@ -212,12 +212,29 @@ func runRebaseSquash(ctx context.Context, llmClient squash.ClientInterface, logg
 	// Create git runner
 	runner := git.NewRunnerWithLogger(flagDebug, logger)
 
+	// Create git remote manager for branch detection
+	remoteManager := git.NewRemoteManager(runner)
+
+	// Get default branch name
+	baseBranch := "main" // fallback
+	remotes, err := remoteManager.GetRemotes(ctx)
+	if err == nil {
+		// Select origin remote or first available remote
+		selectedRemote, err := remoteManager.SelectRemote(remotes, "origin")
+		if err == nil {
+			// Try to detect the default branch
+			if detectedBranch, err := remoteManager.GetDefaultBranch(ctx, selectedRemote.Name); err == nil {
+				baseBranch = detectedBranch
+			}
+		}
+	}
+
 	// Create git history manager
 	history := githistory.New(runner)
 
 	// Create rebase workflow config
 	config := rebase.Config{
-		BaseBranch: "main", // TODO: Make this configurable or auto-detect
+		BaseBranch: baseBranch,
 		Language:   squashLang,
 		Logger:     logger,
 	}

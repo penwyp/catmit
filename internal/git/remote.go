@@ -117,3 +117,8 @@ func (m *remoteManager) HasUpstreamBranch(ctx context.Context, branch string) bo
 	_, err := m.runner.Run(ctx, "git", "rev-parse", "--abbrev-ref", branch+"@{upstream}")
 	return err == nil
 }
+
+// GetDefaultBranch detects the default branch name of a remote repository
+func (m *remoteManager) GetDefaultBranch(ctx context.Context, remote string) (string, error) {
+	return GetDefaultBranchWithRunner(ctx, m.runner, remote)
+}

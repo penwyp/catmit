@@ -27,4 +27,7 @@ type RemoteManager interface {
 
 	// HasUpstreamBranch checks if the branch has an upstream branch
 	HasUpstreamBranch(ctx context.Context, branch string) bool
+
+	// GetDefaultBranch detects the default branch name of a remote repository
+	GetDefaultBranch(ctx context.Context, remote string) (string, error)
 }

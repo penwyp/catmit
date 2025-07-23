@@ -19,34 +19,19 @@ func TestGetVersionString(t *testing.T) {
 // TestIsPRRequested tests the PR flag detection
 func TestIsPRRequested(t *testing.T) {
 	tests := []struct {
-		name         string
-		flagPR       bool
-		flagCreatePR bool
-		expected     bool
+		name     string
+		flagPR   bool
+		expected bool
 	}{
 		{
-			name:         "neither flag set",
-			flagPR:       false,
-			flagCreatePR: false,
-			expected:     false,
+			name:     "flag not set",
+			flagPR:   false,
+			expected: false,
 		},
 		{
-			name:         "only flagPR set",
-			flagPR:       true,
-			flagCreatePR: false,
-			expected:     true,
-		},
-		{
-			name:         "only flagCreatePR set",
-			flagPR:       false,
-			flagCreatePR: true,
-			expected:     true,
-		},
-		{
-			name:         "both flags set",
-			flagPR:       true,
-			flagCreatePR: true,
-			expected:     true,
+			name:     "flag set",
+			flagPR:   true,
+			expected: true,
 		},
 	}
 
