@@ -37,23 +37,23 @@ Features:
 }
 
 var (
-	flagLang     string
-	flagTimeout  int
-	flagYes      bool
-	flagDryRun   bool
-	flagDebug    bool
-	flagPush     bool
-	flagStageAll bool
-	flagVersion  bool
-	flagPR       bool   // New PR flag
-	flagSeed     string // Seed text for commit message generation
+	flagLang     string // commit message language (ISO 639-1)
+	flagTimeout  int    // API timeout in seconds
+	flagYes      bool   // skip confirmation and commit immediately
+	flagDryRun   bool   // print message but do not commit
+	flagDebug    bool   // enable debug output for troubleshooting
+	flagPush     bool   // automatically push after successful commit
+	flagStageAll bool   // automatically stage all changes (tracked and untracked) if none are staged
+	flagVersion  bool   // show version information
+	flagPR       bool   // create pull request after successful push
+	flagSeed     string // seed text for commit message generation
 
 	// PR-specific flags
-	flagPRRemote   string
-	flagPRBase     string
-	flagPRDraft    bool
-	flagPRProvider string
-	flagPRTemplate bool // Enable PR template support
+	flagPRRemote   string // remote to use for pull request
+	flagPRBase     string // base branch for pull request (defaults to provider's default branch)
+	flagPRDraft    bool   // create pull request as draft
+	flagPRProvider string // override detected provider (github, gitlab, gitea, bitbucket)
+	flagPRTemplate bool   // use PR template if available
 )
 
 func init() {
@@ -81,9 +81,6 @@ func init() {
 	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
 	rootCmd.Flags().BoolVar(&flagPRTemplate, "pr-template", true, "use PR template if available")
 
-	// Mark create-pr as deprecated
-	_ = rootCmd.Flags().MarkDeprecated("create-pr", "use --pr instead")
-
 	// Add auth subcommand
 	authCmd := &cobra.Command{
 		Use:   "auth",
@@ -110,11 +107,6 @@ func init() {
 }
 
 func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
-
-// isPRRequested returns true if user requested PR creation via either flag
-func isPRRequested() bool {
-	return flagPR
-}
 
 // testDeps is used for dependency injection in tests
 var testDeps *app.Dependencies
@@ -148,7 +140,7 @@ func run(cmd *cobra.Command, args []string) error {
 		DryRun:      flagDryRun,
 		Push:        flagPush,
 		StageAll:    flagStageAll,
-		CreatePR:    isPRRequested(),
+		CreatePR:    flagPR,
 		SeedText:    seedText,
 		PRConfig: app.PRConfig{
 			Remote:      flagPRRemote,
@@ -186,7 +178,11 @@ func run(cmd *cobra.Command, args []string) error {
 			errors.HandleFatal(err)
 		}
 		if errors.Is(err, gitinfo.ErrNoDiff) {
-			// This is handled inside workflow, but just in case
+			// Display the error message but exit with code 0 since it's not really an error
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			handler := errors.NewHandler(false)
+			_ = handler.Handle(err)
 			return nil
 		}
 

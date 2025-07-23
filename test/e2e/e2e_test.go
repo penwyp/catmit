@@ -197,7 +197,7 @@ func TestE2E_NothingToCommit(t *testing.T) {
 
 		err := cmd.Run()
 		require.NoError(t, err, out.String())
-		require.Contains(t, out.String(), "Nothing to commit")
+		require.Contains(t, out.String(), "nothing to commit")
 	})
 
 	// Test with --dry-run flag
@@ -211,6 +211,6 @@ func TestE2E_NothingToCommit(t *testing.T) {
 
 		err := cmd.Run()
 		require.NoError(t, err, out.String())
-		require.Contains(t, out.String(), "Nothing to commit")
+		require.Contains(t, out.String(), "nothing to commit")
 	})
 }

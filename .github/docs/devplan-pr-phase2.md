@@ -35,7 +35,7 @@ Phase 2 将聚焦于**完善自动检测、优化用户体验、扩展功能集�
 - [ ] 实现配置热加载
 
 ### 3. CLI 参数对齐（优化）
-- [ ] 将 `--create-pr` 改为 `-c/--pr`
+- [ ] 将 `--pr` 改为 `-c/--pr`
 - [ ] 新增 `--pr-remote`、`--pr-base`、`--pr-draft`、`--pr-provider` 参数
 - [ ] 实现参数依赖关系验证
 - [ ] 保持向后兼容性
@@ -418,7 +418,7 @@ func (m PRPreviewModel) View() string {
 从 Phase 1 继承的技术债务：
 
 1. **命令结构不一致**
-   - 当前：`--create-pr` 作为布尔标志
+   - 当前：`--pr` 作为布尔标志
    - 目标：`--pr` 带子选项
 
 2. **Provider 检测硬编码**

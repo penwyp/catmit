@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/pkg/gitinfo"
 )
 
 // Action represents a user action with keyboard shortcuts
@@ -169,10 +171,13 @@ func (m *BaseModel) standardView() string {
 
 	// Error display
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("9"))
-		content = append(content, errorStyle.Render("Error: "+m.err.Error()), "")
+		// Skip displaying ErrNoDiff here as it will be handled by the error handler
+		if !errors.Is(m.err, gitinfo.ErrNoDiff) {
+			errorStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("9"))
+			content = append(content, errorStyle.Render("Error: "+m.err.Error()), "")
+		}
 	}
 
 	// Actions

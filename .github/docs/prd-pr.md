@@ -375,7 +375,7 @@ catmit -p -c  # 将自动识别 github.company.com 为 GitHub
 ## 9 · 实现计划
 
 ### Phase 1：MVP 版本（GitHub + Gitea）
-- [x] 扩展现有 `--create-pr` 功能
+- [x] 扩展现有 `--pr` 功能
 - [ ] 实现 provider 自动检测
 - [ ] 添加 CLI 版本检查
 - [ ] 实现 `auth status` 命令

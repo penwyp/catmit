@@ -200,9 +200,9 @@ The squash command helps consolidate multiple commit messages into a single, com
 
 ### Pull Request workflow
 ```bash
-catmit --create-pr   # Commit, push, and create PR
-catmit -y --create-pr  # Auto-commit and create PR
-catmit -p=false --create-pr  # Create PR without pushing (for existing branches)
+catmit --pr   # Commit, push, and create PR
+catmit -y --pr  # Auto-commit and create PR
+catmit -p=false --pr  # Create PR without pushing (for existing branches)
 catmit auth status   # Check authentication status for all remotes
 ```
 

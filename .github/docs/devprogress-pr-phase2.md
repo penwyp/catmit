@@ -46,7 +46,7 @@
 - ✅ 实现了配置优先的检测流程（配置 > 模式匹配 > HTTP探测）
 
 #### CLI 参数改进完成
-- ✅ 将 --create-pr 改为 -c/--pr（保持向后兼容）
+- ✅ 将 --pr 改为 -c/--pr（保持向后兼容）
 - ✅ 添加了 --pr-remote, --pr-base, --pr-draft, --pr-provider 参数
 - ✅ 使用 MarkDeprecated 标记旧参数为废弃
 
@@ -213,7 +213,7 @@
 - [x] 实现配置热加载（使用 fsnotify 文件监听）
 
 ### CLI 参数对齐
-- [x] 将 --create-pr 改为 -c/--pr（保持向后兼容）
+- [x] 将 --pr 改为 -c/--pr（保持向后兼容）
 - [x] 新增 --pr-remote、--pr-base、--pr-draft、--pr-provider 参数
 - [x] 实现参数依赖关系验证
 - [x] 保持向后兼容性

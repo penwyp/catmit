@@ -35,12 +35,12 @@ func (a *clientAdapter) GenerateCommitMessage(ctx context.Context, prompt string
 }
 
 var (
-	squashYes        bool
-	squashLang       string
-	squashTimeout    int
-	squashAppendMode bool
-	squashRebase     bool
-	squashDebug      bool
+	squashYes        bool   // skip confirmation and output directly
+	squashLang       string // output language (en/zh)
+	squashTimeout    int    // timeout in seconds
+	squashAppendMode bool   // use append mode (non-clearing console)
+	squashRebase     bool   // modify local commit history by squashing unpushed commits
+	squashDebug      bool   // enable debug output for troubleshooting
 )
 
 var squashCmd = &cobra.Command{
@@ -87,7 +87,7 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	// Create LLM client adapter
 	llmClient := &clientAdapter{client: deps.GetClient()}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(squashTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(squashTimeout)*time.Second)
 	defer cancel()
 
 	// Handle rebase mode

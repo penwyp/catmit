@@ -277,7 +277,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 	if err != nil {
 		// Check if it's the "nothing to commit" error
 		if errors.Is(err, gitinfo.ErrNoDiff) {
-			return nil
+			return err
 		}
 		// Check if it's a git repository error
 		if errors.Is(err, errors.ErrNoGitRepo) {

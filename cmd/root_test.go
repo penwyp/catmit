@@ -15,37 +15,3 @@ func TestGetVersionString(t *testing.T) {
 	version = "1.0.0"
 	assert.Equal(t, "catmit version 1.0.0", GetVersionString())
 }
-
-// TestIsPRRequested tests the PR flag detection
-func TestIsPRRequested(t *testing.T) {
-	tests := []struct {
-		name     string
-		flagPR   bool
-		expected bool
-	}{
-		{
-			name:     "flag not set",
-			flagPR:   false,
-			expected: false,
-		},
-		{
-			name:     "flag set",
-			flagPR:   true,
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original values
-			originalFlagPR := flagPR
-			defer func() {
-				flagPR = originalFlagPR
-			}()
-
-			flagPR = tt.flagPR
-
-			assert.Equal(t, tt.expected, isPRRequested())
-		})
-	}
-}

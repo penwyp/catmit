@@ -342,13 +342,13 @@ $ catmit squash --rebase
 ### 🚀 Pull Request 创建
 ```bash
 # 提交并创建 GitHub pull request
-catmit --create-pr
+catmit --pr
 
 # 自动提交并创建 PR，无需确认
-catmit -y --create-pr
+catmit -y --pr
 
 # 创建 PR 但不推送（适用于已存在的分支）
-catmit -p=false --create-pr
+catmit -p=false --pr
 
 # 检查所有 git 远程仓库的认证状态
 catmit auth status
@@ -435,29 +435,29 @@ catmit 提供对拉取请求创建的全面控制：
 **所有 PR 标志：**
 ```bash
 # 指定 PR 的远程仓库（对 fork 很有用）
-catmit --create-pr --pr-remote upstream
+catmit --pr --pr-remote upstream
 
 # 设置自定义基础分支（默认：main/master）
-catmit --create-pr --pr-base develop
+catmit --pr --pr-base develop
 
 # 创建草稿 PR
-catmit --create-pr --pr-draft
+catmit --pr --pr-draft
 
 # 覆盖自动检测的提供商
-catmit --create-pr --pr-provider gitlab
+catmit --pr --pr-provider gitlab
 
 # 组合多个选项
-catmit -y --create-pr --pr-remote upstream --pr-base release/v2 --pr-draft
+catmit -y --pr --pr-remote upstream --pr-base release/v2 --pr-draft
 ```
 
 **Fork 工作流支持：**
 ```bash
 # 在 fork 上工作？推送到 origin 并创建 PR 到 upstream
 git remote -v  # origin（你的 fork），upstream（原始仓库）
-catmit --create-pr --pr-remote upstream
+catmit --pr --pr-remote upstream
 
 # 或使用简写
-catmit --create-pr -r upstream
+catmit --pr -r upstream
 ```
 
 **多远程场景：**
@@ -466,10 +466,10 @@ catmit --create-pr -r upstream
 catmit auth status
 
 # 创建 PR 到特定远程
-catmit --create-pr --pr-remote company
+catmit --pr --pr-remote company
 
 # 如果分支已存在于远程，跳过推送
-catmit --create-pr --push=false
+catmit --pr --push=false
 ```
 
 **提供商检测：**

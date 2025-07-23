@@ -145,13 +145,13 @@ $ catmit squash --rebase
 ### 🚀 Pull Request Creation
 ```bash
 # Commit and create a GitHub pull request
-catmit --create-pr
+catmit --pr
 
 # Auto-commit and create PR without confirmation
-catmit -y --create-pr
+catmit -y --pr
 
 # Create PR without pushing (useful for existing branches)
-catmit -p=false --create-pr
+catmit -p=false --pr
 
 # Check authentication status for all git remotes
 catmit auth status
@@ -238,29 +238,29 @@ catmit provides comprehensive control over pull request creation:
 **All PR Flags:**
 ```bash
 # Specify remote for PR (useful for forks)
-catmit --create-pr --pr-remote upstream
+catmit --pr --pr-remote upstream
 
 # Set custom base branch (default: main/master)
-catmit --create-pr --pr-base develop
+catmit --pr --pr-base develop
 
 # Create as draft PR
-catmit --create-pr --pr-draft
+catmit --pr --pr-draft
 
 # Override auto-detected provider
-catmit --create-pr --pr-provider gitlab
+catmit --pr --pr-provider gitlab
 
 # Combine multiple options
-catmit -y --create-pr --pr-remote upstream --pr-base release/v2 --pr-draft
+catmit -y --pr --pr-remote upstream --pr-base release/v2 --pr-draft
 ```
 
 **Fork Workflow Support:**
 ```bash
 # Working on a fork? Push to origin and create PR to upstream
 git remote -v  # origin (your fork), upstream (original repo)
-catmit --create-pr --pr-remote upstream
+catmit --pr --pr-remote upstream
 
 # Or use the shorthand
-catmit --create-pr -r upstream
+catmit --pr -r upstream
 ```
 
 **Multi-Remote Scenarios:**
@@ -269,10 +269,10 @@ catmit --create-pr -r upstream
 catmit auth status
 
 # Create PR to specific remote
-catmit --create-pr --pr-remote company
+catmit --pr --pr-remote company
 
 # Skip push if branch already exists remotely
-catmit --create-pr --push=false
+catmit --pr --push=false
 ```
 
 **Provider Detection:**

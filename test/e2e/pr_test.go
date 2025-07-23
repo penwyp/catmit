@@ -349,8 +349,8 @@ func TestE2E_PRCreation_NoChanges(t *testing.T) {
 	require.NoError(t, err, out.String())
 
 	// When --pr is specified, it creates PR even with no changes
-	// It should NOT print "Nothing to commit" because it returns after PR creation
-	require.NotContains(t, out.String(), "Nothing to commit")
+	// It should NOT print "nothing to commit" because it returns after PR creation
+	require.NotContains(t, out.String(), "nothing to commit")
 	require.Contains(t, out.String(), "Pull request created successfully")
 	require.Contains(t, out.String(), "PR URL: https://github.com/owner/repo/pull/456")
 }
