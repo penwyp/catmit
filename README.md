@@ -88,22 +88,22 @@ catmit --version
 #### Basic Squash (Editor Mode)
 ```bash
 # Consolidate multiple commit messages into one (opens editor)
-catmit squash
+catmit squash-draft
 
 # Skip confirmation, output directly
-catmit squash --yes
+catmit squash-draft --yes
 
 # Generate in Chinese
-catmit squash --lang zh
+catmit squash-draft --lang zh
 
 # Custom timeout
-catmit squash --timeout 60
+catmit squash-draft --timeout 60
 
 # Use append mode for better console output
-catmit squash --append-mode
+catmit squash-draft --append-mode
 
 # Example workflow:
-$ catmit squash
+$ catmit squash-draft
 # Opens your default editor to input commit messages
 # Enter messages one per line, save and exit
 
@@ -120,14 +120,14 @@ feat: implement complete authentication system
 #### Interactive Rebase Mode
 ```bash
 # Squash unpushed commits using interactive rebase
-catmit squash --rebase
-catmit squash -r  # shorthand
+catmit squash-draft --rebase
+catmit squash-draft -r  # shorthand
 
 # Combine with other options
-catmit squash --rebase --yes --lang zh
+catmit squash-draft --rebase --yes --lang zh
 
 # Example workflow:
-$ catmit squash --rebase
+$ catmit squash-draft --rebase
 # Analyzes unpushed commits
 # Generates consolidated commit message using AI
 # Performs interactive rebase with backup branch creation

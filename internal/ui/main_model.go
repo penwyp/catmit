@@ -128,7 +128,7 @@ func NewMainModelWithPRConfig(
 	ta.ShowLineNumbers = false
 
 	m := &MainModel{
-		BaseModel:    NewBaseModel("Generating Message", nil, false),
+		BaseModel:    NewBaseModel("Generating Message", nil),
 		phase:        PhaseLoading,
 		loadingStage: StageCollect,
 		spinner:      sp,

@@ -52,7 +52,7 @@ func TestSquashCommand_E2E(t *testing.T) {
 	}{
 		{
 			name: "interactive mode",
-			args: []string{"squash", "--yes"},
+			args: []string{"squash-draft", "--yes"},
 			input: `feat: add user authentication
 fix: resolve login error
 docs: update auth guide
@@ -67,7 +67,7 @@ docs: update auth guide
 		},
 		{
 			name: "with language flag",
-			args: []string{"squash", "--yes", "--lang", "en"},
+			args: []string{"squash-draft", "--yes", "--lang", "en"},
 			input: `feat: add feature
 fix: fix bug
 
@@ -78,11 +78,27 @@ fix: fix bug
 		},
 		{
 			name: "error with single message",
-			args: []string{"squash", "--yes"},
+			args: []string{"squash-draft", "--yes"},
 			input: `feat: single commit
 
 `,
 			expectedError: "at least 2 commit messages are required",
+		},
+		{
+			name: "dry-run mode",
+			args: []string{"squash-draft", "--dry-run"},
+			input: `feat: add authentication
+fix: resolve login errors
+docs: update documentation
+
+`,
+			expectedOutput: []string{
+				"=== DRY RUN MODE ===",
+				"Generated commit message:",
+				"feat: implement authentication system",
+				"(Message not copied to clipboard)",
+				"=== END DRY RUN ===",
+			},
 		},
 	}
 
@@ -158,7 +174,7 @@ docs: update guide`)
 	}
 
 	// Run the command
-	cmd := exec.Command(binPath, "squash", "--yes")
+	cmd := exec.Command(binPath, "squash-draft", "--yes")
 	cmd.Env = env
 	// Since we're not in a terminal, it will read from stdin
 	cmd.Stdin = strings.NewReader(`feat: add authentication
@@ -207,7 +223,7 @@ func TestSquashCommand_Timeout(t *testing.T) {
 	}
 
 	// Run the command with a very short timeout
-	cmd := exec.Command(binPath, "squash", "--yes", "--timeout", "1")
+	cmd := exec.Command(binPath, "squash-draft", "--yes", "--timeout", "1")
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader("feat: test\nfix: bug\n\n")
 
@@ -234,6 +250,193 @@ echo "%s" > "$1"
 	require.NoError(t, err)
 
 	return editorPath
+}
+
+// TestSquashHistoryCommand_E2E tests the squash-history command
+func TestSquashHistoryCommand_E2E(t *testing.T) {
+	// Build the binary for testing
+	binPath := buildSquashBinary(t)
+
+	// Create a temporary git repo
+	repoDir := t.TempDir()
+	setupSquashGitRepo(t, repoDir)
+
+	// Set up a mock LLM server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := `{
+			"choices": [{
+				"message": {
+					"content": "feat: implement complete feature set\n\n- Add user authentication\n- Fix login errors\n- Update documentation\n- Improve performance"
+				}
+			}]
+		}`
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, response)
+	}))
+	defer server.Close()
+
+	// Set environment variables
+	env := []string{
+		fmt.Sprintf("CATMIT_LLM_API_KEY=%s", "test-key"),
+		fmt.Sprintf("CATMIT_LLM_API_URL=%s", server.URL),
+		fmt.Sprintf("CATMIT_LLM_MODEL=%s", "test-model"),
+		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+		fmt.Sprintf("HOME=%s", os.Getenv("HOME")),
+		fmt.Sprintf("USER=%s", os.Getenv("USER")),
+	}
+
+	tests := []struct {
+		name           string
+		args           []string
+		setupRepo      func(t *testing.T, dir string)
+		expectedOutput []string
+		expectedError  string
+	}{
+		{
+			name: "dry-run mode",
+			args: []string{"squash-history", "--dry-run"},
+			setupRepo: func(t *testing.T, dir string) {
+				// Create some unpushed commits
+				createFile(t, filepath.Join(dir, "file1.txt"), "content1")
+				gitAdd(t, dir, ".")
+				gitCommit(t, dir, "feat: add file1")
+
+				createFile(t, filepath.Join(dir, "file2.txt"), "content2")
+				gitAdd(t, dir, ".")
+				gitCommit(t, dir, "fix: add file2")
+			},
+			expectedOutput: []string{
+				"=== DRY RUN MODE ===",
+				"Would squash 2 commits",
+				"Generated commit message:",
+				"feat: implement complete feature set",
+				"=== END DRY RUN ===",
+			},
+		},
+		{
+			name: "no unpushed commits",
+			args: []string{"squash-history", "--yes"},
+			setupRepo: func(t *testing.T, dir string) {
+				// Checkout back to main to have no unpushed commits
+				cmd := exec.Command("git", "checkout", "main")
+				cmd.Dir = dir
+				require.NoError(t, cmd.Run())
+			},
+			expectedOutput: []string{
+				"No commits to rebase",
+			},
+		},
+		{
+			name: "yes mode with unpushed commits",
+			args: []string{"squash-history", "--yes", "--lang", "en"},
+			setupRepo: func(t *testing.T, dir string) {
+				// Create some unpushed commits
+				createFile(t, filepath.Join(dir, "feature.txt"), "new feature")
+				gitAdd(t, dir, ".")
+				gitCommit(t, dir, "feat: new feature")
+
+				createFile(t, filepath.Join(dir, "bugfix.txt"), "bug fix")
+				gitAdd(t, dir, ".")
+				gitCommit(t, dir, "fix: critical bug")
+			},
+			expectedOutput: []string{
+				"Generated commit message:",
+				"feat: implement complete feature set",
+				"Executing rebase...",
+				"✓ Rebase completed successfully",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a new repo for each test
+			testRepo := filepath.Join(repoDir, tt.name)
+			require.NoError(t, os.MkdirAll(testRepo, 0755))
+			setupSquashGitRepo(t, testRepo)
+
+			// Apply test-specific repo setup
+			if tt.setupRepo != nil {
+				tt.setupRepo(t, testRepo)
+			}
+
+			// Run the command
+			cmd := exec.Command(binPath, tt.args...)
+			cmd.Dir = testRepo
+			cmd.Env = env
+
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+
+			// Check results
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, stderr.String(), tt.expectedError)
+			} else {
+				if err != nil {
+					t.Logf("stdout: %s", stdout.String())
+					t.Logf("stderr: %s", stderr.String())
+				}
+				assert.NoError(t, err)
+				output := stdout.String()
+				for _, expected := range tt.expectedOutput {
+					assert.Contains(t, output, expected)
+				}
+			}
+		})
+	}
+}
+
+// Helper functions for git operations
+func setupSquashGitRepo(t *testing.T, dir string) {
+	// Initialize git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	// Configure git
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	// Create initial commit
+	createFile(t, filepath.Join(dir, "README.md"), "# Test Repo")
+	gitAdd(t, dir, ".")
+	gitCommit(t, dir, "Initial commit")
+
+	// Create and checkout main branch
+	cmd = exec.Command("git", "checkout", "-b", "main")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	// Create a feature branch for testing
+	cmd = exec.Command("git", "checkout", "-b", "feature-test")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+}
+
+func createFile(t *testing.T, path, content string) {
+	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+}
+
+func gitAdd(t *testing.T, dir, files string) {
+	cmd := exec.Command("git", "add", files)
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+}
+
+func gitCommit(t *testing.T, dir, message string) {
+	cmd := exec.Command("git", "commit", "-m", message)
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
 }
 
 // buildSquashBinary builds the binary for testing

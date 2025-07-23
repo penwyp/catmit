@@ -13,12 +13,11 @@ func TestBaseModel_NewBaseModel(t *testing.T) {
 		{Key: "C", Label: "Cancel", Handler: func() tea.Cmd { return tea.Quit }},
 	}
 
-	model := NewBaseModel("Test Title", actions, false)
+	model := NewBaseModel("Test Title", actions)
 
 	assert.Equal(t, "Test Title", model.title)
 	assert.Equal(t, 2, len(model.actions))
 	assert.Equal(t, 0, model.selected)
-	assert.False(t, model.appendMode)
 	assert.False(t, model.done)
 	assert.Nil(t, model.err)
 }
@@ -58,7 +57,7 @@ func TestBaseModel_HandleKeyboard(t *testing.T) {
 			quitCalled = false
 			acceptCalled = false
 
-			model := NewBaseModel("Test", actions, false)
+			model := NewBaseModel("Test", actions)
 			cmd := model.HandleKeyboard(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key), Alt: false})
 
 			assert.Equal(t, tt.expectedDone, model.done)
@@ -83,7 +82,7 @@ func TestBaseModel_NavigationWrapping(t *testing.T) {
 		{Key: "3", Label: "Three", Handler: func() tea.Cmd { return nil }},
 	}
 
-	model := NewBaseModel("Test", actions, false)
+	model := NewBaseModel("Test", actions)
 
 	// Test wrapping from beginning to end
 	model.selected = 0
@@ -97,7 +96,7 @@ func TestBaseModel_NavigationWrapping(t *testing.T) {
 }
 
 func TestBaseModel_HandleWindowSize(t *testing.T) {
-	model := NewBaseModel("Test", nil, false)
+	model := NewBaseModel("Test", nil)
 
 	model.HandleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
 
@@ -112,7 +111,7 @@ func TestBaseModel_RenderActions(t *testing.T) {
 		{Key: "C", Label: "ancel", Handler: func() tea.Cmd { return nil }},
 	}
 
-	model := NewBaseModel("Test", actions, false)
+	model := NewBaseModel("Test", actions)
 
 	// Test with first action selected
 	model.selected = 0
@@ -132,7 +131,7 @@ func TestBaseModel_StandardView(t *testing.T) {
 		{Key: "A", Label: "ccept", Handler: func() tea.Cmd { return nil }},
 	}
 
-	model := NewBaseModel("Test Title", actions, false)
+	model := NewBaseModel("Test Title", actions)
 	model.SetContentRenderer(func() string {
 		return "This is the main content"
 	})
@@ -145,7 +144,7 @@ func TestBaseModel_StandardView(t *testing.T) {
 }
 
 func TestBaseModel_ErrorDisplay(t *testing.T) {
-	model := NewBaseModel("Test", nil, false)
+	model := NewBaseModel("Test", nil)
 	model.SetError(assert.AnError)
 
 	view := model.View()
@@ -153,30 +152,8 @@ func TestBaseModel_ErrorDisplay(t *testing.T) {
 	assert.Contains(t, view, assert.AnError.Error())
 }
 
-func TestBaseModel_AppendMode(t *testing.T) {
-	model := NewBaseModel("Test", nil, true)
-	model.SetContentRenderer(func() string {
-		return "Content line 1"
-	})
-
-	// First render
-	view1 := model.View()
-	assert.Contains(t, view1, "Content line 1")
-	assert.Greater(t, len(model.renderedLines), 0)
-
-	// Change content
-	model.SetContentRenderer(func() string {
-		return "Content line 2"
-	})
-
-	// Second render should append
-	view2 := model.View()
-	assert.Contains(t, view2, "─") // separator
-	assert.Contains(t, view2, "Content line 2")
-}
-
 func TestBaseModel_SettersAndGetters(t *testing.T) {
-	model := NewBaseModel("Initial", nil, false)
+	model := NewBaseModel("Initial", nil)
 
 	// Test SetTitle
 	model.SetTitle("New Title")
@@ -205,7 +182,7 @@ func TestBaseModel_SettersAndGetters(t *testing.T) {
 }
 
 func TestBaseModel_EmptyActions(t *testing.T) {
-	model := NewBaseModel("Test", []Action{}, false)
+	model := NewBaseModel("Test", []Action{})
 
 	// Should not panic with empty actions
 	cmd := model.HandleKeyboard(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")})
@@ -216,7 +193,7 @@ func TestBaseModel_EmptyActions(t *testing.T) {
 }
 
 func TestBaseModel_ContentRenderer(t *testing.T) {
-	model := NewBaseModel("Test", nil, false)
+	model := NewBaseModel("Test", nil)
 
 	// No content renderer set
 	view := model.View()
@@ -237,7 +214,7 @@ func TestBaseModel_SelectionBounds(t *testing.T) {
 		{Key: "2", Label: "Two", Handler: func() tea.Cmd { return nil }},
 	}
 
-	model := NewBaseModel("Test", actions, false)
+	model := NewBaseModel("Test", actions)
 
 	// Test selection stays in bounds when actions change
 	model.selected = 1

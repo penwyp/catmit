@@ -42,13 +42,13 @@ type squashMsg struct {
 }
 
 // NewSquashModel creates a new SquashModel
-func NewSquashModel(s *squash.Squash, messages []string, appendMode bool) *SquashModel {
+func NewSquashModel(s *squash.Squash, messages []string) *SquashModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	model := &SquashModel{
-		BaseModel: NewBaseModel("Squashing Commit Messages", nil, appendMode),
+		BaseModel: NewBaseModel("Squashing Commit Messages", nil),
 		squash:    s,
 		messages:  messages,
 		phase:     SquashPhaseGenerating,

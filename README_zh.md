@@ -285,22 +285,22 @@ catmit --version
 #### 基础合并模式（编辑器模式）
 ```bash
 # 将多个提交信息合并为一个（打开编辑器）
-catmit squash
+catmit squash-draft
 
 # 跳过确认，直接输出
-catmit squash --yes
+catmit squash-draft --yes
 
 # 生成中文提交信息
-catmit squash --lang zh
+catmit squash-draft --lang zh
 
 # 自定义超时时间
-catmit squash --timeout 60
+catmit squash-draft --timeout 60
 
 # 使用追加模式获得更好的控制台输出
-catmit squash --append-mode
+catmit squash-draft --append-mode
 
 # 示例工作流：
-$ catmit squash
+$ catmit squash-draft
 # 打开默认编辑器输入提交信息
 # 每行一个提交信息，保存并退出
 
@@ -317,14 +317,14 @@ feat: 实现完整的认证系统
 #### 交互式变基模式
 ```bash
 # 使用交互式变基合并未推送的提交
-catmit squash --rebase
-catmit squash -r  # 简写
+catmit squash-draft --rebase
+catmit squash-draft -r  # 简写
 
 # 与其他选项组合使用
-catmit squash --rebase --yes --lang zh
+catmit squash-draft --rebase --yes --lang zh
 
 # 示例工作流：
-$ catmit squash --rebase
+$ catmit squash-draft --rebase
 # 分析未推送的提交
 # 使用 AI 生成合并的提交信息
 # 执行交互式变基并创建备份分支

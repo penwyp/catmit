@@ -38,7 +38,6 @@ type RebaseModel struct {
 	height      int
 	accepted    bool
 	copySuccess bool
-	appendMode  bool
 	backupBranch string
 
 	// Styles
@@ -52,7 +51,7 @@ type RebaseModel struct {
 }
 
 // NewRebaseModel creates a new RebaseModel
-func NewRebaseModel(workflow *rebase.Workflow, appendMode bool) *RebaseModel {
+func NewRebaseModel(workflow *rebase.Workflow) *RebaseModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -61,7 +60,6 @@ func NewRebaseModel(workflow *rebase.Workflow, appendMode bool) *RebaseModel {
 		workflow:   workflow,
 		phase:      RebasePhaseAnalyzing,
 		spinner:    s,
-		appendMode: appendMode,
 
 		// Initialize styles
 		titleStyle:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")),
@@ -77,9 +75,6 @@ func NewRebaseModel(workflow *rebase.Workflow, appendMode bool) *RebaseModel {
 // Run starts the TUI
 func (m *RebaseModel) Run() error {
 	p := tea.NewProgram(m, tea.WithAltScreen())
-	if m.appendMode {
-		p = tea.NewProgram(m)
-	}
 	_, err := p.Run()
 	return err
 }

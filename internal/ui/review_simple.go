@@ -19,7 +19,7 @@ type SimpleReviewModel struct {
 }
 
 // NewSimpleReviewModel creates a new simplified review model
-func NewSimpleReviewModel(message, lang string, appendMode bool) *SimpleReviewModel {
+func NewSimpleReviewModel(message, lang string) *SimpleReviewModel {
 	// Clean the message
 	cleanMsg := strings.TrimSpace(strings.ReplaceAll(message, "\r", ""))
 
@@ -31,7 +31,7 @@ func NewSimpleReviewModel(message, lang string, appendMode bool) *SimpleReviewMo
 	ta.ShowLineNumbers = false
 
 	model := &SimpleReviewModel{
-		BaseModel: NewBaseModel("Commit Preview", nil, appendMode),
+		BaseModel: NewBaseModel("Commit Preview", nil),
 		message:   cleanMsg,
 		lang:      lang,
 		textArea:  ta,

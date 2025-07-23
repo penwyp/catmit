@@ -32,11 +32,6 @@ type BaseModel struct {
 	actions  []Action
 	selected int
 
-	// Non-clearing mode
-	appendMode     bool
-	renderedLines  []string // History of rendered content
-	lastViewHeight int      // Track last view height for append mode
-
 	// Styles
 	styles UIStyles
 
@@ -45,12 +40,11 @@ type BaseModel struct {
 }
 
 // NewBaseModel creates a new base model with default settings
-func NewBaseModel(title string, actions []Action, appendMode bool) BaseModel {
+func NewBaseModel(title string, actions []Action) BaseModel {
 	return BaseModel{
 		title:      title,
 		actions:    actions,
 		selected:   0,
-		appendMode: appendMode,
 		styles:     DefaultStyles(),
 		width:      80,
 		height:     24,
@@ -137,11 +131,8 @@ func (m *BaseModel) RenderActions() string {
 	return strings.Join(rendered, "  ")
 }
 
-// View renders the model using either append or standard mode
+// View renders the model
 func (m *BaseModel) View() string {
-	if m.appendMode {
-		return m.appendView()
-	}
 	return m.standardView()
 }
 
@@ -186,52 +177,6 @@ func (m *BaseModel) standardView() string {
 	}
 
 	return contentStyle.Render(strings.Join(content, "\n"))
-}
-
-// appendView renders in append mode, adding new content without clearing
-func (m *BaseModel) appendView() string {
-	// Get the current view
-	currentView := m.standardView()
-	lines := strings.Split(currentView, "\n")
-
-	// If this is the first render or content has changed significantly
-	if len(m.renderedLines) == 0 {
-		m.renderedLines = lines
-		m.lastViewHeight = len(lines)
-		return currentView
-	}
-
-	// Find what has changed
-	var newContent []string
-
-	// Simple strategy: if the number of lines changed or content differs,
-	// append the new content
-	contentChanged := false
-	if len(lines) != m.lastViewHeight {
-		contentChanged = true
-	} else {
-		// Check if content actually changed
-		for i := 0; i < len(lines) && i < len(m.renderedLines); i++ {
-			if i < len(m.renderedLines) && lines[i] != m.renderedLines[i] {
-				contentChanged = true
-				break
-			}
-		}
-	}
-
-	if contentChanged {
-		// Add a separator
-		newContent = append(newContent, strings.Repeat("─", min(m.width-4, 80)))
-		newContent = append(newContent, lines...)
-		m.renderedLines = append(m.renderedLines, newContent...)
-		m.lastViewHeight = len(lines)
-		return strings.Join(newContent, "\n")
-	}
-
-	// If only selection changed, update just the action line
-	// For now, return empty to avoid duplicate content
-	// In a real implementation, we'd use ANSI codes to update in place
-	return ""
 }
 
 // SetContentRenderer sets the function that renders the main content

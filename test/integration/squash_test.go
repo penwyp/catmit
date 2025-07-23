@@ -197,7 +197,7 @@ func TestSquash_UIModel(t *testing.T) {
 	}
 
 	// Create UI model
-	model := ui.NewSquashModel(s, messages, false)
+	model := ui.NewSquashModel(s, messages)
 
 	// Test initialization
 	initCmd := model.Init()

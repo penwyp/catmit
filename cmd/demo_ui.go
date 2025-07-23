@@ -13,22 +13,14 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run demo_ui.go [review|squash] [--append-mode]")
+		fmt.Println("Usage: go run demo_ui.go [review|squash]")
 		os.Exit(1)
-	}
-
-	appendMode := false
-	for _, arg := range os.Args {
-		if arg == "--append-mode" {
-			appendMode = true
-			break
-		}
 	}
 
 	switch os.Args[1] {
 	case "review":
-		demoReview(appendMode)
-	case "squash":
+		demoReview()
+	case "squash-draft":
 		fmt.Println("Squash demo requires actual squash instance")
 	default:
 		fmt.Println("Unknown mode:", os.Args[1])
@@ -36,16 +28,15 @@ func main() {
 	}
 }
 
-func demoReview(appendMode bool) {
+func demoReview() {
 	// Sample commit message
 	message := `feat(ui): implement unified TUI framework
 
 - Add BaseModel for consistent keyboard navigation
 - Support arrow keys and Esc key globally
-- Implement append mode for non-clearing console
 - Simplify UI implementation across all models`
 
-	model := ui.NewSimpleReviewModel(message, "en", appendMode)
+	model := ui.NewSimpleReviewModel(message, "en")
 
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()

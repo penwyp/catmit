@@ -129,8 +129,8 @@ func TestSquashCommand(t *testing.T) {
 	assert.NotNil(t, flags.Lookup("yes"))
 	assert.NotNil(t, flags.Lookup("lang"))
 	assert.NotNil(t, flags.Lookup("timeout"))
-	assert.NotNil(t, flags.Lookup("append-mode"))
-	assert.NotNil(t, flags.Lookup("rebase"))
+	assert.NotNil(t, flags.Lookup("debug"))
+	assert.NotNil(t, flags.Lookup("dry-run"))
 }
 
 func TestRunSquash_Validation(t *testing.T) {

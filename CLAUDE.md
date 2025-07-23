@@ -184,10 +184,10 @@ catmit --seed "feat: auth"  # Seed text via flag (same effect)
 
 ### Squash workflow
 ```bash
-catmit squash        # Default mode (opens editor) with TUI
-catmit squash -n     # No confirmation, output directly
-catmit squash -l zh  # Generate Chinese commit message
-catmit squash -t 60  # 60 second timeout
+catmit squash-draft        # Default mode (opens editor) with TUI
+catmit squash-draft -n     # No confirmation, output directly
+catmit squash-draft -l zh  # Generate Chinese commit message
+catmit squash-draft -t 60  # 60 second timeout
 ```
 
 The squash command helps consolidate multiple commit messages into a single, comprehensive commit message. It:
