@@ -316,7 +316,7 @@ func optimizeStringSlice(slice []string) []string {
 }
 
 // ErrNoDiff indicates there is no diff to commit in the current repository.
-var ErrNoDiff = errors.New(errors.ErrTypeGit, "nothing to commit").WithSuggestion("Use 'git add' to stage your changes")
+var ErrNoDiff = errors.New(errors.ErrTypeGit, "nothing to commit")
 
 // Enhanced error types for better error handling and categorization.
 var (

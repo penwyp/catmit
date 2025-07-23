@@ -127,7 +127,7 @@ func WrapRetryable(errType ErrorType, message string, cause error) *CatmitError 
 var (
 	// Git related errors
 	ErrNoGitRepo       = New(ErrTypeGit, "current directory is not a Git repository").WithSuggestion("Please run this command in a Git repository")
-	ErrNoStagedChanges = New(ErrTypeGit, "no staged changes").WithSuggestion("Use 'git add' to stage your changes")
+	ErrNoStagedChanges = New(ErrTypeGit, "no staged changes")
 	ErrNoBranch        = New(ErrTypeGit, "unable to get current branch").WithSuggestion("Make sure you are on a valid Git branch")
 	ErrGitCommand      = New(ErrTypeGit, "Git command execution failed")
 
