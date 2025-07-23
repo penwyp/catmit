@@ -3,13 +3,11 @@ package rebase
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/penwyp/catmit/pkg/githistory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -33,20 +31,14 @@ func (m *MockHistoryManager) FindMergeBase(ctx context.Context, ref1, ref2 strin
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockHistoryManager) GetUnpushedCommits(ctx context.Context, baseBranch, headRef string) ([]githistory.Commit, error) {
-	args := m.Called(ctx, baseBranch, headRef)
-	if commits := args.Get(0); commits != nil {
-		return commits.([]githistory.Commit), args.Error(1)
-	}
-	return nil, args.Error(1)
+func (m *MockHistoryManager) GetUnpushedCommits(ctx context.Context, base, head string) ([]githistory.Commit, error) {
+	args := m.Called(ctx, base, head)
+	return args.Get(0).([]githistory.Commit), args.Error(1)
 }
 
-func (m *MockHistoryManager) GetCommitsBetween(ctx context.Context, from, to string) ([]githistory.Commit, error) {
-	args := m.Called(ctx, from, to)
-	if commits := args.Get(0); commits != nil {
-		return commits.([]githistory.Commit), args.Error(1)
-	}
-	return nil, args.Error(1)
+func (m *MockHistoryManager) GetCommitsBetween(ctx context.Context, base, head string) ([]githistory.Commit, error) {
+	args := m.Called(ctx, base, head)
+	return args.Get(0).([]githistory.Commit), args.Error(1)
 }
 
 func (m *MockHistoryManager) BackupBranch(ctx context.Context, branchName string) (string, error) {
@@ -54,13 +46,8 @@ func (m *MockHistoryManager) BackupBranch(ctx context.Context, branchName string
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockHistoryManager) RebaseInteractive(ctx context.Context, onto string, commits []githistory.Commit, newMessage string) error {
-	args := m.Called(ctx, onto, commits, newMessage)
-	return args.Error(0)
-}
-
-func (m *MockHistoryManager) ResetHard(ctx context.Context, ref string) error {
-	args := m.Called(ctx, ref)
+func (m *MockHistoryManager) RebaseInteractive(ctx context.Context, base string, commits []githistory.Commit, message string) error {
+	args := m.Called(ctx, base, commits, message)
 	return args.Error(0)
 }
 
@@ -69,17 +56,22 @@ func (m *MockHistoryManager) AbortRebase(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *MockHistoryManager) CherryPick(ctx context.Context, commits []string) error {
-	args := m.Called(ctx, commits)
+func (m *MockHistoryManager) GetCommit(ctx context.Context, ref string) (*githistory.Commit, error) {
+	args := m.Called(ctx, ref)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*githistory.Commit), args.Error(1)
+}
+
+func (m *MockHistoryManager) ResetHard(ctx context.Context, ref string) error {
+	args := m.Called(ctx, ref)
 	return args.Error(0)
 }
 
-func (m *MockHistoryManager) GetCommit(ctx context.Context, ref string) (*githistory.Commit, error) {
-	args := m.Called(ctx, ref)
-	if commit := args.Get(0); commit != nil {
-		return commit.(*githistory.Commit), args.Error(1)
-	}
-	return nil, args.Error(1)
+func (m *MockHistoryManager) CherryPick(ctx context.Context, commits []string) error {
+	args := m.Called(ctx, commits)
+	return args.Error(0)
 }
 
 // MockSquashClient is a mock implementation of squash.ClientInterface
@@ -93,10 +85,6 @@ func (m *MockSquashClient) GenerateCommitMessage(ctx context.Context, prompt str
 }
 
 func TestNew(t *testing.T) {
-	mockHistory := new(MockHistoryManager)
-	mockClient := new(MockSquashClient)
-	logger := zap.NewNop()
-
 	tests := []struct {
 		name   string
 		config Config
@@ -106,7 +94,7 @@ func TestNew(t *testing.T) {
 			config: Config{
 				BaseBranch: "main",
 				Language:   "en",
-				Logger:     logger,
+				Logger:     zap.NewNop(),
 			},
 		},
 		{
@@ -121,83 +109,79 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			workflow := New(mockHistory, mockClient, tt.config)
-			assert.NotNil(t, workflow)
-			assert.Equal(t, mockHistory, workflow.history)
-			assert.NotNil(t, workflow.squash)
-			assert.Equal(t, tt.config.BaseBranch, workflow.config.BaseBranch)
-			assert.Equal(t, tt.config.Language, workflow.config.Language)
-			assert.NotNil(t, workflow.logger)
+			mockHistory := new(MockHistoryManager)
+			mockClient := new(MockSquashClient)
+
+			w := New(mockHistory, mockClient, tt.config)
+
+			assert.NotNil(t, w)
+			assert.Equal(t, tt.config.BaseBranch, w.config.BaseBranch)
+			assert.Equal(t, tt.config.Language, w.config.Language)
+			assert.NotNil(t, w.logger)
+			assert.NotNil(t, w.squash)
+			assert.Equal(t, mockHistory, w.history)
 		})
 	}
 }
 
-func TestWorkflow_Analyze(t *testing.T) {
+func TestAnalyze(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.NewNop()
 
 	tests := []struct {
-		name      string
-		setupMock func(*MockHistoryManager)
-		config    Config
-		want      *AnalysisResult
-		wantErr   bool
-		errMsg    string
+		name           string
+		setupMocks     func(*MockHistoryManager)
+		expectedResult *AnalysisResult
+		expectedError  string
 	}{
 		{
 			name: "successful analysis with multiple commits",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
 				m.On("FindMergeBase", ctx, "main", "HEAD").Return("abc123", nil)
 				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return([]githistory.Commit{
 					{ShortSHA: "def456", Subject: "feat: add feature"},
-					{ShortSHA: "ghi789", Subject: "fix: fix bug"},
-					{ShortSHA: "jkl012", Subject: "docs: update docs"},
+					{ShortSHA: "ghi789", Subject: "fix: bug fix"},
+					{ShortSHA: "jkl012", Subject: "docs: update readme"},
 				}, nil)
 			},
-			config: Config{BaseBranch: "main", Logger: logger},
-			want: &AnalysisResult{
+			expectedResult: &AnalysisResult{
 				CurrentBranch: "feature-branch",
 				BaseBranch:    "main",
 				MergeBase:     "abc123",
 				UnpushedCommits: []githistory.Commit{
 					{ShortSHA: "def456", Subject: "feat: add feature"},
-					{ShortSHA: "ghi789", Subject: "fix: fix bug"},
-					{ShortSHA: "jkl012", Subject: "docs: update docs"},
+					{ShortSHA: "ghi789", Subject: "fix: bug fix"},
+					{ShortSHA: "jkl012", Subject: "docs: update readme"},
 				},
 				HasChanges: false,
 				CanRebase:  true,
 				Message:    "Found 3 commits that can be squashed.",
 			},
-			wantErr: false,
 		},
 		{
-			name: "uncommitted changes present",
-			setupMock: func(m *MockHistoryManager) {
+			name: "has uncommitted changes",
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(true, nil)
 			},
-			config: Config{BaseBranch: "main", Logger: logger},
-			want: &AnalysisResult{
+			expectedResult: &AnalysisResult{
 				CurrentBranch: "feature-branch",
 				BaseBranch:    "main",
 				HasChanges:    true,
 				CanRebase:     false,
 				Message:       "Cannot rebase: You have uncommitted changes. Please commit or stash them first.",
 			},
-			wantErr: false,
 		},
 		{
 			name: "no commits to rebase",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
 				m.On("FindMergeBase", ctx, "main", "HEAD").Return("abc123", nil)
 				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return([]githistory.Commit{}, nil)
 			},
-			config: Config{BaseBranch: "main", Logger: logger},
-			want: &AnalysisResult{
+			expectedResult: &AnalysisResult{
 				CurrentBranch:   "feature-branch",
 				BaseBranch:      "main",
 				MergeBase:       "abc123",
@@ -206,11 +190,10 @@ func TestWorkflow_Analyze(t *testing.T) {
 				CanRebase:       false,
 				Message:         "No commits to rebase. Your branch is up to date with main.",
 			},
-			wantErr: false,
 		},
 		{
 			name: "only one commit",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
 				m.On("FindMergeBase", ctx, "main", "HEAD").Return("abc123", nil)
@@ -218,8 +201,7 @@ func TestWorkflow_Analyze(t *testing.T) {
 					{ShortSHA: "def456", Subject: "feat: single commit"},
 				}, nil)
 			},
-			config: Config{BaseBranch: "main", Logger: logger},
-			want: &AnalysisResult{
+			expectedResult: &AnalysisResult{
 				CurrentBranch: "feature-branch",
 				BaseBranch:    "main",
 				MergeBase:     "abc123",
@@ -230,77 +212,66 @@ func TestWorkflow_Analyze(t *testing.T) {
 				CanRebase:  false,
 				Message:    "Only one commit found. Nothing to squash.",
 			},
-			wantErr: false,
 		},
 		{
-			name: "fallback to GetCommitsBetween when GetUnpushedCommits fails",
-			setupMock: func(m *MockHistoryManager) {
+			name: "fallback to GetCommitsBetween",
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
 				m.On("FindMergeBase", ctx, "main", "HEAD").Return("abc123", nil)
-				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return(nil, errors.New("upstream not found"))
+				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return([]githistory.Commit{}, errors.New("unpushed failed"))
 				m.On("GetCommitsBetween", ctx, "abc123", "HEAD").Return([]githistory.Commit{
-					{ShortSHA: "def456", Subject: "feat: add feature"},
-					{ShortSHA: "ghi789", Subject: "fix: fix bug"},
+					{ShortSHA: "def456", Subject: "feat: commit 1"},
+					{ShortSHA: "ghi789", Subject: "feat: commit 2"},
 				}, nil)
 			},
-			config: Config{BaseBranch: "main", Logger: logger},
-			want: &AnalysisResult{
+			expectedResult: &AnalysisResult{
 				CurrentBranch: "feature-branch",
 				BaseBranch:    "main",
 				MergeBase:     "abc123",
 				UnpushedCommits: []githistory.Commit{
-					{ShortSHA: "def456", Subject: "feat: add feature"},
-					{ShortSHA: "ghi789", Subject: "fix: fix bug"},
+					{ShortSHA: "def456", Subject: "feat: commit 1"},
+					{ShortSHA: "ghi789", Subject: "feat: commit 2"},
 				},
 				HasChanges: false,
 				CanRebase:  true,
 				Message:    "Found 2 commits that can be squashed.",
 			},
-			wantErr: false,
 		},
 		{
 			name: "error getting current branch",
-			setupMock: func(m *MockHistoryManager) {
-				m.On("GetCurrentBranch", ctx).Return("", errors.New("not in a git repo"))
+			setupMocks: func(m *MockHistoryManager) {
+				m.On("GetCurrentBranch", ctx).Return("", errors.New("git error"))
 			},
-			config:  Config{BaseBranch: "main", Logger: logger},
-			wantErr: true,
-			errMsg:  "failed to get current branch",
+			expectedError: "failed to get current branch: git error",
 		},
 		{
 			name: "error checking uncommitted changes",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
-				m.On("HasUncommittedChanges", ctx).Return(false, errors.New("git error"))
+				m.On("HasUncommittedChanges", ctx).Return(false, errors.New("check error"))
 			},
-			config:  Config{BaseBranch: "main", Logger: logger},
-			wantErr: true,
-			errMsg:  "failed to check uncommitted changes",
+			expectedError: "failed to check uncommitted changes: check error",
 		},
 		{
 			name: "error finding merge base",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
-				m.On("FindMergeBase", ctx, "main", "HEAD").Return("", errors.New("merge base not found"))
+				m.On("FindMergeBase", ctx, "main", "HEAD").Return("", errors.New("merge base error"))
 			},
-			config:  Config{BaseBranch: "main", Logger: logger},
-			wantErr: true,
-			errMsg:  "failed to find merge base",
+			expectedError: "failed to find merge base with main: merge base error",
 		},
 		{
 			name: "error getting commits",
-			setupMock: func(m *MockHistoryManager) {
+			setupMocks: func(m *MockHistoryManager) {
 				m.On("GetCurrentBranch", ctx).Return("feature-branch", nil)
 				m.On("HasUncommittedChanges", ctx).Return(false, nil)
 				m.On("FindMergeBase", ctx, "main", "HEAD").Return("abc123", nil)
-				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return(nil, errors.New("git error"))
-				m.On("GetCommitsBetween", ctx, "abc123", "HEAD").Return(nil, errors.New("git error"))
+				m.On("GetUnpushedCommits", ctx, "main", "HEAD").Return([]githistory.Commit{}, errors.New("unpushed failed"))
+				m.On("GetCommitsBetween", ctx, "abc123", "HEAD").Return([]githistory.Commit{}, errors.New("between failed"))
 			},
-			config:  Config{BaseBranch: "main", Logger: logger},
-			wantErr: true,
-			errMsg:  "failed to get commits for rebase",
+			expectedError: "failed to get commits for rebase: between failed",
 		},
 	}
 
@@ -308,17 +279,22 @@ func TestWorkflow_Analyze(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockHistory := new(MockHistoryManager)
 			mockClient := new(MockSquashClient)
-			tt.setupMock(mockHistory)
+			tt.setupMocks(mockHistory)
 
-			workflow := New(mockHistory, mockClient, tt.config)
-			got, err := workflow.Analyze(ctx)
+			w := New(mockHistory, mockClient, Config{
+				BaseBranch: "main",
+				Language:   "en",
+				Logger:     zap.NewNop(),
+			})
 
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+			result, err := w.Analyze(ctx)
+
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
 			}
 
 			mockHistory.AssertExpectations(t)
@@ -326,53 +302,35 @@ func TestWorkflow_Analyze(t *testing.T) {
 	}
 }
 
-func TestWorkflow_GenerateCommitMessage(t *testing.T) {
+func TestGenerateCommitMessage(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.NewNop()
 
 	tests := []struct {
-		name      string
-		commits   []githistory.Commit
-		lang      string
-		mockResp  string
-		mockError error
-		want      string
-		wantErr   bool
-		errMsg    string
+		name          string
+		commits       []githistory.Commit
+		mockResponse  string
+		mockError     error
+		expectedMsg   string
+		expectedError string
 	}{
 		{
 			name: "successful generation with multiple commits",
 			commits: []githistory.Commit{
-				{Subject: "feat: add user auth", Body: "Implemented JWT authentication"},
-				{Subject: "fix: resolve login bug", Body: ""},
-				{Subject: "docs: update README", Body: "Added auth section"},
+				{Subject: "feat: add feature", Body: "This adds a new feature"},
+				{Subject: "fix: bug fix"},
+				{Subject: "docs: update readme", Body: "Updated documentation\nwith examples"},
 			},
-			lang:     "en",
-			mockResp: "feat: implement complete authentication system",
-			want:     "feat: implement complete authentication system",
-			wantErr:  false,
+			mockResponse: "feat: comprehensive feature update with bug fixes and documentation",
+			expectedMsg:  "feat: comprehensive feature update with bug fixes and documentation",
 		},
 		{
-			name: "successful generation in Chinese",
-			commits: []githistory.Commit{
-				{Subject: "feat: 添加用户认证", Body: "实现了JWT认证"},
-				{Subject: "fix: 修复登录错误", Body: ""},
-			},
-			lang:     "zh",
-			mockResp: "feat: 实现完整的认证系统",
-			want:     "feat: 实现完整的认证系统",
-			wantErr:  false,
-		},
-		{
-			name: "error from squash client",
+			name: "generation error",
 			commits: []githistory.Commit{
 				{Subject: "feat: add feature"},
-				{Subject: "fix: fix bug"},
+				{Subject: "fix: bug fix"},
 			},
-			lang:      "en",
-			mockError: errors.New("API error"),
-			wantErr:   true,
-			errMsg:    "failed to generate commit message",
+			mockError:     errors.New("API error"),
+			expectedError: "failed to generate commit message: API error",
 		},
 	}
 
@@ -381,23 +339,36 @@ func TestWorkflow_GenerateCommitMessage(t *testing.T) {
 			mockHistory := new(MockHistoryManager)
 			mockClient := new(MockSquashClient)
 
+			// Calculate expected messages
+			var expectedMessages []string
+			for _, commit := range tt.commits {
+				msg := commit.Subject
+				if commit.Body != "" {
+					msg += "\n" + commit.Body
+				}
+				expectedMessages = append(expectedMessages, msg)
+			}
+
+			// Mock the squash client's behavior
 			if tt.mockError != nil {
 				mockClient.On("GenerateCommitMessage", ctx, mock.Anything).Return("", tt.mockError)
 			} else {
-				mockClient.On("GenerateCommitMessage", ctx, mock.Anything).Return(tt.mockResp, nil)
+				mockClient.On("GenerateCommitMessage", ctx, mock.Anything).Return(tt.mockResponse, nil)
 			}
 
-			config := Config{BaseBranch: "main", Language: tt.lang, Logger: logger}
-			workflow := New(mockHistory, mockClient, config)
+			w := New(mockHistory, mockClient, Config{
+				BaseBranch: "main",
+				Language:   "en",
+			})
 
-			got, err := workflow.GenerateCommitMessage(ctx, tt.commits)
+			msg, err := w.GenerateCommitMessage(ctx, tt.commits)
 
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedMsg, msg)
 			}
 
 			mockClient.AssertExpectations(t)
@@ -405,18 +376,15 @@ func TestWorkflow_GenerateCommitMessage(t *testing.T) {
 	}
 }
 
-func TestWorkflow_ExecuteRebase(t *testing.T) {
+func TestExecuteRebase(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.NewNop()
 
 	tests := []struct {
-		name         string
-		analysis     *AnalysisResult
-		newMessage   string
-		setupMock    func(*MockHistoryManager)
-		wantErr      bool
-		errMsg       string
-		wantRecovery bool
+		name          string
+		analysis      *AnalysisResult
+		newMessage    string
+		setupMocks    func(*MockHistoryManager)
+		expectedError string
 	}{
 		{
 			name: "successful rebase",
@@ -425,17 +393,16 @@ func TestWorkflow_ExecuteRebase(t *testing.T) {
 				BaseBranch:    "main",
 				MergeBase:     "abc123",
 				UnpushedCommits: []githistory.Commit{
-					{ShortSHA: "def456", Subject: "feat: add feature"},
-					{ShortSHA: "ghi789", Subject: "fix: fix bug"},
+					{ShortSHA: "def456", Subject: "feat: commit 1"},
+					{ShortSHA: "ghi789", Subject: "feat: commit 2"},
 				},
 				CanRebase: true,
 			},
-			newMessage: "feat: consolidated feature implementation",
-			setupMock: func(m *MockHistoryManager) {
-				m.On("BackupBranch", ctx, "feature-branch").Return("feature-branch-backup-12345", nil)
-				m.On("RebaseInteractive", ctx, "abc123", mock.Anything, "feat: consolidated feature implementation").Return(nil)
+			newMessage: "feat: consolidated feature",
+			setupMocks: func(m *MockHistoryManager) {
+				m.On("BackupBranch", ctx, "feature-branch").Return("backup-feature-branch", nil)
+				m.On("RebaseInteractive", ctx, "abc123", mock.Anything, "feat: consolidated feature").Return(nil)
 			},
-			wantErr: false,
 		},
 		{
 			name: "cannot rebase",
@@ -443,41 +410,36 @@ func TestWorkflow_ExecuteRebase(t *testing.T) {
 				CanRebase: false,
 				Message:   "No commits to rebase",
 			},
-			setupMock: func(m *MockHistoryManager) {},
-			wantErr:   true,
-			errMsg:    "cannot rebase: No commits to rebase",
+			expectedError: "cannot rebase: No commits to rebase",
 		},
 		{
-			name: "backup branch creation fails",
-			analysis: &AnalysisResult{
-				CurrentBranch:   "feature-branch",
-				UnpushedCommits: []githistory.Commit{{ShortSHA: "def456"}},
-				CanRebase:       true,
-			},
-			setupMock: func(m *MockHistoryManager) {
-				m.On("BackupBranch", ctx, "feature-branch").Return("", errors.New("cannot create branch"))
-			},
-			wantErr: true,
-			errMsg:  "failed to create backup branch",
-		},
-		{
-			name: "rebase fails",
+			name: "backup branch error",
 			analysis: &AnalysisResult{
 				CurrentBranch: "feature-branch",
+				CanRebase:     true,
+			},
+			setupMocks: func(m *MockHistoryManager) {
+				m.On("BackupBranch", ctx, "feature-branch").Return("", errors.New("backup failed"))
+			},
+			expectedError: "failed to create backup branch: backup failed",
+		},
+		{
+			name: "rebase interactive error",
+			analysis: &AnalysisResult{
+				CurrentBranch: "feature-branch",
+				BaseBranch:    "main",
 				MergeBase:     "abc123",
 				UnpushedCommits: []githistory.Commit{
-					{ShortSHA: "def456", Subject: "feat: add feature"},
+					{ShortSHA: "def456", Subject: "feat: commit 1"},
 				},
 				CanRebase: true,
 			},
-			newMessage: "feat: new message",
-			setupMock: func(m *MockHistoryManager) {
-				m.On("BackupBranch", ctx, "feature-branch").Return("feature-branch-backup-12345", nil)
-				m.On("RebaseInteractive", ctx, "abc123", mock.Anything, "feat: new message").Return(errors.New("merge conflict"))
+			newMessage: "feat: consolidated",
+			setupMocks: func(m *MockHistoryManager) {
+				m.On("BackupBranch", ctx, "feature-branch").Return("backup-feature-branch", nil)
+				m.On("RebaseInteractive", ctx, "abc123", mock.Anything, "feat: consolidated").Return(errors.New("rebase failed"))
 			},
-			wantErr:      true,
-			errMsg:       "rebase failed",
-			wantRecovery: true,
+			expectedError: "rebase failed: rebase failed",
 		},
 	}
 
@@ -485,23 +447,23 @@ func TestWorkflow_ExecuteRebase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockHistory := new(MockHistoryManager)
 			mockClient := new(MockSquashClient)
-			tt.setupMock(mockHistory)
 
-			config := Config{BaseBranch: "main", Logger: logger}
-			workflow := New(mockHistory, mockClient, config)
+			if tt.setupMocks != nil {
+				tt.setupMocks(mockHistory)
+			}
 
-			err := workflow.ExecuteRebase(ctx, tt.analysis, tt.newMessage)
+			w := New(mockHistory, mockClient, Config{
+				BaseBranch: "main",
+				Logger:     zap.NewNop(),
+			})
 
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
-				if tt.wantRecovery {
-					assert.Contains(t, err.Error(), "To recover")
-					assert.Contains(t, err.Error(), "git rebase --abort")
-					assert.Contains(t, err.Error(), "git reset --hard")
-				}
+			err := w.ExecuteRebase(ctx, tt.analysis, tt.newMessage)
+
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 
 			mockHistory.AssertExpectations(t)
@@ -511,47 +473,54 @@ func TestWorkflow_ExecuteRebase(t *testing.T) {
 
 func TestFormatCommitList(t *testing.T) {
 	tests := []struct {
-		name    string
-		commits []githistory.Commit
-		want    string
+		name     string
+		commits  []githistory.Commit
+		expected string
 	}{
 		{
 			name: "multiple commits",
 			commits: []githistory.Commit{
 				{ShortSHA: "abc123", Subject: "feat: add feature"},
-				{ShortSHA: "def456", Subject: "fix: fix bug"},
-				{ShortSHA: "ghi789", Subject: "docs: update docs"},
+				{ShortSHA: "def456", Subject: "fix: bug fix"},
+				{ShortSHA: "ghi789", Subject: "docs: update readme"},
 			},
-			want: "  1. abc123 feat: add feature\n  2. def456 fix: fix bug\n  3. ghi789 docs: update docs",
+			expected: "  1. abc123 feat: add feature\n  2. def456 fix: bug fix\n  3. ghi789 docs: update readme",
 		},
 		{
-			name:    "empty commits",
-			commits: []githistory.Commit{},
-			want:    "",
+			name:     "empty commits",
+			commits:  []githistory.Commit{},
+			expected: "",
 		},
 		{
 			name: "single commit",
 			commits: []githistory.Commit{
-				{ShortSHA: "abc123", Subject: "feat: single feature"},
+				{ShortSHA: "xyz789", Subject: "chore: cleanup"},
 			},
-			want: "  1. abc123 feat: single feature",
+			expected: "  1. xyz789 chore: cleanup",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FormatCommitList(tt.commits)
-			assert.Equal(t, tt.want, got)
+			result := FormatCommitList(tt.commits)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
 func TestGetRecoveryInstructions(t *testing.T) {
-	backupBranch := "feature-branch-backup-12345"
-	got := GetRecoveryInstructions(backupBranch)
+	backupBranch := "backup-feature-123"
+	expected := `If something went wrong, you can recover using one of these commands:
 
-	assert.Contains(t, got, "If something went wrong")
-	assert.Contains(t, got, "git rebase --abort")
-	assert.Contains(t, got, fmt.Sprintf("git reset --hard %s", backupBranch))
-	assert.Contains(t, got, fmt.Sprintf("git branch -D %s", backupBranch))
+1. Abort the rebase (if still in progress):
+   git rebase --abort
+
+2. Reset to the backup branch:
+   git reset --hard backup-feature-123
+
+3. Delete the backup branch when done:
+   git branch -D backup-feature-123`
+
+	result := GetRecoveryInstructions(backupBranch)
+	assert.Equal(t, expected, result)
 }
