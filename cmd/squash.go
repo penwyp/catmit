@@ -40,6 +40,7 @@ var (
 	squashTimeout    int
 	squashAppendMode bool
 	squashRebase     bool
+	squashDebug      bool
 )
 
 var squashCmd = &cobra.Command{
@@ -69,18 +70,19 @@ func init() {
 	squashCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
 	squashCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
 	squashCmd.Flags().BoolVarP(&squashRebase, "rebase", "r", false, "Modify local commit history by squashing unpushed commits")
+	squashCmd.Flags().BoolVar(&squashDebug, "debug", false, "Enable debug output for troubleshooting")
 }
 
 func runSquash(cmd *cobra.Command, args []string) error {
 	// Initialize logger first
-	appLogger, err := logger.New(flagDebug)
+	appLogger, err := logger.New(squashDebug)
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
 
 	// Create dependencies
-	deps := app.NewDependencies(appLogger, flagDebug)
+	deps := app.NewDependencies(appLogger, squashDebug)
 
 	// Create LLM client adapter
 	llmClient := &clientAdapter{client: deps.GetClient()}
@@ -210,7 +212,7 @@ func readMessagesFromStdin() ([]string, error) {
 
 func runRebaseSquash(ctx context.Context, llmClient squash.ClientInterface, logger *zap.Logger) error {
 	// Create git runner
-	runner := git.NewRunnerWithLogger(flagDebug, logger)
+	runner := git.NewRunnerWithLogger(squashDebug, logger)
 
 	// Create git remote manager for branch detection
 	remoteManager := git.NewRemoteManager(runner)

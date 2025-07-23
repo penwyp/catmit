@@ -182,3 +182,160 @@ func TestSquash_buildPrompt(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanCommitMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no cleaning needed",
+			input:    "feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - consolidated",
+			input:    "Here's the consolidated commit message: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - here is",
+			input:    "Here is the consolidated commit message: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - the consolidated",
+			input:    "The consolidated commit message is: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - consolidated only",
+			input:    "Consolidated commit message: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - here's commit",
+			input:    "Here's the commit message: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - here is commit",
+			input:    "Here is the commit message: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove English prefix - the commit",
+			input:    "The commit message is: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove Chinese prefix - 合并后的提交信息",
+			input:    "合并后的提交信息：feat: 添加新功能",
+			expected: "feat: 添加新功能",
+		},
+		{
+			name:     "remove Chinese prefix - 这是合并后的提交信息",
+			input:    "这是合并后的提交信息：feat: 添加新功能",
+			expected: "feat: 添加新功能",
+		},
+		{
+			name:     "remove Chinese prefix - 提交信息",
+			input:    "提交信息：feat: 添加新功能",
+			expected: "feat: 添加新功能",
+		},
+		{
+			name:     "remove Chinese prefix - 以下是合并后的提交信息",
+			input:    "以下是合并后的提交信息：feat: 添加新功能",
+			expected: "feat: 添加新功能",
+		},
+		{
+			name:     "remove Chinese prefix - 生成的提交信息",
+			input:    "生成的提交信息：feat: 添加新功能",
+			expected: "feat: 添加新功能",
+		},
+		{
+			name:     "remove double quotes",
+			input:    "\"feat: add new feature\"",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove single quotes",
+			input:    "'feat: add new feature'",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "remove backticks",
+			input:    "`feat: add new feature`",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "prefix and quotes combined",
+			input:    "Here's the commit message: \"feat: add new feature\"",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "case insensitive prefix matching",
+			input:    "HERE'S THE COMMIT MESSAGE: feat: add new feature",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "whitespace handling",
+			input:    "  Here's the commit message:   feat: add new feature  ",
+			expected: "feat: add new feature",
+		},
+		{
+			name:     "short string - no quotes removal",
+			input:    "ab",
+			expected: "ab",
+		},
+		{
+			name:     "mismatched quotes",
+			input:    "\"feat: add new feature'",
+			expected: "\"feat: add new feature'",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "only whitespace",
+			input:    "   ",
+			expected: "",
+		},
+		{
+			name:     "prefix without colon",
+			input:    "Here's the commit message feat: add new feature",
+			expected: "Here's the commit message feat: add new feature",
+		},
+		{
+			name:     "multiple prefixes - only first removed",
+			input:    "Here's the commit message: The commit message is: feat: add new feature",
+			expected: "The commit message is: feat: add new feature",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Access the unexported function through the squash type
+			s := New(nil, "en")
+			// We'll need to test this indirectly through the Generate method
+			// or make the function exported for testing
+			
+			// For now, we test it through a mock that returns the input with prefix
+			mockClient := new(MockClient)
+			s = New(mockClient, "en")
+			
+			// Mock returns the input string
+			mockClient.On("GenerateCommitMessage", mock.Anything, mock.Anything).
+				Return(tt.input, nil)
+			
+			// Generate will clean the message
+			result, err := s.Generate(context.Background(), []string{"commit 1", "commit 2"})
+			
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
