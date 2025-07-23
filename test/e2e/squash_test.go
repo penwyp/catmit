@@ -52,7 +52,7 @@ func TestSquashCommand_E2E(t *testing.T) {
 	}{
 		{
 			name: "interactive mode",
-			args: []string{"squash", "--no-confirm"},
+			args: []string{"squash", "--yes"},
 			input: `feat: add user authentication
 fix: resolve login error
 docs: update auth guide
@@ -67,7 +67,7 @@ docs: update auth guide
 		},
 		{
 			name: "with language flag",
-			args: []string{"squash", "--no-confirm", "--lang", "en"},
+			args: []string{"squash", "--yes", "--lang", "en"},
 			input: `feat: add feature
 fix: fix bug
 
@@ -78,7 +78,7 @@ fix: fix bug
 		},
 		{
 			name: "error with single message",
-			args: []string{"squash", "--no-confirm"},
+			args: []string{"squash", "--yes"},
 			input: `feat: single commit
 
 `,
@@ -158,7 +158,7 @@ docs: update guide`)
 	}
 
 	// Run the command
-	cmd := exec.Command(binPath, "squash", "--no-confirm")
+	cmd := exec.Command(binPath, "squash", "--yes")
 	cmd.Env = env
 	// Since we're not in a terminal, it will read from stdin
 	cmd.Stdin = strings.NewReader(`feat: add authentication
@@ -207,7 +207,7 @@ func TestSquashCommand_Timeout(t *testing.T) {
 	}
 
 	// Run the command with a very short timeout
-	cmd := exec.Command(binPath, "squash", "--no-confirm", "--timeout", "1")
+	cmd := exec.Command(binPath, "squash", "--yes", "--timeout", "1")
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader("feat: test\nfix: bug\n\n")
 

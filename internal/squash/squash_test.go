@@ -319,13 +319,12 @@ func TestCleanCommitMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Access the unexported function through the squash type
-			s := New(nil, "en")
 			// We'll need to test this indirectly through the Generate method
 			// or make the function exported for testing
 			
 			// For now, we test it through a mock that returns the input with prefix
 			mockClient := new(MockClient)
-			s = New(mockClient, "en")
+			s := New(mockClient, "en")
 			
 			// Mock returns the input string
 			mockClient.On("GenerateCommitMessage", mock.Anything, mock.Anything).

@@ -237,8 +237,8 @@ func TestSquash_ClipboardIntegration(t *testing.T) {
 	assert.Equal(t, testContent, readContent)
 }
 
-// TestSquash_NoConfirmMode tests output in --no-confirm mode
-func TestSquash_NoConfirmMode(t *testing.T) {
+// TestSquash_YesMode tests output in --yes mode
+func TestSquash_YesMode(t *testing.T) {
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -247,7 +247,7 @@ func TestSquash_NoConfirmMode(t *testing.T) {
 	// Simulate generated commit message
 	expectedMessage := "feat: consolidated commit message"
 
-	// Output message (simulate --no-confirm mode behavior)
+	// Output message (simulate --yes mode behavior)
 	fmt.Println(expectedMessage)
 
 	// Restore stdout

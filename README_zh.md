@@ -288,7 +288,7 @@ catmit --version
 catmit squash
 
 # 跳过确认，直接输出
-catmit squash --no-confirm
+catmit squash --yes
 
 # 生成中文提交信息
 catmit squash --lang zh
@@ -321,7 +321,7 @@ catmit squash --rebase
 catmit squash -r  # 简写
 
 # 与其他选项组合使用
-catmit squash --rebase --no-confirm --lang zh
+catmit squash --rebase --yes --lang zh
 
 # 示例工作流：
 $ catmit squash --rebase

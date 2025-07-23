@@ -35,7 +35,7 @@ func (a *clientAdapter) GenerateCommitMessage(ctx context.Context, prompt string
 }
 
 var (
-	squashNoConfirm  bool
+	squashYes        bool
 	squashLang       string
 	squashTimeout    int
 	squashAppendMode bool
@@ -55,7 +55,7 @@ The generated message will be automatically copied to your clipboard.`,
   catmit squash
 
   # No confirmation with Chinese output
-  catmit squash --no-confirm --lang zh
+  catmit squash --yes --lang zh
 
   # Custom timeout
   catmit squash --timeout 60`,
@@ -65,7 +65,7 @@ The generated message will be automatically copied to your clipboard.`,
 func init() {
 	rootCmd.AddCommand(squashCmd)
 
-	squashCmd.Flags().BoolVarP(&squashNoConfirm, "no-confirm", "n", false, "Skip confirmation and output directly")
+	squashCmd.Flags().BoolVarP(&squashYes, "yes", "y", false, "Skip confirmation and output directly")
 	squashCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
 	squashCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
 	squashCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
@@ -108,8 +108,8 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	// Create squash instance
 	squashInstance := squash.New(llmClient, squashLang)
 
-	// Handle no-confirm mode
-	if squashNoConfirm {
+	// Handle yes mode
+	if squashYes {
 		result, err := squashInstance.Generate(ctx, messages)
 		if err != nil {
 			return fmt.Errorf("failed to generate commit message: %w", err)
@@ -244,8 +244,8 @@ func runRebaseSquash(ctx context.Context, llmClient squash.ClientInterface, logg
 	// Create rebase workflow
 	workflow := rebase.New(history, llmClient, config)
 
-	// Handle no-confirm mode differently
-	if squashNoConfirm {
+	// Handle yes mode differently
+	if squashYes {
 		// Analyze the repository
 		analysis, err := workflow.Analyze(ctx)
 		if err != nil {

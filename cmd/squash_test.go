@@ -127,7 +127,7 @@ func TestSquashCommand(t *testing.T) {
 
 	// Test flags
 	flags := squashCmd.Flags()
-	assert.NotNil(t, flags.Lookup("no-confirm"))
+	assert.NotNil(t, flags.Lookup("yes"))
 	assert.NotNil(t, flags.Lookup("lang"))
 	assert.NotNil(t, flags.Lookup("timeout"))
 	assert.NotNil(t, flags.Lookup("append-mode"))

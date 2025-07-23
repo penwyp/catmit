@@ -91,7 +91,7 @@ catmit --version
 catmit squash
 
 # Skip confirmation, output directly
-catmit squash --no-confirm
+catmit squash --yes
 
 # Generate in Chinese
 catmit squash --lang zh
@@ -124,7 +124,7 @@ catmit squash --rebase
 catmit squash -r  # shorthand
 
 # Combine with other options
-catmit squash --rebase --no-confirm --lang zh
+catmit squash --rebase --yes --lang zh
 
 # Example workflow:
 $ catmit squash --rebase
