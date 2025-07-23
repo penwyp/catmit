@@ -27,17 +27,17 @@ const (
 
 // RebaseModel is the Bubble Tea model for the rebase workflow
 type RebaseModel struct {
-	workflow    *rebase.Workflow
-	phase       RebasePhase
-	analysis    *rebase.AnalysisResult
-	message     string
-	result      string
-	error       error
-	spinner     spinner.Model
-	width       int
-	height      int
-	accepted    bool
-	copySuccess bool
+	workflow     *rebase.Workflow
+	phase        RebasePhase
+	analysis     *rebase.AnalysisResult
+	message      string
+	result       string
+	error        error
+	spinner      spinner.Model
+	width        int
+	height       int
+	accepted     bool
+	copySuccess  bool
 	backupBranch string
 
 	// Styles
@@ -52,23 +52,25 @@ type RebaseModel struct {
 
 // NewRebaseModel creates a new RebaseModel
 func NewRebaseModel(workflow *rebase.Workflow) *RebaseModel {
+
+	colors := DefaultColors()
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = lipgloss.NewStyle().Foreground(colors.HotPink)
 
 	return &RebaseModel{
-		workflow:   workflow,
-		phase:      RebasePhaseAnalyzing,
-		spinner:    s,
+		workflow: workflow,
+		phase:    RebasePhaseAnalyzing,
+		spinner:  s,
 
 		// Initialize styles
-		titleStyle:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")),
-		infoStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("86")),
-		errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		successStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("46")),
+		titleStyle:   lipgloss.NewStyle().Bold(true).Foreground(colors.HotPink),
+		infoStyle:    lipgloss.NewStyle().Foreground(colors.Cyan),
+		errorStyle:   lipgloss.NewStyle().Foreground(colors.Red),
+		successStyle: lipgloss.NewStyle().Foreground(colors.BrightGreen),
 		normalStyle:  lipgloss.NewStyle(),
-		dimStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		helpStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+		dimStyle:     lipgloss.NewStyle().Foreground(colors.DarkGray),
+		helpStyle:    lipgloss.NewStyle().Foreground(colors.LightGray),
 	}
 }
 
@@ -207,10 +209,10 @@ func (m *RebaseModel) View() string {
 		s.WriteString(m.titleStyle.Render("📋 Commits to Squash") + "\n\n")
 		s.WriteString(m.infoStyle.Render(fmt.Sprintf("Branch: %s → %s", m.analysis.CurrentBranch, m.analysis.BaseBranch)) + "\n")
 		s.WriteString(m.infoStyle.Render(fmt.Sprintf("Commits to squash: %d", len(m.analysis.UnpushedCommits))) + "\n\n")
-		
+
 		s.WriteString(m.normalStyle.Render("The following commits will be squashed:") + "\n")
 		s.WriteString(m.dimStyle.Render(rebase.FormatCommitList(m.analysis.UnpushedCommits)) + "\n\n")
-		
+
 		s.WriteString(m.helpStyle.Render("Continue? (y/n): "))
 
 	case RebasePhaseGenerating:
@@ -220,11 +222,11 @@ func (m *RebaseModel) View() string {
 	case RebasePhaseConfirming:
 		s.WriteString(m.titleStyle.Render("📝 Generated Commit Message") + "\n\n")
 		s.WriteString(m.normalStyle.Render(m.result) + "\n\n")
-		
+
 		if m.copySuccess {
 			s.WriteString(m.successStyle.Render("✓ Copied to clipboard") + "\n\n")
 		}
-		
+
 		s.WriteString(m.helpStyle.Render("[A]ccept  [E]dit  [R]egenerate  [C]ancel: "))
 
 	case RebasePhaseExecuting:
@@ -290,14 +292,14 @@ func (m *RebaseModel) executeRebase() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		err := m.workflow.ExecuteRebase(ctx, m.analysis, m.result)
-		
+
 		// Extract backup branch name from analysis or error message
 		backupBranch := ""
 		if m.analysis != nil {
 			// The workflow should have created a backup
 			backupBranch = fmt.Sprintf("%s_bak", m.analysis.CurrentBranch)
 		}
-		
+
 		return executedMsg{backupBranch: backupBranch, err: err}
 	}
 }

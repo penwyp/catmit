@@ -351,7 +351,7 @@ catmit -y --pr
 catmit -p=false --pr
 
 # 检查所有 git 远程仓库的认证状态
-catmit auth status
+catmit check-auth
 ```
 
 **支持的 PR 平台：**
@@ -463,7 +463,7 @@ catmit --pr -r upstream
 **多远程场景：**
 ```bash
 # 列出所有远程仓库及其提供商
-catmit auth status
+catmit check-auth
 
 # 创建 PR 到特定远程
 catmit --pr --pr-remote company

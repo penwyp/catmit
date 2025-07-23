@@ -464,7 +464,7 @@ func (m *MainModel) renderLoadingContent() string {
 	switch m.loadingStage {
 	case StageCollect:
 		status = "Collecting diff…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
+		statusStyle = lipgloss.NewStyle().Foreground(colors.DarkOrange)
 	case StagePreprocess:
 		status = "Preprocessing files…"
 		statusStyle = lipgloss.NewStyle().Foreground(colors.Orange)

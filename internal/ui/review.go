@@ -170,16 +170,14 @@ func (m *ReviewModel) calculateContentWidth() int {
 // View renders the UI
 func (m *ReviewModel) View() string {
 	// --- Palette ---
-	const (
-		cGray   = lipgloss.Color("245")
-		cBlue   = lipgloss.Color("39")
-		cGreen  = lipgloss.Color("42")
-		cYellow = lipgloss.Color("220")
-		cRed    = lipgloss.Color("196")
-		cWhite  = lipgloss.Color("255")
-		cBlack  = lipgloss.Color("0")
-		padding = 1
-	)
+	colors := DefaultColors()
+	cGray := colors.Gray
+	cBlue := colors.Blue
+	cGreen := colors.Green
+	cYellow := colors.Yellow
+	cRed := colors.Red
+	cWhite := colors.White
+	cBlack := colors.Black
 
 	// Dynamically calculate content width
 	contentWidth := m.calculateContentWidth()

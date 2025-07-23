@@ -102,13 +102,14 @@ func (m *BaseModel) RenderActions() string {
 		return ""
 	}
 
+	colors := DefaultColors()
 	actionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("14")).
+		Foreground(colors.BrightCyan).
 		Bold(true)
 
 	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("14")).
-		Foreground(lipgloss.Color("0")).
+		Background(colors.BrightCyan).
+		Foreground(colors.Black).
 		Bold(true).
 		Padding(0, 1)
 
@@ -138,9 +139,10 @@ func (m *BaseModel) View() string {
 
 // standardView renders the full UI, clearing screen each time
 func (m *BaseModel) standardView() string {
+	colors := DefaultColors()
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("12"))
+		Foreground(colors.BrightBlue)
 
 	contentStyle := lipgloss.NewStyle().
 		Padding(1, 2)
@@ -166,7 +168,7 @@ func (m *BaseModel) standardView() string {
 		if !errors.Is(m.err, gitinfo.ErrNoDiff) {
 			errorStyle := lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("9"))
+				Foreground(colors.BrightRed)
 			content = append(content, errorStyle.Render("Error: "+m.err.Error()), "")
 		}
 	}

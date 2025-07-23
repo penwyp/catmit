@@ -8,27 +8,59 @@ import (
 
 // UIColors defines a unified color theme
 type UIColors struct {
-	Gray   lipgloss.Color
-	Blue   lipgloss.Color
-	Green  lipgloss.Color
-	Yellow lipgloss.Color
-	Red    lipgloss.Color
-	White  lipgloss.Color
-	Black  lipgloss.Color
-	Orange lipgloss.Color
+	// Basic colors
+	Gray    lipgloss.Color
+	Blue    lipgloss.Color
+	Green   lipgloss.Color
+	Yellow  lipgloss.Color
+	Red     lipgloss.Color
+	White   lipgloss.Color
+	Black   lipgloss.Color
+	Orange  lipgloss.Color
+	HotPink lipgloss.Color
+
+	// Extended colors
+	DarkGreen     lipgloss.Color
+	DarkBlue      lipgloss.Color
+	Cyan          lipgloss.Color
+	BrightGreen   lipgloss.Color
+	DarkGray      lipgloss.Color
+	LightGray     lipgloss.Color
+	BrightRed     lipgloss.Color
+	BrightYellow  lipgloss.Color
+	BrightCyan    lipgloss.Color
+	BrightBlue    lipgloss.Color
+	DarkOrange    lipgloss.Color
+	SecondaryGray lipgloss.Color
 }
 
 // DefaultColors returns the default color theme
 func DefaultColors() UIColors {
 	return UIColors{
-		Gray:   lipgloss.Color("245"),
-		Blue:   lipgloss.Color("39"),
-		Green:  lipgloss.Color("42"),
-		Yellow: lipgloss.Color("220"),
-		Red:    lipgloss.Color("196"),
-		White:  lipgloss.Color("255"),
-		Black:  lipgloss.Color("0"),
-		Orange: lipgloss.Color("208"),
+		// Basic colors
+		Gray:    "245",
+		Blue:    "39",
+		Green:   "42",
+		Yellow:  "220",
+		Red:     "196",
+		White:   "255",
+		Black:   "0",
+		Orange:  "208",
+		HotPink: "205",
+
+		// Extended colors
+		DarkGreen:     "22",
+		DarkBlue:      "19",
+		Cyan:          "86",
+		BrightGreen:   "46",
+		DarkGray:      "240",
+		LightGray:     "241",
+		BrightRed:     "9",
+		BrightYellow:  "11",
+		BrightCyan:    "14",
+		BrightBlue:    "12",
+		DarkOrange:    "33",
+		SecondaryGray: "250",
 	}
 }
 
@@ -45,6 +77,10 @@ type UIStyles struct {
 	CommitType lipgloss.Style
 	CommitDesc lipgloss.Style
 	CommitBody lipgloss.Style
+	Info       lipgloss.Style
+	Dim        lipgloss.Style
+	Help       lipgloss.Style
+	Framework  lipgloss.Style
 }
 
 // DefaultStyles returns the default style set
@@ -62,6 +98,10 @@ func DefaultStyles() UIStyles {
 		CommitType: lipgloss.NewStyle().Foreground(colors.Yellow),
 		CommitDesc: lipgloss.NewStyle().Foreground(colors.White),
 		CommitBody: lipgloss.NewStyle().Foreground(colors.Gray),
+		Info:       lipgloss.NewStyle().Foreground(colors.Cyan),
+		Dim:        lipgloss.NewStyle().Foreground(colors.DarkGray),
+		Help:       lipgloss.NewStyle().Foreground(colors.LightGray),
+		Framework:  lipgloss.NewStyle().Foreground(colors.BrightCyan),
 	}
 }
 

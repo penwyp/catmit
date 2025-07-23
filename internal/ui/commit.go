@@ -165,13 +165,10 @@ func (m *CommitModel) calculateContentWidth() int {
 // View renders the UI (returns only the content, border is handled by MainModel)
 func (m *CommitModel) View() string {
 	// Palette (consistent with ReviewModel)
-	const (
-		cGray   = lipgloss.Color("245")
-		cBlue   = lipgloss.Color("39")
-		cGreen  = lipgloss.Color("42")
-		cYellow = lipgloss.Color("220")
-		cWhite  = lipgloss.Color("255")
-	)
+	colors := DefaultColors()
+	cGreen := colors.Green
+	cYellow := colors.Yellow
+	cWhite := colors.White
 
 	contentWidth := m.calculateContentWidth()
 

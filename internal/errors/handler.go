@@ -138,11 +138,11 @@ func (h *DefaultHandler) inferErrorType(err error) *CatmitError {
 func (h *DefaultHandler) printError(err *CatmitError) {
 	// Define styles
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("9")).
+		Foreground(ColorBrightRed).
 		Bold(true)
 
 	suggestionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("11"))
+		Foreground(ColorBrightYellow)
 
 	// Build error message
 	var parts []string

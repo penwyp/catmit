@@ -142,9 +142,7 @@ func TestRunSquash_Validation(t *testing.T) {
 // Helper function to test getMessagesFromEditor with mocked behavior
 func TestGetMessagesFromEditor_Logic(t *testing.T) {
 	// Test the parsing logic by simulating file content
-	testContent := `# Enter commit messages, one per line
-# Lines starting with # will be ignored
-# Save and exit when done
+	testContent := `# Enter commit messages, one per line, Lines starting with # will be ignored, Save and exit when done
 
 feat: add user authentication
 fix: resolve login error

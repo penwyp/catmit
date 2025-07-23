@@ -40,10 +40,10 @@ type AuthCLIDetector interface {
 	SuggestInstallCommand(cliName string) []string
 }
 
-// NewAuthStatusCommand creates the 'auth status' command
-func NewAuthStatusCommand(git AuthGitRunner, providerDetector AuthProviderDetector, cliDetector AuthCLIDetector) *cobra.Command {
+// NewCheckAuthCommand creates the 'check-auth' command
+func NewCheckAuthCommand(git AuthGitRunner, providerDetector AuthProviderDetector, cliDetector AuthCLIDetector) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status",
+		Use:   "check-auth",
 		Short: "Check authentication status for git remotes",
 		Long:  `Check the authentication status of CLI tools for all configured git remotes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

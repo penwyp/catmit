@@ -40,7 +40,7 @@ case "$args" in
 `, args, response)
 		}
 	}
-	
+
 	// Add pattern matches for pr create commands with title
 	for args, response := range responses {
 		if strings.HasPrefix(args, "pr create --title") {
@@ -394,7 +394,7 @@ func TestE2E_AuthStatus(t *testing.T) {
 	defer giteaAPIServer.Close()
 
 	// Run auth status command
-	authCmd := exec.Command(bin, "auth", "status")
+	authCmd := exec.Command(bin, "check-auth")
 	authCmd.Dir = repo
 	authCmd.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(ghMock)+":"+filepath.Dir(teaMock)+":"+os.Getenv("PATH"),

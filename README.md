@@ -154,7 +154,7 @@ catmit -y --pr
 catmit -p=false --pr
 
 # Check authentication status for all git remotes
-catmit auth status
+catmit check-auth
 ```
 
 **Supported PR Platforms:**
@@ -266,7 +266,7 @@ catmit --pr -r upstream
 **Multi-Remote Scenarios:**
 ```bash
 # List all remotes and their providers
-catmit auth status
+catmit check-auth
 
 # Create PR to specific remote
 catmit --pr --pr-remote company

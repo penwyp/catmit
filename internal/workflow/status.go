@@ -9,14 +9,14 @@ func RenderStatusBar(message string, isSuccess bool) string {
 	var style lipgloss.Style
 	if isSuccess {
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42")). // Green
-			Background(lipgloss.Color("22")). // Dark green
+			Foreground(ColorGreen).
+			Background(ColorDarkGreen).
 			Bold(true).
 			Padding(0, 1)
 	} else {
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")). // Blue
-			Background(lipgloss.Color("19")). // Dark blue
+			Foreground(ColorBlue).
+			Background(ColorDarkBlue).
 			Bold(true).
 			Padding(0, 1)
 	}

@@ -145,7 +145,7 @@ func TestE2E_GitLabAuth(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run auth status command
-	authCmd := exec.Command(bin, "auth", "status")
+	authCmd := exec.Command(bin, "check-auth")
 	authCmd.Dir = repo
 	authCmd.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(glabMock)+":"+os.Getenv("PATH"),

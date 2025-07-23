@@ -81,23 +81,14 @@ func init() {
 	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
 	rootCmd.Flags().BoolVar(&flagPRTemplate, "pr-template", true, "use PR template if available")
 
-	// Add auth subcommand
-	authCmd := &cobra.Command{
-		Use:   "auth",
-		Short: "Authentication related commands",
-		Long:  `Manage authentication for PR creation with various git hosting providers`,
-	}
-
-	// Create auth status command with proper implementations
+	// Add check-auth command
 	// Note: debug flag is not available in init(), will be false by default
-	authStatusCmd := NewAuthStatusCommand(
+	checkAuthCmd := NewCheckAuthCommand(
 		newAuthGitRunner(false),
 		newAuthProviderDetector(),
 		newAuthCLIDetector(),
 	)
-
-	authCmd.AddCommand(authStatusCmd)
-	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(checkAuthCmd)
 
 	// Disable Cobra's auto-generated completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true

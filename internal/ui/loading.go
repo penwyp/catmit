@@ -166,25 +166,26 @@ func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View displays text according to the current stage.
 func (m *LoadingModel) View() string {
 	// Define colors for different stages
+	colors := DefaultColors()
 	var statusStyle lipgloss.Style
 	var status string
 
 	switch m.stage {
 	case StageCollect:
 		status = "Collecting diff…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33")) // Orange
+		statusStyle = lipgloss.NewStyle().Foreground(colors.DarkOrange)
 	case StagePreprocess:
 		status = "Preprocessing files…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208")) // Dark orange
+		statusStyle = lipgloss.NewStyle().Foreground(colors.Orange)
 	case StagePrompt:
 		status = "Crafting prompt…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")) // Blue
+		statusStyle = lipgloss.NewStyle().Foreground(colors.Blue)
 	case StageQuery:
 		status = "Generating commit message…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42")) // Green
+		statusStyle = lipgloss.NewStyle().Foreground(colors.Green)
 	default:
 		status = "Processing…"
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")) // Gray
+		statusStyle = lipgloss.NewStyle().Foreground(colors.SecondaryGray)
 	}
 
 	return m.spinner.View() + " " + statusStyle.Render(status)

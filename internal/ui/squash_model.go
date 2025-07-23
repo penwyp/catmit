@@ -43,9 +43,10 @@ type squashMsg struct {
 
 // NewSquashModel creates a new SquashModel
 func NewSquashModel(s *squash.Squash, messages []string) *SquashModel {
+	colors := DefaultColors()
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	sp.Style = lipgloss.NewStyle().Foreground(colors.HotPink)
 
 	model := &SquashModel{
 		BaseModel: NewBaseModel("Squashing Commit Messages", nil),
@@ -231,14 +232,15 @@ func (m *SquashModel) renderGenerating() string {
 
 // renderReviewing renders the review content
 func (m *SquashModel) renderReviewing() string {
+	colors := DefaultColors()
 	resultStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(colors.DarkGray).
 		Padding(1, 2).
 		Width(min(80, m.width-4))
 
 	successStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("10"))
+		Foreground(colors.BrightGreen)
 
 	var content []string
 

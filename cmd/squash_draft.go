@@ -134,9 +134,9 @@ func getMessagesFromEditor() ([]string, error) {
 
 	// Interactive mode - use editor
 	// Get the default editor
-	editor := os.Getenv("EDITOR")
+	editor := os.Getenv("CATMIT_EDITOR")
 	if editor == "" {
-		editor = "vi"
+		editor = "vim"
 	}
 
 	// Create a temporary file
@@ -147,7 +147,7 @@ func getMessagesFromEditor() ([]string, error) {
 	defer os.Remove(tmpfile.Name())
 
 	// Write prompt information
-	_, err = tmpfile.WriteString("# Enter commit messages, one per line\n# Lines starting with # will be ignored\n# Save and exit when done\n\n")
+	_, err = tmpfile.WriteString("# Enter commit messages, one per line, Lines starting with # will be ignored, Save and exit when done\n\n")
 	if err != nil {
 		return nil, err
 	}
@@ -192,4 +192,3 @@ func readMessagesFromStdin() ([]string, error) {
 	}
 	return messages, scanner.Err()
 }
-

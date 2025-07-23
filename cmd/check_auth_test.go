@@ -59,8 +59,8 @@ func (m *MockGitRunner) GetRemoteURL(ctx context.Context, remote string) (string
 	return args.String(0), args.Error(1)
 }
 
-// TestAuthStatusCommand_Execute tests the execution of the auth status command
-func TestAuthStatusCommand_Execute(t *testing.T) {
+// TestCheckAuthCommand_Execute tests the execution of the check-auth command
+func TestCheckAuthCommand_Execute(t *testing.T) {
 	tests := []struct {
 		name           string
 		setupMocks     func(*MockGitRunner, *MockProviderDetector, *MockCLIDetector)
@@ -189,7 +189,7 @@ func TestAuthStatusCommand_Execute(t *testing.T) {
 
 			// Create command and capture output
 			var buf bytes.Buffer
-			cmd := NewAuthStatusCommand(mockGit, mockProvider, mockCLI)
+			cmd := NewCheckAuthCommand(mockGit, mockProvider, mockCLI)
 			cmd.SetOut(&buf)
 			cmd.SetErr(&buf)
 
@@ -215,8 +215,8 @@ func TestAuthStatusCommand_Execute(t *testing.T) {
 	}
 }
 
-// TestAuthStatusCommand_FormatTable tests table formatting
-func TestAuthStatusCommand_FormatTable(t *testing.T) {
+// TestCheckAuthCommand_FormatTable tests table formatting
+func TestCheckAuthCommand_FormatTable(t *testing.T) {
 	tests := []struct {
 		name          string
 		statuses      []RemoteAuthStatus
@@ -252,8 +252,8 @@ func TestAuthStatusCommand_FormatTable(t *testing.T) {
 	}
 }
 
-// TestAuthStatusCommand_ColorOutput tests colored output
-func TestAuthStatusCommand_ColorOutput(t *testing.T) {
+// TestCheckAuthCommand_ColorOutput tests colored output
+func TestCheckAuthCommand_ColorOutput(t *testing.T) {
 	tests := []struct {
 		name          string
 		authenticated bool
