@@ -277,7 +277,6 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 	if err != nil {
 		// Check if it's the "nothing to commit" error
 		if errors.Is(err, gitinfo.ErrNoDiff) {
-			fmt.Fprintln(w.output, "Nothing to commit.")
 			return nil
 		}
 		// Check if it's a git repository error
@@ -317,7 +316,6 @@ func (w *Workflow) generateCommitMessage(ctx context.Context) (string, error) {
 				// Return early to handle in the calling function
 				return "", err
 			}
-			fmt.Fprintln(w.output, "Nothing to commit.")
 			if w.config.Debug {
 				w.logger.Debug("No staged, unstaged, or untracked changes detected")
 			}
