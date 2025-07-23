@@ -21,7 +21,6 @@ func (m *MockSquashClient) GenerateCommitMessage(ctx context.Context, prompt str
 	return args.String(0), args.Error(1)
 }
 
-
 func TestClientAdapter_GenerateCommitMessage(t *testing.T) {
 	// Test that the adapter correctly passes through the prompt
 	// The actual LLM client behavior is tested in the llm package tests
@@ -121,12 +120,12 @@ docs: update docs`,
 
 func TestSquashCommand(t *testing.T) {
 	// Test that the squash command is properly initialized
-	assert.NotNil(t, squashCmd)
-	assert.Equal(t, "squash", squashCmd.Use)
-	assert.Contains(t, squashCmd.Short, "Consolidate")
+	assert.NotNil(t, squashDraftCmd)
+	assert.Equal(t, "squash-draft", squashDraftCmd.Use)
+	assert.Contains(t, squashDraftCmd.Short, "Consolidate")
 
 	// Test flags
-	flags := squashCmd.Flags()
+	flags := squashDraftCmd.Flags()
 	assert.NotNil(t, flags.Lookup("yes"))
 	assert.NotNil(t, flags.Lookup("lang"))
 	assert.NotNil(t, flags.Lookup("timeout"))
@@ -165,7 +164,7 @@ docs: update auth guide
 	// Parse the content similar to getMessagesFromEditor
 	var messages []string
 	scanner := bufio.NewScanner(strings.NewReader(testContent))
-	
+
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())
 		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {

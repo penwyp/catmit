@@ -43,8 +43,8 @@ var (
 	squashDebug      bool   // enable debug output for troubleshooting
 )
 
-var squashCmd = &cobra.Command{
-	Use:   "squash",
+var squashDraftCmd = &cobra.Command{
+	Use:   "squash-draft",
 	Short: "Consolidate multiple commit messages into one",
 	Long: `Squash command helps you consolidate multiple commit messages into a single,
 comprehensive commit message using LLM.
@@ -52,25 +52,25 @@ comprehensive commit message using LLM.
 Opens your default editor to input commit messages (one per line).
 The generated message will be automatically copied to your clipboard.`,
 	Example: `  # Default mode (opens editor)
-  catmit squash
+  catmit squash-draft
 
   # No confirmation with Chinese output
-  catmit squash --yes --lang zh
+  catmit squash-draft --yes --lang zh
 
   # Custom timeout
-  catmit squash --timeout 60`,
+  catmit squash-draft --timeout 60`,
 	RunE: runSquash,
 }
 
 func init() {
-	rootCmd.AddCommand(squashCmd)
+	rootCmd.AddCommand(squashDraftCmd)
 
-	squashCmd.Flags().BoolVarP(&squashYes, "yes", "y", false, "Skip confirmation and output directly")
-	squashCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
-	squashCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
-	squashCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
-	squashCmd.Flags().BoolVarP(&squashRebase, "rebase", "r", false, "Modify local commit history by squashing unpushed commits")
-	squashCmd.Flags().BoolVar(&squashDebug, "debug", false, "Enable debug output for troubleshooting")
+	squashDraftCmd.Flags().BoolVarP(&squashYes, "yes", "y", false, "Skip confirmation and output directly")
+	squashDraftCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
+	squashDraftCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
+	squashDraftCmd.Flags().BoolVar(&squashAppendMode, "append-mode", false, "Use append mode (non-clearing console)")
+	squashDraftCmd.Flags().BoolVarP(&squashRebase, "rebase", "r", false, "Modify local commit history by squashing unpushed commits")
+	squashDraftCmd.Flags().BoolVar(&squashDebug, "debug", false, "Enable debug output for troubleshooting")
 }
 
 func runSquash(cmd *cobra.Command, args []string) error {
