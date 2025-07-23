@@ -38,17 +38,17 @@ type UIColors struct {
 func DefaultColors() UIColors {
 	return UIColors{
 		// Basic colors
-		Gray:    "245",
-		Blue:    "39",
-		Green:   "42",
-		Yellow:  "220",
-		Red:     "196",
-		White:   "255",
-		Black:   "0",
-		Orange:  "208",
-		HotPink: "205",
+		Gray:   "245",
+		Blue:   "39",
+		Green:  "42",
+		Yellow: "220",
+		Red:    "196",
+		White:  "255",
+		Black:  "0",
+		Orange: "208",
 
 		// Extended colors
+		HotPink:       "205",
 		DarkGreen:     "22",
 		DarkBlue:      "19",
 		Cyan:          "86",
