@@ -45,7 +45,6 @@ var (
 	flagPush     bool
 	flagStageAll bool
 	flagVersion  bool
-	flagCreatePR bool   // Deprecated: use flagPR instead
 	flagPR       bool   // New PR flag
 	flagSeed     string // Seed text for commit message generation
 
@@ -60,7 +59,7 @@ var (
 func init() {
 	// Disable automatic completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	
+
 	// Disable automatic help command
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 
@@ -72,7 +71,6 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
-	rootCmd.Flags().BoolVar(&flagCreatePR, "create-pr", false, "create GitHub pull request after successful push (deprecated, use --pr)")
 	rootCmd.Flags().BoolVarP(&flagPR, "pr", "c", false, "create pull request after successful push")
 	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
 
@@ -106,17 +104,16 @@ func init() {
 
 	// Disable Cobra's auto-generated completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	
+
 	// Disable Cobra's auto-generated help command
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 }
-
 
 func ExecuteContext(ctx context.Context) error { return rootCmd.ExecuteContext(ctx) }
 
 // isPRRequested returns true if user requested PR creation via either flag
 func isPRRequested() bool {
-	return flagPR || flagCreatePR
+	return flagPR
 }
 
 // testDeps is used for dependency injection in tests
@@ -135,11 +132,6 @@ func run(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to initialize logger", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
-
-	// Show deprecation warning if --create-pr is used
-	if flagCreatePR {
-		_, _ = fmt.Fprintln(cmd.OutOrStderr(), "⚠️  Warning: --create-pr is deprecated, please use --pr instead")
-	}
 
 	// Prioritize --seed flag over positional argument
 	seedText := flagSeed

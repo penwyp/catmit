@@ -54,14 +54,11 @@ func TestIsPRRequested(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save original values
 			originalFlagPR := flagPR
-			originalFlagCreatePR := flagCreatePR
 			defer func() {
 				flagPR = originalFlagPR
-				flagCreatePR = originalFlagCreatePR
 			}()
 
 			flagPR = tt.flagPR
-			flagCreatePR = tt.flagCreatePR
 
 			assert.Equal(t, tt.expected, isPRRequested())
 		})
