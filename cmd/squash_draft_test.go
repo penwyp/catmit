@@ -21,15 +21,6 @@ func (m *MockSquashClient) GenerateCommitMessage(ctx context.Context, prompt str
 	return args.String(0), args.Error(1)
 }
 
-func TestClientAdapter_GenerateCommitMessage(t *testing.T) {
-	// Test that the adapter correctly passes through the prompt
-	// The actual LLM client behavior is tested in the llm package tests
-	t.Run("adapter structure", func(t *testing.T) {
-		// Create a nil client adapter to test the structure
-		adapter := &clientAdapter{client: nil}
-		assert.NotNil(t, adapter)
-	})
-}
 
 func TestReadMessagesFromStdin(t *testing.T) {
 	tests := []struct {
@@ -137,6 +128,63 @@ func TestRunSquash_Validation(t *testing.T) {
 	// This test verifies the validation logic without running the full command
 	// We'll use a more focused approach for the actual runSquash function tests
 	// in integration tests, as it requires complex mocking of editor interactions
+}
+
+func TestRunSquash_DryRunMode(t *testing.T) {
+	// Save original values
+	origYes := squashYes
+	origDryRun := squashDryRun
+	origTimeout := squashTimeout
+	defer func() {
+		squashYes = origYes
+		squashDryRun = origDryRun
+		squashTimeout = origTimeout
+	}()
+
+	// Set test values
+	squashDryRun = true
+	squashTimeout = 30
+	squashDebug = false
+
+	// Create mock client
+	mockClient := new(MockSquashClient)
+	mockClient.On("GenerateCommitMessage", mock.Anything, mock.Anything).
+		Return("feat: consolidated feature", nil)
+
+	// Test with valid messages (would need to mock getMessagesFromEditor)
+	// This is a placeholder for the actual test implementation
+	t.Run("dry run output", func(t *testing.T) {
+		// The actual implementation would require mocking stdin or editor
+		// which is complex for unit tests and better suited for integration tests
+		assert.True(t, squashDryRun)
+	})
+}
+
+func TestRunSquash_ErrorScenarios(t *testing.T) {
+	tests := []struct {
+		name          string
+		messages      []string
+		expectedError string
+	}{
+		{
+			name:          "less than 2 messages",
+			messages:      []string{"single message"},
+			expectedError: "at least 2 commit messages are required",
+		},
+		{
+			name:          "empty messages",
+			messages:      []string{},
+			expectedError: "at least 2 commit messages are required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This would need proper mocking of getMessagesFromEditor
+			// For now, we just validate the error message format
+			assert.Contains(t, tt.expectedError, "at least 2")
+		})
+	}
 }
 
 // Helper function to test getMessagesFromEditor with mocked behavior

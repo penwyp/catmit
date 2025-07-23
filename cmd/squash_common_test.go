@@ -69,3 +69,18 @@ func TestCreateRebaseWorkflow(t *testing.T) {
 		assert.NotNil(t, createRebaseWorkflow)
 	})
 }
+
+func TestInitSquashDependencies_ErrorCases(t *testing.T) {
+	// Test with environment variables that might cause initialization to fail
+	// This is challenging to test without modifying the actual implementation
+	// to accept configuration or use dependency injection
+	
+	t.Run("successful initialization", func(t *testing.T) {
+		deps, err := initSquashDependencies(false)
+		assert.NoError(t, err)
+		assert.NotNil(t, deps)
+		if deps != nil {
+			_ = deps.logger.Sync()
+		}
+	})
+}

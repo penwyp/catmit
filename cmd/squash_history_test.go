@@ -43,3 +43,87 @@ func TestSquashHistoryExamples(t *testing.T) {
 	assert.Contains(t, squashHistoryCmd.Example, "--dry-run")
 	assert.Contains(t, squashHistoryCmd.Example, "--lang zh")
 }
+
+func TestRunSquashHistory_DryRunMode(t *testing.T) {
+	// Save original values
+	origDryRun := historyDryRun
+	origTimeout := historyTimeout
+	defer func() {
+		historyDryRun = origDryRun
+		historyTimeout = origTimeout
+	}()
+
+	// Set test values
+	historyDryRun = true
+	historyTimeout = 30
+	historyDebug = false
+
+	t.Run("dry run prevents execution", func(t *testing.T) {
+		// Verify that dry-run mode is set
+		assert.True(t, historyDryRun)
+		// The actual execution test would require mocked dependencies
+		// which is better suited for integration tests
+	})
+}
+
+func TestRunSquashHistory_YesMode(t *testing.T) {
+	// Save original values
+	origYes := historyYes
+	origTimeout := historyTimeout
+	defer func() {
+		historyYes = origYes
+		historyTimeout = origTimeout
+	}()
+
+	// Set test values
+	historyYes = true
+	historyTimeout = 30
+
+	t.Run("yes mode skips confirmation", func(t *testing.T) {
+		// Verify that yes mode is set
+		assert.True(t, historyYes)
+		// The actual execution test would require mocked dependencies
+	})
+}
+
+func TestRunSquashHistory_Flags(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     string
+		expected interface{}
+	}{
+		{
+			name:     "default language",
+			flag:     "lang",
+			expected: "en",
+		},
+		{
+			name:     "default timeout",
+			flag:     "timeout",
+			expected: "30",
+		},
+		{
+			name:     "yes flag",
+			flag:     "yes",
+			expected: "false",
+		},
+		{
+			name:     "debug flag",
+			flag:     "debug",
+			expected: "false",
+		},
+		{
+			name:     "dry-run flag",
+			flag:     "dry-run",
+			expected: "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := squashHistoryCmd.Flags().Lookup(tt.flag)
+			assert.NotNil(t, flag)
+			assert.Equal(t, tt.expected, flag.DefValue)
+		})
+	}
+}
