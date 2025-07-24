@@ -6,11 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/penwyp/catmit/internal/app"
-	"github.com/penwyp/catmit/internal/git"
-	"github.com/penwyp/catmit/internal/logger"
-	"github.com/penwyp/catmit/internal/rebase"
-	"github.com/penwyp/catmit/pkg/githistory"
 	"github.com/penwyp/catmit/pkg/llm"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -302,9 +297,8 @@ func TestSquashDependenciesIntegration(t *testing.T) {
 		assert.True(t, ok)
 		assert.NotNil(t, adapter.client)
 
-		// Clean up
-		err = deps.logger.Sync()
-		assert.NoError(t, err)
+		// Clean up - ignore sync error for stdout/stderr
+		_ = deps.logger.Sync()
 	})
 }
 
