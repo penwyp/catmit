@@ -12,6 +12,9 @@ type ExtendedGitRunner interface {
 // CreatorInterface defines the interface for PR creators
 type CreatorInterface interface {
 	Create(ctx context.Context, options CreateOptions) (string, error)
+	// CheckExists checks if a PR already exists for the current branch
+	// Returns: exists (true if PR exists), prURL (URL of existing PR), error
+	CheckExists(ctx context.Context, options CreateOptions) (bool, string, error)
 }
 
 // LLMInterface defines the interface for LLM clients

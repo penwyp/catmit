@@ -96,7 +96,7 @@ func TestCrossForkPR(t *testing.T) {
 
 	// 8. Execute command
 	output := "Created PR #123: https://git.example.com/alice/app-frontend/pulls/123"
-	cmdRunner.On("Run", ctx, "tea", expectedArgs).Return([]byte(output), nil)
+	cmdRunner.On("Run", ctx, "tea", "pr", "create", "--repo", "alice/app-frontend", "--title", "feat: cross-fork PR", "--description", "This is a cross-fork PR", "--base", "main", "--head", "john.doe:feat-op").Return([]byte(output), nil)
 
 	// 9. Parse output
 	cmdBuilder.On("ParseGiteaPROutput", output).Return("https://git.example.com/alice/app-frontend/pulls/123", nil)
@@ -164,7 +164,7 @@ func TestPRAlreadyExistsWithoutURL(t *testing.T) {
 
 	// Execute command with "already exists" error but no parseable URL
 	errorOutput := "Error: could not create PR from feat-op to john.doe:master: pull request already exists for these targets [id: 842, issue_id: 2, head_repo_id: 193, base_repo_id: 193, head_branch: feat-op, base_branch: master]"
-	cmdRunner.On("Run", ctx, "tea", mock.Anything).Return([]byte(errorOutput), assert.AnError)
+	cmdRunner.On("Run", ctx, "tea", "pr", "create").Return([]byte(errorOutput), assert.AnError)
 
 	// Parse output fails
 	cmdBuilder.On("ParseGiteaPROutput", errorOutput).Return("", assert.AnError)
@@ -237,7 +237,7 @@ func TestPRAlreadyExistsWithExtractedURL(t *testing.T) {
 
 	// Execute command with "already exists" error
 	errorOutput := "Error: could not create PR from feat-op to john.doe:master: pull request already exists for these targets [id: 842, issue_id: 80, head_repo_id: 193, base_repo_id: 193, head_branch: feat-op, base_branch: master]"
-	cmdRunner.On("Run", ctx, "tea", mock.Anything).Return([]byte(errorOutput), assert.AnError)
+	cmdRunner.On("Run", ctx, "tea", "pr", "create").Return([]byte(errorOutput), assert.AnError)
 
 	// Parse output fails
 	cmdBuilder.On("ParseGiteaPROutput", errorOutput).Return("", assert.AnError)

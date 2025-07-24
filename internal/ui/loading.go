@@ -14,7 +14,8 @@ import (
 type Stage int
 
 const (
-	StageCollect    Stage = iota
+	StagePRCheck    Stage = iota // New: check if PR already exists
+	StageCollect
 	StagePreprocess       // New: intelligent data preprocessing stage
 	StagePrompt
 	StageQuery

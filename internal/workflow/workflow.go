@@ -44,6 +44,23 @@ func (w *Workflow) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Early PR existence check if --pr is requested
+	if w.config.CreatePR && !w.config.DryRun {
+		if exists, prURL, err := w.checkPRExists(ctx); err != nil {
+			// Log error but continue - PR check is not critical
+			if w.config.Debug {
+				w.logger.Debug("Failed to check PR existence", zap.Error(err))
+			}
+		} else if exists {
+			// PR already exists, display URL and exit
+			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+			if prURL != "" {
+				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			}
+			return nil
+		}
+	}
+
 	// Special case: if --pr is requested without -y and no changes, just create PR
 	if w.config.CreatePR && !w.config.AutoConfirm && !w.config.DryRun {
 		if handled, err := w.handlePROnlyCase(ctx); handled {
@@ -402,4 +419,34 @@ func (w *Workflow) createPullRequest(ctx context.Context, committer git.Committe
 		fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
 	}
 	return nil
+}
+
+// checkPRExists checks if a PR already exists for the current branch
+func (w *Workflow) checkPRExists(ctx context.Context) (bool, string, error) {
+	// Get the PR creator from dependencies
+	prCreator := w.deps.GetPRCreator()
+	if prCreator == nil {
+		// PR creator not available, cannot check
+		return false, "", nil
+	}
+
+	// Create PR options for checking
+	remote := w.config.PRConfig.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+	
+	options := pr.CreateOptions{
+		Remote:     remote,
+		BaseBranch: w.config.PRConfig.BaseBranch,
+		Draft:      w.config.PRConfig.Draft,
+	}
+
+	// Check if PR exists
+	exists, prURL, err := prCreator.CheckExists(ctx, options)
+	if err != nil {
+		return false, "", err
+	}
+
+	return exists, prURL, nil
 }

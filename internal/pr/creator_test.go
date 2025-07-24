@@ -98,7 +98,13 @@ type MockCommandRunner struct {
 }
 
 func (m *MockCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	argList := m.Called(ctx, name, args)
+	// Convert variadic args to a slice of interface{} for mock.Called
+	callArgs := make([]interface{}, 0, len(args)+2)
+	callArgs = append(callArgs, ctx, name)
+	for _, arg := range args {
+		callArgs = append(callArgs, arg)
+	}
+	argList := m.Called(callArgs...)
 	if argList.Get(0) == nil {
 		return nil, argList.Error(1)
 	}
@@ -141,7 +147,7 @@ func TestPRCreator_Create(t *testing.T) {
 
 				// Command execution
 				output := "Creating pull request for feature-branch into main in owner/repo\n\nhttps://github.com/owner/repo/pull/123\n"
-				cmdRunner.On("Run", mock.Anything, "gh", []string{"pr", "create", "--fill", "--base", "main"}).Return([]byte(output), nil)
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "create", "--fill", "--base", "main").Return([]byte(output), nil)
 
 				// Output parsing
 				cmdBuilder.On("ParseGitHubPROutput", output).Return("https://github.com/owner/repo/pull/123", nil)
@@ -184,7 +190,7 @@ func TestPRCreator_Create(t *testing.T) {
 
 				// Command execution
 				output := "Created PR #42: https://gitea.io/owner/repo/pulls/42\n"
-				cmdRunner.On("Run", mock.Anything, "tea", mock.Anything).Return([]byte(output), nil)
+				cmdRunner.On("Run", mock.Anything, "tea", "pr", "create", "--repo", "owner/repo", "--title", "feat: new feature", "--description", "This adds a new feature", "--base", "main", "--head", "feature-branch").Return([]byte(output), nil)
 
 				// Output parsing
 				cmdBuilder.On("ParseGiteaPROutput", output).Return("https://gitea.io/owner/repo/pulls/42", nil)
@@ -251,7 +257,7 @@ func TestPRCreator_Create(t *testing.T) {
 
 				// PR already exists error
 				output := "a pull request for branch \"feature-branch\" into branch \"main\" already exists:\nhttps://github.com/owner/repo/pull/456\n"
-				cmdRunner.On("Run", mock.Anything, "gh", mock.Anything).Return([]byte(output), fmt.Errorf("exit status 1"))
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "create", "--fill", "--base", "main").Return([]byte(output), fmt.Errorf("exit status 1"))
 
 				cmdBuilder.On("ParseGitHubPROutput", output).Return("https://github.com/owner/repo/pull/456", nil)
 			},
@@ -311,6 +317,256 @@ func TestPRCreator_Create(t *testing.T) {
 				}
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedURL, url)
+			}
+
+			// Verify mocks
+			mockGit.AssertExpectations(t)
+			mockProvider.AssertExpectations(t)
+			mockCLI.AssertExpectations(t)
+			mockCmdBuilder.AssertExpectations(t)
+			mockCmdRunner.AssertExpectations(t)
+		})
+	}
+}
+
+func TestCreator_CheckExists(t *testing.T) {
+	tests := []struct {
+		name          string
+		options       CreateOptions
+		setupMocks    func(*MockGitRunner, *MockProviderDetector, *MockCLIDetector, *MockCommandBuilder, *MockCommandRunner)
+		expectedExists bool
+		expectedURL    string
+		expectedError  string
+	}{
+		{
+			name: "GitHub PR exists",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://github.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "github",
+					Host:     "github.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection
+				status := cli.CLIStatus{
+					Name:          "gh",
+					Installed:     true,
+					Authenticated: true,
+					Version:       "2.0.0",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
+
+				// Setup command execution for PR check
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state").
+					Return([]byte(`[{"url":"https://github.com/owner/repo/pull/123","state":"OPEN"}]`), nil)
+			},
+			expectedExists: true,
+			expectedURL:    "https://github.com/owner/repo/pull/123",
+		},
+		{
+			name: "GitHub no PR exists",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://github.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "github",
+					Host:     "github.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection
+				status := cli.CLIStatus{
+					Name:          "gh",
+					Installed:     true,
+					Authenticated: true,
+					Version:       "2.0.0",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
+
+				// Setup command execution for PR check - empty result
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state").
+					Return([]byte(`[]`), nil)
+			},
+			expectedExists: false,
+			expectedURL:    "",
+		},
+		{
+			name: "GitLab MR exists",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://gitlab.com/owner/repo.git", nil)
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://gitlab.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "gitlab",
+					Host:     "gitlab.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection
+				status := cli.CLIStatus{
+					Name:          "glab",
+					Installed:     true,
+					Authenticated: true,
+					Version:       "1.0.0",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "gitlab").Return(status, nil)
+
+				// Setup command execution for MR list
+				cmdRunner.On("Run", mock.Anything, "glab", "mr", "list", "--source-branch", "feature-branch").
+					Return([]byte("!123  Fix feature  (feature-branch -> main)"), nil)
+
+				// Setup command execution for MR details
+				cmdRunner.On("Run", mock.Anything, "glab", "mr", "view", "123", "--output", "json").
+					Return([]byte(`{"web_url":"https://gitlab.com/owner/repo/-/merge_requests/123"}`), nil)
+			},
+			expectedExists: true,
+			expectedURL:    "https://gitlab.com/owner/repo/-/merge_requests/123",
+		},
+		{
+			name: "CLI not installed - returns false",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://github.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "github",
+					Host:     "github.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection - not installed
+				status := cli.CLIStatus{
+					Name:          "gh",
+					Installed:     false,
+					Authenticated: false,
+					Version:       "",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
+			},
+			expectedExists: false,
+			expectedURL:    "",
+		},
+		{
+			name: "CLI not authenticated - returns false",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://github.com/owner/repo.git", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://github.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "github",
+					Host:     "github.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection - not authenticated
+				status := cli.CLIStatus{
+					Name:          "gh",
+					Installed:     true,
+					Authenticated: false,
+					Version:       "2.0.0",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
+			},
+			expectedExists: false,
+			expectedURL:    "",
+		},
+		{
+			name: "Gitea provider - not supported",
+			options: CreateOptions{
+				Remote: "origin",
+			},
+			setupMocks: func(git *MockGitRunner, prov *MockProviderDetector, cliDetector *MockCLIDetector, cmdBuilder *MockCommandBuilder, cmdRunner *MockCommandRunner) {
+				// Setup git
+				git.On("GetRemoteURL", mock.Anything, "origin").Return("https://gitea.com/owner/repo.git", nil)
+
+				// Setup provider detection
+				prov.On("DetectFromRemote", mock.Anything, "https://gitea.com/owner/repo.git").Return(provider.RemoteInfo{
+					Provider: "gitea",
+					Host:     "gitea.com",
+					Owner:    "owner",
+					Repo:     "repo",
+				}, nil)
+
+				// Setup CLI detection
+				status := cli.CLIStatus{
+					Name:          "tea",
+					Installed:     true,
+					Authenticated: true,
+					Version:       "0.8.0",
+				}
+				cliDetector.On("DetectCLI", mock.Anything, "gitea").Return(status, nil)
+
+				// Setup git for branch
+				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
+			},
+			expectedExists: false,
+			expectedURL:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			mockGit := new(MockGitRunner)
+			mockProvider := new(MockProviderDetector)
+			mockCLI := new(MockCLIDetector)
+			mockCmdBuilder := new(MockCommandBuilder)
+			mockCmdRunner := new(MockCommandRunner)
+
+			tt.setupMocks(mockGit, mockProvider, mockCLI, mockCmdBuilder, mockCmdRunner)
+
+			// Create PR creator
+			creator := NewCreator(
+				mockGit,
+				mockProvider,
+				mockCLI,
+				mockCmdBuilder,
+				mockCmdRunner,
+			)
+
+			// Execute
+			exists, url, err := creator.CheckExists(context.Background(), tt.options)
+
+			// Assert
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedExists, exists)
 				assert.Equal(t, tt.expectedURL, url)
 			}
 

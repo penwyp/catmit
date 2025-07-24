@@ -383,3 +383,143 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 
 	return prURL, nil
 }
+
+// CheckExists checks if a PR already exists for the current branch
+func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool, string, error) {
+	// 1. Detect provider and remote info
+	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
+	if err != nil {
+		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to get remote URL", err)
+	}
+
+	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
+	if err != nil {
+		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to detect provider", err)
+	}
+
+	if c.logger != nil {
+		c.logger.Debug("checking PR existence",
+			zap.String("provider", remoteInfo.Provider),
+			zap.String("host", remoteInfo.Host),
+			zap.String("owner", remoteInfo.Owner),
+			zap.String("repo", remoteInfo.Repo))
+	}
+
+	// 2. Check if CLI is available
+	cliStatus, err := c.cliDetector.DetectCLI(ctx, remoteInfo.Provider)
+	if err != nil {
+		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to detect CLI", err)
+	}
+
+	if !cliStatus.Installed {
+		// If CLI is not installed, we cannot check PR existence
+		// Return false to allow the workflow to continue
+		return false, "", nil
+	}
+
+	if !cliStatus.Authenticated {
+		// If CLI is not authenticated, we cannot check PR existence
+		// Return false to allow the workflow to continue
+		return false, "", nil
+	}
+
+	// 3. Get current branch
+	currentBranch, err := c.git.GetCurrentBranch(ctx)
+	if err != nil {
+		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to get current branch", err)
+	}
+
+	// 4. Build and execute check command based on provider
+	switch remoteInfo.Provider {
+	case "github":
+		return c.checkGitHubPR(ctx, currentBranch)
+	case "gitlab":
+		return c.checkGitLabMR(ctx, currentBranch)
+	case "gitea":
+		// Gitea doesn't support PR listing via CLI yet
+		return false, "", nil
+	default:
+		// For unknown providers, return false
+		return false, "", nil
+	}
+}
+
+// checkGitHubPR checks if a GitHub PR exists for the current branch
+func (c *Creator) checkGitHubPR(ctx context.Context, branch string) (bool, string, error) {
+	// Use gh pr list to check for existing PRs
+	// --head flag to filter by source branch
+	// --json to get structured output
+	output, err := c.commandRunner.Run(ctx, "gh", "pr", "list", "--head", branch, "--json", "url,state")
+	if err != nil {
+		// If command fails, assume no PR exists
+		return false, "", nil
+	}
+
+	// Parse JSON output
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "[]" || outputStr == "" {
+		// No PRs found
+		return false, "", nil
+	}
+
+	// Simple JSON parsing for PR URL
+	// Look for the first "open" PR
+	if strings.Contains(outputStr, `"state":"OPEN"`) && strings.Contains(outputStr, `"url":"`) {
+		// Extract URL
+		startIdx := strings.Index(outputStr, `"url":"`) + 7
+		endIdx := strings.Index(outputStr[startIdx:], `"`)
+		if endIdx > 0 {
+			prURL := outputStr[startIdx : startIdx+endIdx]
+			return true, prURL, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// checkGitLabMR checks if a GitLab MR exists for the current branch
+func (c *Creator) checkGitLabMR(ctx context.Context, branch string) (bool, string, error) {
+	// Use glab mr list to check for existing MRs
+	// --source-branch flag to filter by source branch
+	output, err := c.commandRunner.Run(ctx, "glab", "mr", "list", "--source-branch", branch)
+	if err != nil {
+		// If command fails, assume no MR exists
+		return false, "", nil
+	}
+
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" || strings.Contains(outputStr, "No merge requests match your search") {
+		// No MRs found
+		return false, "", nil
+	}
+
+	// Parse the output to find an open MR
+	// GitLab CLI output format: "!123  Title  (branch -> target)"
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		// Extract MR number from the first column
+		parts := strings.Fields(line)
+		if len(parts) > 0 && strings.HasPrefix(parts[0], "!") {
+			// Get MR details to extract URL
+			mrNumber := strings.TrimPrefix(parts[0], "!")
+			detailOutput, err := c.commandRunner.Run(ctx, "glab", "mr", "view", mrNumber, "--output", "json")
+			if err == nil {
+				// Extract web_url from JSON
+				detailStr := string(detailOutput)
+				if strings.Contains(detailStr, `"web_url":"`) {
+					startIdx := strings.Index(detailStr, `"web_url":"`) + 11
+					endIdx := strings.Index(detailStr[startIdx:], `"`)
+					if endIdx > 0 {
+						mrURL := detailStr[startIdx : startIdx+endIdx]
+						return true, mrURL, nil
+					}
+				}
+			}
+		}
+	}
+
+	return false, "", nil
+}

@@ -160,6 +160,8 @@ func NewMainModelWithPRConfig(
 
 // Init starts the first phase
 func (m *MainModel) Init() tea.Cmd {
+	// For now, skip PR check in UI and start with collection
+	// The PR check is handled at the workflow level
 	return tea.Batch(m.spinner.Tick, collectCmd(m.collector, m.ctx))
 }
 
@@ -462,6 +464,9 @@ func (m *MainModel) renderLoadingContent() string {
 	var status string
 
 	switch m.loadingStage {
+	case StagePRCheck:
+		status = "Checking if PR already exists…"
+		statusStyle = lipgloss.NewStyle().Foreground(colors.Cyan)
 	case StageCollect:
 		status = "Collecting diff…"
 		statusStyle = lipgloss.NewStyle().Foreground(colors.DarkOrange)

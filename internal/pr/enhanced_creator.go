@@ -126,3 +126,8 @@ func (c *EnhancedCreator) Create(ctx context.Context, options CreateOptions) (st
 	// Call the base Create method
 	return c.Creator.Create(ctx, options)
 }
+
+// CheckExists delegates to the base Creator's CheckExists method
+func (c *EnhancedCreator) CheckExists(ctx context.Context, options CreateOptions) (bool, string, error) {
+	return c.Creator.CheckExists(ctx, options)
+}
