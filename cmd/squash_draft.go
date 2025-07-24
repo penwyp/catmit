@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -80,6 +81,10 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	if squashDryRun {
 		result, err := squashInstance.Generate(ctx, messages)
 		if err != nil {
+			// Check if error is due to context timeout
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("operation timed out after %d seconds", squashTimeout)
+			}
 			return fmt.Errorf("failed to generate commit message: %w", err)
 		}
 
@@ -95,6 +100,10 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	if squashYes {
 		result, err := squashInstance.Generate(ctx, messages)
 		if err != nil {
+			// Check if error is due to context timeout
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("operation timed out after %d seconds", squashTimeout)
+			}
 			return fmt.Errorf("failed to generate commit message: %w", err)
 		}
 
@@ -133,10 +142,13 @@ func getMessagesFromEditor() ([]string, error) {
 	}
 
 	// Interactive mode - use editor
-	// Get the default editor
+	// Get the default editor with fallback chain: CATMIT_EDITOR -> EDITOR -> vim
 	editor := os.Getenv("CATMIT_EDITOR")
 	if editor == "" {
-		editor = "vim"
+		editor = os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vim"
+		}
 	}
 
 	// Create a temporary file
@@ -144,7 +156,14 @@ func getMessagesFromEditor() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() {
+		if err := os.Remove(tmpfile.Name()); err != nil {
+			// Log warning if temp file cleanup fails
+			// Note: Without access to logger in this scope, we'll silently ignore cleanup errors
+			// The OS will clean up temp files eventually
+			_ = err
+		}
+	}()
 
 	// Write prompt information
 	_, err = tmpfile.WriteString("# Enter commit messages, one per line, Lines starting with # will be ignored, Save and exit when done\n\n")

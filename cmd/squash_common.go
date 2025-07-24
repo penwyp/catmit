@@ -55,9 +55,20 @@ func initSquashDependencies(debug bool) (*squashDependencies, error) {
 	}, nil
 }
 
-// createContext creates a context with timeout
+// createContext creates a context with timeout and proper timeout handling
 func createContext(cmd *cobra.Command, timeout int) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(cmd.Context(), time.Duration(timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(timeout)*time.Second)
+	
+	// Wrap the cancel function to handle timeout explicitly
+	wrappedCancel := func() {
+		cancel()
+		// Check if the context was cancelled due to timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Fprintf(cmd.ErrOrStderr(), "\nOperation timed out after %d seconds\n", timeout)
+		}
+	}
+	
+	return ctx, wrappedCancel
 }
 
 // createRebaseWorkflow creates a rebase workflow with all necessary components
