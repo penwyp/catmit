@@ -28,12 +28,12 @@ func NewEnhancedCreator(
 ) *EnhancedCreator {
 	// Create base creator
 	creator := NewCreator(git, providerDetector, cliDetector, commandBuilder, commandRunner)
-	
+
 	// Create enhanced components
 	prTemplateManager := template.NewPRTemplateManager()
 	commitAnalyzer := NewCommitAnalyzer(git)
 	llmGenerator := NewLLMGenerator(llmClient)
-	
+
 	return &EnhancedCreator{
 		Creator:           creator,
 		llmClient:         llmClient,

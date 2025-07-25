@@ -54,7 +54,7 @@ func (a *CommitAnalyzer) AnalyzeForPR(ctx context.Context, prRemote, prBase stri
 
 	// Try to fetch relevant commits with fallback strategy
 	commits, diff, err := a.getRelevantCommits(ctx, prRemote, prBase)
-	
+
 	// Create analysis data
 	data := &PRAnalysisData{
 		BranchName: branchName,
@@ -64,7 +64,7 @@ func (a *CommitAnalyzer) AnalyzeForPR(ctx context.Context, prRemote, prBase stri
 	// If we have diff data, analyze it
 	if diff != "" {
 		data.FullDiff = diff
-		
+
 		// Extract diff stats
 		if stats, err := a.extractDiffStats(diff); err == nil {
 			data.DiffStats = stats
@@ -73,15 +73,15 @@ func (a *CommitAnalyzer) AnalyzeForPR(ctx context.Context, prRemote, prBase stri
 		// Extract changed files
 		if files, err := a.extractChangedFiles(diff); err == nil {
 			data.ChangedFiles = files
-			
+
 			// Check for test and doc files
 			for _, file := range files {
 				lowerFile := strings.ToLower(file)
 				if strings.Contains(lowerFile, "test") || strings.Contains(lowerFile, "_test.") {
 					data.HasTests = true
 				}
-				if strings.Contains(lowerFile, "readme") || strings.Contains(lowerFile, ".md") || 
-				   strings.Contains(lowerFile, "doc") {
+				if strings.Contains(lowerFile, "readme") || strings.Contains(lowerFile, ".md") ||
+					strings.Contains(lowerFile, "doc") {
 					data.HasDocs = true
 				}
 			}
@@ -101,7 +101,7 @@ func (a *CommitAnalyzer) getRelevantCommits(ctx context.Context, prRemote, prBas
 	// Strategy 1: Try upstream repository (fork workflow)
 	if prRemote != "origin" {
 		a.log.Debugf("Trying upstream repository: %s/%s", prRemote, prBase)
-		
+
 		// Check if remote exists
 		if err := a.checkRemoteExists(ctx, prRemote); err == nil {
 			upstreamBase := fmt.Sprintf("%s/%s", prRemote, prBase)
@@ -130,7 +130,7 @@ func (a *CommitAnalyzer) getRelevantCommits(ctx context.Context, prRemote, prBas
 		if base == prBase {
 			continue // Skip if we already tried this
 		}
-		
+
 		originBase := fmt.Sprintf("origin/%s", base)
 		commits, diff, err := a.getCommitsSince(ctx, originBase, "HEAD")
 		if err == nil && len(commits) > 0 {
@@ -166,30 +166,30 @@ func (a *CommitAnalyzer) getCommitsSince(ctx context.Context, base, head string)
 	}
 
 	commits := make([]CommitInfo, 0, len(lines))
-	
+
 	// Get detailed info for each commit
 	for _, sha := range lines {
 		if sha == "" {
 			continue
 		}
-		
+
 		// Get commit message
 		msgOutput, err := a.git.Run(ctx, "git", "log", "-1", "--pretty=format:%B", sha)
 		if err != nil {
 			continue
 		}
-		
+
 		// Get commit author and date
 		authorOutput, err := a.git.Run(ctx, "git", "log", "-1", "--pretty=format:%an", sha)
 		if err != nil {
 			continue
 		}
-		
+
 		dateOutput, err := a.git.Run(ctx, "git", "log", "-1", "--pretty=format:%ai", sha)
 		if err != nil {
 			continue
 		}
-		
+
 		commits = append(commits, CommitInfo{
 			SHA:     sha,
 			Message: strings.TrimSpace(string(msgOutput)),
@@ -214,7 +214,7 @@ func (a *CommitAnalyzer) extractDiffStats(diff string) (string, error) {
 	lines := strings.Split(diff, "\n")
 	var statsLines []string
 	inStats := false
-	
+
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
 			inStats = false
@@ -227,11 +227,11 @@ func (a *CommitAnalyzer) extractDiffStats(diff string) (string, error) {
 			inStats = true
 		}
 	}
-	
+
 	if len(statsLines) > 0 {
 		return strings.Join(statsLines, "\n"), nil
 	}
-	
+
 	// If no stats found, try to generate them
 	// This would need to parse the diff manually
 	return "", nil
@@ -241,7 +241,7 @@ func (a *CommitAnalyzer) extractDiffStats(diff string) (string, error) {
 func (a *CommitAnalyzer) extractChangedFiles(diff string) ([]string, error) {
 	files := make(map[string]bool)
 	lines := strings.Split(diff, "\n")
-	
+
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
 			// Extract file paths from diff --git a/path b/path
@@ -258,12 +258,12 @@ func (a *CommitAnalyzer) extractChangedFiles(diff string) ([]string, error) {
 			}
 		}
 	}
-	
+
 	// Convert map to slice
 	result := make([]string, 0, len(files))
 	for file := range files {
 		result = append(result, file)
 	}
-	
+
 	return result, nil
 }

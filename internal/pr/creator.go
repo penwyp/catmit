@@ -432,12 +432,11 @@ func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool,
 	// 4. Build and execute check command based on provider
 	switch remoteInfo.Provider {
 	case "github":
-		return c.checkGitHubPR(ctx, currentBranch)
+		return c.checkGitHubPR(ctx, currentBranch, remoteInfo)
 	case "gitlab":
-		return c.checkGitLabMR(ctx, currentBranch)
+		return c.checkGitLabMR(ctx, currentBranch, remoteInfo)
 	case "gitea":
-		// Gitea doesn't support PR listing via CLI yet
-		return false, "", nil
+		return c.checkGiteaPR(ctx, currentBranch, remoteInfo)
 	default:
 		// For unknown providers, return false
 		return false, "", nil
@@ -445,11 +444,14 @@ func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool,
 }
 
 // checkGitHubPR checks if a GitHub PR exists for the current branch
-func (c *Creator) checkGitHubPR(ctx context.Context, branch string) (bool, string, error) {
+func (c *Creator) checkGitHubPR(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
 	// Use gh pr list to check for existing PRs
 	// --head flag to filter by source branch
 	// --json to get structured output
-	output, err := c.commandRunner.Run(ctx, "gh", "pr", "list", "--head", branch, "--json", "url,state")
+	// -R to specify the repository
+	args := []string{"pr", "list", "--head", branch, "--json", "url,state",
+		"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+	output, err := c.commandRunner.Run(ctx, "gh", args...)
 	if err != nil {
 		// If command fails, assume no PR exists
 		return false, "", nil
@@ -478,10 +480,13 @@ func (c *Creator) checkGitHubPR(ctx context.Context, branch string) (bool, strin
 }
 
 // checkGitLabMR checks if a GitLab MR exists for the current branch
-func (c *Creator) checkGitLabMR(ctx context.Context, branch string) (bool, string, error) {
+func (c *Creator) checkGitLabMR(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
 	// Use glab mr list to check for existing MRs
 	// --source-branch flag to filter by source branch
-	output, err := c.commandRunner.Run(ctx, "glab", "mr", "list", "--source-branch", branch)
+	// -R to specify the repository
+	args := []string{"mr", "list", "--source-branch", branch,
+		"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+	output, err := c.commandRunner.Run(ctx, "glab", args...)
 	if err != nil {
 		// If command fails, assume no MR exists
 		return false, "", nil
@@ -505,7 +510,8 @@ func (c *Creator) checkGitLabMR(ctx context.Context, branch string) (bool, strin
 		if len(parts) > 0 && strings.HasPrefix(parts[0], "!") {
 			// Get MR details to extract URL
 			mrNumber := strings.TrimPrefix(parts[0], "!")
-			detailOutput, err := c.commandRunner.Run(ctx, "glab", "mr", "view", mrNumber, "--output", "json")
+			detailOutput, err := c.commandRunner.Run(ctx, "glab", "mr", "view", mrNumber, "--output", "json",
+				"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo))
 			if err == nil {
 				// Extract web_url from JSON
 				detailStr := string(detailOutput)

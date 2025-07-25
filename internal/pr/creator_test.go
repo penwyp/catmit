@@ -332,9 +332,9 @@ func TestPRCreator_Create(t *testing.T) {
 
 func TestCreator_CheckExists(t *testing.T) {
 	tests := []struct {
-		name          string
-		options       CreateOptions
-		setupMocks    func(*MockGitRunner, *MockProviderDetector, *MockCLIDetector, *MockCommandBuilder, *MockCommandRunner)
+		name           string
+		options        CreateOptions
+		setupMocks     func(*MockGitRunner, *MockProviderDetector, *MockCLIDetector, *MockCommandBuilder, *MockCommandRunner)
 		expectedExists bool
 		expectedURL    string
 		expectedError  string
@@ -367,7 +367,7 @@ func TestCreator_CheckExists(t *testing.T) {
 				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
 
 				// Setup command execution for PR check
-				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state").
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state", "-R", "owner/repo").
 					Return([]byte(`[{"url":"https://github.com/owner/repo/pull/123","state":"OPEN"}]`), nil)
 			},
 			expectedExists: true,
@@ -401,7 +401,7 @@ func TestCreator_CheckExists(t *testing.T) {
 				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
 
 				// Setup command execution for PR check - empty result
-				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state").
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state", "-R", "owner/repo").
 					Return([]byte(`[]`), nil)
 			},
 			expectedExists: false,
@@ -435,11 +435,11 @@ func TestCreator_CheckExists(t *testing.T) {
 				cliDetector.On("DetectCLI", mock.Anything, "gitlab").Return(status, nil)
 
 				// Setup command execution for MR list
-				cmdRunner.On("Run", mock.Anything, "glab", "mr", "list", "--source-branch", "feature-branch").
+				cmdRunner.On("Run", mock.Anything, "glab", "mr", "list", "--source-branch", "feature-branch", "-R", "owner/repo").
 					Return([]byte("!123  Fix feature  (feature-branch -> main)"), nil)
 
 				// Setup command execution for MR details
-				cmdRunner.On("Run", mock.Anything, "glab", "mr", "view", "123", "--output", "json").
+				cmdRunner.On("Run", mock.Anything, "glab", "mr", "view", "123", "--output", "json", "-R", "owner/repo").
 					Return([]byte(`{"web_url":"https://gitlab.com/owner/repo/-/merge_requests/123"}`), nil)
 			},
 			expectedExists: true,
@@ -531,6 +531,10 @@ func TestCreator_CheckExists(t *testing.T) {
 
 				// Setup git for branch
 				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
+
+				// Setup command execution for PR check - Gitea now supported
+				cmdRunner.On("Run", mock.Anything, "tea", "pulls", "--state", "open", "--repo", "owner/repo").
+					Return([]byte(""), nil)
 			},
 			expectedExists: false,
 			expectedURL:    "",
