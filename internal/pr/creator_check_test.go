@@ -74,22 +74,30 @@ func TestCreator_checkGitLabMR_CrossRepo(t *testing.T) {
 
 	// Test case: MR exists
 	t.Run("MR exists", func(t *testing.T) {
-		// First call to list MRs
+		jsonOutput := `[{"iid":42,"web_url":"https://gitlab.com/upstream-owner/upstream-repo/-/merge_requests/42","state":"opened","source_branch":"feature-branch"}]`
 		mockRunner.On("Run", ctx, "glab",
-			"mr", "list", "--source-branch", branch,
+			"mr", "list", "--output", "json", "--source-branch", branch,
 			"-R", "upstream-owner/upstream-repo",
-		).Return([]byte("!42  Feature MR  (feature-branch -> main)"), nil).Once()
-
-		// Second call to get MR details
-		mockRunner.On("Run", ctx, "glab",
-			"mr", "view", "42", "--output", "json",
-			"-R", "upstream-owner/upstream-repo",
-		).Return([]byte(`{"web_url":"https://gitlab.com/upstream-owner/upstream-repo/-/merge_requests/42"}`), nil).Once()
+		).Return([]byte(jsonOutput), nil).Once()
 
 		exists, mrURL, err := creator.checkGitLabMR(ctx, branch, remoteInfo)
 		assert.NoError(t, err)
 		assert.True(t, exists)
 		assert.Equal(t, "https://gitlab.com/upstream-owner/upstream-repo/-/merge_requests/42", mrURL)
+	})
+
+	// Test case: No MR exists
+	t.Run("No MR exists", func(t *testing.T) {
+		jsonOutput := `[]`
+		mockRunner.On("Run", ctx, "glab",
+			"mr", "list", "--output", "json", "--source-branch", branch,
+			"-R", "upstream-owner/upstream-repo",
+		).Return([]byte(jsonOutput), nil).Once()
+
+		exists, mrURL, err := creator.checkGitLabMR(ctx, branch, remoteInfo)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+		assert.Empty(t, mrURL)
 	})
 
 	mockRunner.AssertExpectations(t)
@@ -113,9 +121,10 @@ func TestCreator_checkGiteaPR_CrossRepo(t *testing.T) {
 
 	// Test case: PR exists
 	t.Run("PR exists", func(t *testing.T) {
+		jsonOutput := `[{"index":15,"url":"https://gitea.com/upstream-owner/upstream-repo/pulls/15","head":{"name":"feature-branch","repo":{"owner":{"login":"upstream-owner"}}}},{"index":16,"url":"https://gitea.com/upstream-owner/upstream-repo/pulls/16","head":{"name":"other-branch","repo":{"owner":{"login":"upstream-owner"}}}}]`
 		mockRunner.On("Run", ctx, "tea",
-			"pulls", "--state", "open", "--repo", "upstream-owner/upstream-repo",
-		).Return([]byte("#15 Add new feature (feature-branch -> main)\n#16 Other PR (other-branch -> main)"), nil).Once()
+			"pulls", "list", "--output", "json", "--fields", "index,head,url", "--state", "open", "--repo", "upstream-owner/upstream-repo",
+		).Return([]byte(jsonOutput), nil).Once()
 
 		exists, prURL, err := creator.checkGiteaPR(ctx, branch, remoteInfo)
 		assert.NoError(t, err)
@@ -125,14 +134,28 @@ func TestCreator_checkGiteaPR_CrossRepo(t *testing.T) {
 
 	// Test case: No PR exists
 	t.Run("No PR exists", func(t *testing.T) {
+		jsonOutput := `[{"index":16,"url":"https://gitea.com/upstream-owner/upstream-repo/pulls/16","head":{"name":"other-branch","repo":{"owner":{"login":"upstream-owner"}}}}]`
 		mockRunner.On("Run", ctx, "tea",
-			"pulls", "--state", "open", "--repo", "upstream-owner/upstream-repo",
-		).Return([]byte("#16 Other PR (other-branch -> main)"), nil).Once()
+			"pulls", "list", "--output", "json", "--fields", "index,head,url", "--state", "open", "--repo", "upstream-owner/upstream-repo",
+		).Return([]byte(jsonOutput), nil).Once()
 
 		exists, prURL, err := creator.checkGiteaPR(ctx, branch, remoteInfo)
 		assert.NoError(t, err)
 		assert.False(t, exists)
 		assert.Empty(t, prURL)
+	})
+
+	// Test case: Cross-fork PR exists (owner:branch format)
+	t.Run("Cross-fork PR exists", func(t *testing.T) {
+		jsonOutput := `[{"index":17,"url":"https://gitea.com/upstream-owner/upstream-repo/pulls/17","head":{"name":"yunpeng.wu:feature-branch","repo":{"owner":{"login":"yunpeng.wu"}}}},{"index":16,"url":"https://gitea.com/upstream-owner/upstream-repo/pulls/16","head":{"name":"other-branch","repo":{"owner":{"login":"upstream-owner"}}}}]`
+		mockRunner.On("Run", ctx, "tea",
+			"pulls", "list", "--output", "json", "--fields", "index,head,url", "--state", "open", "--repo", "upstream-owner/upstream-repo",
+		).Return([]byte(jsonOutput), nil).Once()
+
+		exists, prURL, err := creator.checkGiteaPR(ctx, branch, remoteInfo)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, "https://gitea.com/upstream-owner/upstream-repo/pulls/17", prURL)
 	})
 
 	mockRunner.AssertExpectations(t)

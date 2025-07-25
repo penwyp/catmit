@@ -434,13 +434,9 @@ func TestCreator_CheckExists(t *testing.T) {
 				}
 				cliDetector.On("DetectCLI", mock.Anything, "gitlab").Return(status, nil)
 
-				// Setup command execution for MR list
-				cmdRunner.On("Run", mock.Anything, "glab", "mr", "list", "--source-branch", "feature-branch", "-R", "owner/repo").
-					Return([]byte("!123  Fix feature  (feature-branch -> main)"), nil)
-
-				// Setup command execution for MR details
-				cmdRunner.On("Run", mock.Anything, "glab", "mr", "view", "123", "--output", "json", "-R", "owner/repo").
-					Return([]byte(`{"web_url":"https://gitlab.com/owner/repo/-/merge_requests/123"}`), nil)
+				// Setup command execution for MR list with JSON output
+				cmdRunner.On("Run", mock.Anything, "glab", "mr", "list", "--output", "json", "--source-branch", "feature-branch", "-R", "owner/repo").
+					Return([]byte(`[{"iid":123,"web_url":"https://gitlab.com/owner/repo/-/merge_requests/123","state":"opened","source_branch":"feature-branch"}]`), nil)
 			},
 			expectedExists: true,
 			expectedURL:    "https://gitlab.com/owner/repo/-/merge_requests/123",
@@ -533,8 +529,8 @@ func TestCreator_CheckExists(t *testing.T) {
 				git.On("GetCurrentBranch", mock.Anything).Return("feature-branch", nil)
 
 				// Setup command execution for PR check - Gitea now supported
-				cmdRunner.On("Run", mock.Anything, "tea", "pulls", "--state", "open", "--repo", "owner/repo").
-					Return([]byte(""), nil)
+				cmdRunner.On("Run", mock.Anything, "tea", "pulls", "list", "--output", "json", "--fields", "index,head,url", "--state", "open", "--repo", "owner/repo").
+					Return([]byte("[]"), nil)
 			},
 			expectedExists: false,
 			expectedURL:    "",

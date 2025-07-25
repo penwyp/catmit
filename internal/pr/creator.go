@@ -2,6 +2,7 @@ package pr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -443,6 +444,12 @@ func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool,
 	}
 }
 
+// GitHubPullRequest represents a pull request in gh CLI JSON output
+type GitHubPullRequest struct {
+	URL   string `json:"url"`
+	State string `json:"state"`
+}
+
 // checkGitHubPR checks if a GitHub PR exists for the current branch
 func (c *Creator) checkGitHubPR(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
 	// Use gh pr list to check for existing PRs
@@ -464,27 +471,37 @@ func (c *Creator) checkGitHubPR(ctx context.Context, branch string, remoteInfo p
 		return false, "", nil
 	}
 
-	// Simple JSON parsing for PR URL
-	// Look for the first "open" PR
-	if strings.Contains(outputStr, `"state":"OPEN"`) && strings.Contains(outputStr, `"url":"`) {
-		// Extract URL
-		startIdx := strings.Index(outputStr, `"url":"`) + 7
-		endIdx := strings.Index(outputStr[startIdx:], `"`)
-		if endIdx > 0 {
-			prURL := outputStr[startIdx : startIdx+endIdx]
-			return true, prURL, nil
+	var prs []GitHubPullRequest
+	if err := json.Unmarshal([]byte(outputStr), &prs); err != nil {
+		// If JSON parsing fails, fall back to no PR exists
+		return false, "", nil
+	}
+
+	// Check each PR to find one that is open
+	for _, pr := range prs {
+		if pr.State == "OPEN" {
+			return true, pr.URL, nil
 		}
 	}
 
 	return false, "", nil
 }
 
+// GitLabMergeRequest represents a merge request in glab CLI JSON output
+type GitLabMergeRequest struct {
+	IID    int    `json:"iid"`
+	WebURL string `json:"web_url"`
+	State  string `json:"state"`
+	SourceBranch string `json:"source_branch"`
+}
+
 // checkGitLabMR checks if a GitLab MR exists for the current branch
 func (c *Creator) checkGitLabMR(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
-	// Use glab mr list to check for existing MRs
-	// --source-branch flag to filter by source branch
+	// Use glab mr list with JSON output to get structured data
+	// --output json for structured output
+	// --source-branch to filter by source branch
 	// -R to specify the repository
-	args := []string{"mr", "list", "--source-branch", branch,
+	args := []string{"mr", "list", "--output", "json", "--source-branch", branch,
 		"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
 	output, err := c.commandRunner.Run(ctx, "glab", args...)
 	if err != nil {
@@ -492,38 +509,23 @@ func (c *Creator) checkGitLabMR(ctx context.Context, branch string, remoteInfo p
 		return false, "", nil
 	}
 
+	// Parse JSON output
 	outputStr := strings.TrimSpace(string(output))
-	if outputStr == "" || strings.Contains(outputStr, "No merge requests match your search") {
+	if outputStr == "" || outputStr == "[]" {
 		// No MRs found
 		return false, "", nil
 	}
 
-	// Parse the output to find an open MR
-	// GitLab CLI output format: "!123  Title  (branch -> target)"
-	lines := strings.Split(outputStr, "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		// Extract MR number from the first column
-		parts := strings.Fields(line)
-		if len(parts) > 0 && strings.HasPrefix(parts[0], "!") {
-			// Get MR details to extract URL
-			mrNumber := strings.TrimPrefix(parts[0], "!")
-			detailOutput, err := c.commandRunner.Run(ctx, "glab", "mr", "view", mrNumber, "--output", "json",
-				"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo))
-			if err == nil {
-				// Extract web_url from JSON
-				detailStr := string(detailOutput)
-				if strings.Contains(detailStr, `"web_url":"`) {
-					startIdx := strings.Index(detailStr, `"web_url":"`) + 11
-					endIdx := strings.Index(detailStr[startIdx:], `"`)
-					if endIdx > 0 {
-						mrURL := detailStr[startIdx : startIdx+endIdx]
-						return true, mrURL, nil
-					}
-				}
-			}
+	var mrs []GitLabMergeRequest
+	if err := json.Unmarshal([]byte(outputStr), &mrs); err != nil {
+		// If JSON parsing fails, fall back to no MR exists
+		return false, "", nil
+	}
+
+	// Check each MR to find one matching the current branch and is open
+	for _, mr := range mrs {
+		if mr.SourceBranch == branch && mr.State == "opened" {
+			return true, mr.WebURL, nil
 		}
 	}
 

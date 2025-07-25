@@ -2,19 +2,35 @@ package pr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/penwyp/catmit/internal/provider"
 )
 
+// TeaPullRequest represents a pull request in tea CLI JSON output
+type TeaPullRequest struct {
+	Index int `json:"index"`
+	URL   string `json:"url"`
+	Head  struct {
+		Name string `json:"name"`
+		Repo struct {
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repo"`
+	} `json:"head"`
+}
+
 // checkGiteaPR checks if a Gitea PR exists for the current branch
 func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
-	// Use tea pulls to get open PR list
+	// Use tea pulls list with JSON output to get structured data
+	// --output json for structured output
+	// --fields to get only needed fields (index, head, url)
 	// --state open to get only open PRs
 	// --repo to specify the repository
-	args := []string{"pulls", "--state", "open", "--repo", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+	args := []string{"pulls", "list", "--output", "json", "--fields", "index,head,url", "--state", "open", "--repo", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
 
 	output, err := c.commandRunner.Run(ctx, "tea", args...)
 	if err != nil {
@@ -22,35 +38,40 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		return false, "", nil
 	}
 
-	// Parse output to find matching branch
-	// tea output format: "#123 PR Title (source-branch -> target-branch)"
-	outputStr := string(output)
-	lines := strings.Split(outputStr, "\n")
+	// Parse JSON output
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" || outputStr == "[]" {
+		// No PRs found
+		return false, "", nil
+	}
 
-	// Create regex pattern to match PR with the current branch
-	branchPattern := fmt.Sprintf(`\(%s\s*->\s*`, regexp.QuoteMeta(branch))
+	var prs []TeaPullRequest
+	if err := json.Unmarshal([]byte(outputStr), &prs); err != nil {
+		// If JSON parsing fails, fall back to no PR exists
+		return false, "", nil
+	}
 
-	for _, line := range lines {
-		if line == "" {
-			continue
+	// Check each PR to find one matching the current branch
+	for _, pr := range prs {
+		// Handle cross-fork scenarios where head branch is "owner:branch"
+		if pr.Head.Name == branch {
+			// Direct match (same repository)
+			return true, pr.URL, nil
 		}
-
-		// Check if line contains the current branch as source
-		if matched, _ := regexp.MatchString(branchPattern, line); matched {
-			// Extract PR number from the line
-			prNumberRe := regexp.MustCompile(`#(\d+)`)
-			if matches := prNumberRe.FindStringSubmatch(line); len(matches) > 1 {
-				prNumber := matches[1]
-				// Construct PR URL
-				// Use HTTPS protocol and ensure no port in URL for standard web access
-				host := remoteInfo.Host
-				if remoteInfo.Port != 0 && remoteInfo.Port != 80 && remoteInfo.Port != 443 {
-					host = fmt.Sprintf("%s:%d", host, remoteInfo.Port)
-				}
-				prURL := fmt.Sprintf("https://%s/%s/%s/pulls/%s",
-					host, remoteInfo.Owner, remoteInfo.Repo, prNumber)
-				return true, prURL, nil
+		
+		// Check for cross-fork format: "owner:branch"
+		if strings.Contains(pr.Head.Name, ":") {
+			parts := strings.SplitN(pr.Head.Name, ":", 2)
+			if len(parts) == 2 && parts[1] == branch {
+				// Cross-fork match
+				return true, pr.URL, nil
 			}
+		}
+		
+		// Also check if the head repo owner matches and branch matches
+		// This handles cases where the JSON structure includes repo owner info
+		if pr.Head.Repo.Owner.Login != "" && pr.Head.Name == branch {
+			return true, pr.URL, nil
 		}
 	}
 
