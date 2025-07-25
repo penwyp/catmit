@@ -46,18 +46,30 @@ func (w *Workflow) Run(ctx context.Context) error {
 
 	// Early PR existence check if --pr is requested
 	if w.config.CreatePR && !w.config.DryRun {
+		if w.config.Debug {
+			w.logger.Debug("Starting early PR existence check",
+				zap.String("remote", w.config.PRConfig.Remote),
+				zap.String("baseBranch", w.config.PRConfig.BaseBranch))
+		}
 		if exists, prURL, err := w.checkPRExists(ctx); err != nil {
 			// Log error but continue - PR check is not critical
 			if w.config.Debug {
 				w.logger.Debug("Failed to check PR existence", zap.Error(err))
 			}
-		} else if exists {
-			// PR already exists, display URL and exit
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+		} else {
+			if w.config.Debug {
+				w.logger.Debug("Early PR check result",
+					zap.Bool("exists", exists),
+					zap.String("prURL", prURL))
 			}
-			return nil
+			if exists {
+				// PR already exists, display URL and exit
+				fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+				if prURL != "" {
+					fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+				}
+				return nil
+			}
 		}
 	}
 
@@ -113,6 +125,21 @@ func (w *Workflow) handlePROnlyCase(ctx context.Context) (bool, error) {
 				return true, errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 			}
 			fmt.Fprintln(w.output, RenderStatusBar("Branch pushed successfully", true))
+		}
+
+		// Check if PR already exists before creating
+		if exists, prURL, err := w.checkPRExists(ctx); err != nil {
+			if w.config.Debug {
+				w.logger.Debug("Failed to check PR existence in handlePROnlyCase", zap.Error(err))
+			}
+			// Continue with PR creation if check fails
+		} else if exists {
+			// PR already exists, display URL and exit
+			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+			if prURL != "" {
+				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			}
+			return true, nil
 		}
 
 		// Create PR even with no changes
@@ -427,6 +454,9 @@ func (w *Workflow) checkPRExists(ctx context.Context) (bool, string, error) {
 	prCreator := w.deps.GetPRCreator()
 	if prCreator == nil {
 		// PR creator not available, cannot check
+		if w.config.Debug {
+			w.logger.Debug("PR creator not available, cannot check PR existence")
+		}
 		return false, "", nil
 	}
 
@@ -442,10 +472,26 @@ func (w *Workflow) checkPRExists(ctx context.Context) (bool, string, error) {
 		Draft:      w.config.PRConfig.Draft,
 	}
 
+	if w.config.Debug {
+		w.logger.Debug("Calling prCreator.CheckExists",
+			zap.String("remote", options.Remote),
+			zap.String("baseBranch", options.BaseBranch),
+			zap.Bool("draft", options.Draft))
+	}
+
 	// Check if PR exists
 	exists, prURL, err := prCreator.CheckExists(ctx, options)
 	if err != nil {
+		if w.config.Debug {
+			w.logger.Debug("prCreator.CheckExists returned error", zap.Error(err))
+		}
 		return false, "", err
+	}
+
+	if w.config.Debug {
+		w.logger.Debug("prCreator.CheckExists result",
+			zap.Bool("exists", exists),
+			zap.String("prURL", prURL))
 	}
 
 	return exists, prURL, nil
