@@ -49,11 +49,21 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 	var prs []TeaPullRequest
 	if err := json.Unmarshal([]byte(outputStr), &prs); err != nil {
 		// If JSON parsing fails, fall back to no PR exists
+		if c.logger != nil {
+			c.logger.Debug("Failed to parse tea JSON output", zap.Error(err), zap.String("output", outputStr))
+		}
 		return false, "", nil
 	}
 
+	// Temporary debug output
+	fmt.Printf("[DEBUG] checkGiteaPR: Found %d PRs, checking for branch '%s'\n", len(prs), branch)
+
 	// Check each PR to find one matching the current branch
 	for _, pr := range prs {
+		// Temporary debug output
+		fmt.Printf("[DEBUG] checkGiteaPR: Checking PR %s with head '%s' (repo owner: '%s')\n", 
+			pr.URL, pr.Head.Name, pr.Head.Repo.Owner.Login)
+		
 		if c.logger != nil {
 			c.logger.Debug("Checking PR for branch match",
 				zap.String("target_branch", branch),
@@ -74,8 +84,15 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		// Check for cross-fork format: "owner:branch"
 		if strings.Contains(pr.Head.Name, ":") {
 			parts := strings.SplitN(pr.Head.Name, ":", 2)
+			// Temporary debug output
+			fmt.Printf("[DEBUG] checkGiteaPR: Cross-fork check - split '%s' into %d parts\n", pr.Head.Name, len(parts))
+			if len(parts) == 2 {
+				fmt.Printf("[DEBUG] checkGiteaPR: Comparing parts[1]='%s' with branch='%s'\n", parts[1], branch)
+			}
+			
 			if len(parts) == 2 && parts[1] == branch {
 				// Cross-fork match
+				fmt.Printf("[DEBUG] checkGiteaPR: MATCH FOUND! Cross-fork PR %s\n", pr.URL)
 				if c.logger != nil {
 					c.logger.Debug("Found cross-fork branch match",
 						zap.String("pr_head", pr.Head.Name),
@@ -96,5 +113,6 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		}
 	}
 
+	fmt.Printf("[DEBUG] checkGiteaPR: No matching PR found\n")
 	return false, "", nil
 }

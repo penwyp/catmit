@@ -60,7 +60,7 @@ func defaultPRCreatorProvider(debug bool, logger *zap.Logger) *pr.Creator {
 
 	// Set logger for PR creator
 	if logger != nil {
-		prCreator.WithLogger(logger)
+		prCreator = prCreator.WithLogger(logger)
 	}
 
 	return prCreator
@@ -146,7 +146,7 @@ func newDefaultCommitter(debug bool, logger *zap.Logger, prEnabled bool, prRemot
 
 	// Set logger for PR creator
 	if logger != nil {
-		prCreator.WithLogger(logger)
+		prCreator = prCreator.WithLogger(logger)
 	}
 
 	return &defaultCommitter{
