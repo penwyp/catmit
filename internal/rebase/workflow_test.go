@@ -339,15 +339,6 @@ func TestGenerateCommitMessage(t *testing.T) {
 			mockHistory := new(MockHistoryManager)
 			mockClient := new(MockSquashClient)
 
-			// Calculate expected messages
-			var expectedMessages []string
-			for _, commit := range tt.commits {
-				msg := commit.Subject
-				if commit.Body != "" {
-					msg += "\n" + commit.Body
-				}
-				expectedMessages = append(expectedMessages, msg)
-			}
 
 			// Mock the squash client's behavior
 			if tt.mockError != nil {

@@ -231,9 +231,6 @@ func TestGetDefaultBranchWithRealRunner(t *testing.T) {
 	// Test type assertion path in GetDefaultBranchWithRunner
 	t.Run("with realRunner type assertion", func(t *testing.T) {
 		// Create a custom mock that can be embedded in realRunner
-		type embeddableRunner interface {
-			Runner
-		}
 		
 		// Mock for the embedded runner
 		mockEmbedded := new(MockBranchRunner)
