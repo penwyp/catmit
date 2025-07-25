@@ -44,7 +44,7 @@ func (w *Workflow) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Early PR existence check if --pr is requested
+	// Early PR existence check if --pr is requested - do this BEFORE any other operations
 	if w.config.CreatePR && !w.config.DryRun {
 		if w.config.Debug {
 			w.logger.Debug("Starting early PR existence check",
@@ -66,7 +66,7 @@ func (w *Workflow) Run(ctx context.Context) error {
 				w.logger.Debug("Failed to check PR existence, continuing", zap.Error(err))
 			}
 		} else if exists {
-			// PR already exists, display URL and exit
+			// PR already exists, display URL and exit immediately - no further operations
 			if w.config.Debug {
 				w.logger.Debug("PR exists, exiting early", zap.String("prURL", prURL))
 			}
@@ -138,20 +138,7 @@ func (w *Workflow) handlePROnlyCase(ctx context.Context) (bool, error) {
 			fmt.Fprintln(w.output, RenderStatusBar("Branch pushed successfully", true))
 		}
 
-		// Check if PR already exists before creating
-		if exists, prURL, err := w.checkPRExists(ctx); err != nil {
-			if w.config.Debug {
-				w.logger.Debug("Failed to check PR existence in handlePROnlyCase", zap.Error(err))
-			}
-			// Continue with PR creation if check fails
-		} else if exists {
-			// PR already exists, display URL and exit
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-			}
-			return true, nil
-		}
+		// PR existence already checked in early check - no need to check again
 
 		// Create PR even with no changes
 		fmt.Fprintln(w.output, RenderStatusBar("Creating pull request...", false))
@@ -193,38 +180,7 @@ func (w *Workflow) runDryRun(ctx context.Context) error {
 
 // runAutomatic executes the automatic commit workflow (-y flag)
 func (w *Workflow) runAutomatic(ctx context.Context) error {
-	// Additional PR existence check for automatic mode with PR creation
-	if w.config.CreatePR {
-		if w.config.Debug {
-			w.logger.Debug("Checking PR existence before starting automatic mode")
-		}
-		
-		exists, prURL, err := w.checkPRExists(ctx)
-		if w.config.Debug {
-			w.logger.Debug("Automatic mode PR check result",
-				zap.Bool("exists", exists),
-				zap.String("prURL", prURL),
-				zap.Error(err))
-		}
-		
-		if err != nil {
-			if w.config.Debug {
-				w.logger.Debug("Failed to check PR existence in automatic mode, continuing", zap.Error(err))
-			}
-		} else if exists {
-			// PR already exists, display URL and exit without calling LLM
-			if w.config.Debug {
-				w.logger.Debug("PR exists in automatic mode, exiting", zap.String("prURL", prURL))
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-			} else {
-				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-			}
-			return nil
-		}
-	}
+	// PR existence already checked in early check - no need to check again
 
 	message, err := w.generateCommitMessage(ctx)
 	if err != nil {
@@ -318,38 +274,7 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 
 // runInteractive executes the interactive TUI workflow
 func (w *Workflow) runInteractive(ctx context.Context) error {
-	// Additional PR existence check for interactive mode
-	if w.config.CreatePR {
-		if w.config.Debug {
-			w.logger.Debug("Checking PR existence before starting interactive mode")
-		}
-		
-		exists, prURL, err := w.checkPRExists(ctx)
-		if w.config.Debug {
-			w.logger.Debug("Interactive mode PR check result",
-				zap.Bool("exists", exists),
-				zap.String("prURL", prURL),
-				zap.Error(err))
-		}
-		
-		if err != nil {
-			if w.config.Debug {
-				w.logger.Debug("Failed to check PR existence in interactive mode, continuing", zap.Error(err))
-			}
-		} else if exists {
-			// PR already exists, display URL and exit without starting TUI
-			if w.config.Debug {
-				w.logger.Debug("PR exists in interactive mode, exiting", zap.String("prURL", prURL))
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-			} else {
-				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-			}
-			return nil
-		}
-	}
+	// PR existence already checked in early check - no need to check again
 
 	col := w.deps.GetCollector()
 	promptBuilder := w.deps.GetPromptBuilder(w.config.Language)
