@@ -51,24 +51,35 @@ func (w *Workflow) Run(ctx context.Context) error {
 				zap.String("remote", w.config.PRConfig.Remote),
 				zap.String("baseBranch", w.config.PRConfig.BaseBranch))
 		}
-		if exists, prURL, err := w.checkPRExists(ctx); err != nil {
+		
+		exists, prURL, err := w.checkPRExists(ctx)
+		if w.config.Debug {
+			w.logger.Debug("Early PR check completed",
+				zap.Bool("exists", exists),
+				zap.String("prURL", prURL),
+				zap.Error(err))
+		}
+		
+		if err != nil {
 			// Log error but continue - PR check is not critical
 			if w.config.Debug {
-				w.logger.Debug("Failed to check PR existence", zap.Error(err))
+				w.logger.Debug("Failed to check PR existence, continuing", zap.Error(err))
 			}
+		} else if exists {
+			// PR already exists, display URL and exit
+			if w.config.Debug {
+				w.logger.Debug("PR exists, exiting early", zap.String("prURL", prURL))
+			}
+			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+			if prURL != "" {
+				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			} else {
+				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
+			}
+			return nil
 		} else {
 			if w.config.Debug {
-				w.logger.Debug("Early PR check result",
-					zap.Bool("exists", exists),
-					zap.String("prURL", prURL))
-			}
-			if exists {
-				// PR already exists, display URL and exit
-				fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-				if prURL != "" {
-					fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-				}
-				return nil
+				w.logger.Debug("No existing PR found, continuing with workflow")
 			}
 		}
 	}
@@ -182,6 +193,39 @@ func (w *Workflow) runDryRun(ctx context.Context) error {
 
 // runAutomatic executes the automatic commit workflow (-y flag)
 func (w *Workflow) runAutomatic(ctx context.Context) error {
+	// Additional PR existence check for automatic mode with PR creation
+	if w.config.CreatePR {
+		if w.config.Debug {
+			w.logger.Debug("Checking PR existence before starting automatic mode")
+		}
+		
+		exists, prURL, err := w.checkPRExists(ctx)
+		if w.config.Debug {
+			w.logger.Debug("Automatic mode PR check result",
+				zap.Bool("exists", exists),
+				zap.String("prURL", prURL),
+				zap.Error(err))
+		}
+		
+		if err != nil {
+			if w.config.Debug {
+				w.logger.Debug("Failed to check PR existence in automatic mode, continuing", zap.Error(err))
+			}
+		} else if exists {
+			// PR already exists, display URL and exit without calling LLM
+			if w.config.Debug {
+				w.logger.Debug("PR exists in automatic mode, exiting", zap.String("prURL", prURL))
+			}
+			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+			if prURL != "" {
+				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			} else {
+				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
+			}
+			return nil
+		}
+	}
+
 	message, err := w.generateCommitMessage(ctx)
 	if err != nil {
 		// Special case: if --pr is requested and there are no changes
@@ -274,6 +318,39 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 
 // runInteractive executes the interactive TUI workflow
 func (w *Workflow) runInteractive(ctx context.Context) error {
+	// Additional PR existence check for interactive mode
+	if w.config.CreatePR {
+		if w.config.Debug {
+			w.logger.Debug("Checking PR existence before starting interactive mode")
+		}
+		
+		exists, prURL, err := w.checkPRExists(ctx)
+		if w.config.Debug {
+			w.logger.Debug("Interactive mode PR check result",
+				zap.Bool("exists", exists),
+				zap.String("prURL", prURL),
+				zap.Error(err))
+		}
+		
+		if err != nil {
+			if w.config.Debug {
+				w.logger.Debug("Failed to check PR existence in interactive mode, continuing", zap.Error(err))
+			}
+		} else if exists {
+			// PR already exists, display URL and exit without starting TUI
+			if w.config.Debug {
+				w.logger.Debug("PR exists in interactive mode, exiting", zap.String("prURL", prURL))
+			}
+			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
+			if prURL != "" {
+				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			} else {
+				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
+			}
+			return nil
+		}
+	}
+
 	col := w.deps.GetCollector()
 	promptBuilder := w.deps.GetPromptBuilder(w.config.Language)
 	client := w.deps.GetClient()
