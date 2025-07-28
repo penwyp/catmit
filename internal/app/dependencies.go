@@ -114,13 +114,27 @@ type Config struct {
 	DryRun      bool
 	Push        bool
 	StageAll    bool
-	CreatePR    bool
 	SeedText    string
-	PRConfig    PRConfig
 }
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
+	// Add validation logic here if needed
+	return nil
+}
+
+// PROnlyConfig holds configuration for PR-only workflow
+type PROnlyConfig struct {
+	Debug    bool
+	DryRun   bool
+	Language string
+	Timeout  int
+	Yes      bool
+	PRConfig PRConfig
+}
+
+// Validate validates the PR-only configuration
+func (c *PROnlyConfig) Validate() error {
 	// Add validation logic here if needed
 	return nil
 }

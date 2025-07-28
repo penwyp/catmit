@@ -791,3 +791,55 @@ func (m *MainModel) updatePRPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// NewPROnlyModel creates a new model specifically for PR-only workflow
+func NewPROnlyModel(
+	ctx context.Context,
+	col collectorInterface,
+	pb promptInterface,
+	cli clientInterface,
+	com commitInterface,
+	lang string,
+	apiTimeout time.Duration,
+	prConfig PRConfig,
+) *MainModel {
+	sp := spinner.New()
+	sp.Spinner = spinner.Line
+
+	ta := textarea.New()
+	ta.Placeholder = "Edit PR description..."
+	ta.CharLimit = 2000
+	ta.ShowLineNumbers = false
+
+	m := &MainModel{
+		BaseModel:    NewBaseModel("Analyzing Commits", nil),
+		phase:        PhaseLoading,
+		loadingStage: StageCollect,
+		spinner:      sp,
+		textArea:     ta,
+		ctx:          ctx,
+		collector:    col,
+		promptBuild:  pb,
+		client:       cli,
+		committer:    com,
+		seed:         "", // No seed text for PR
+		lang:         lang,
+		apiTimeout:   apiTimeout,
+		enablePush:   true,  // Always push before PR
+		stageAll:     false, // No staging needed for PR-only
+		createPR:     true,  // Always create PR in PR-only mode
+		prRemote:     prConfig.Remote,
+		prBase:       prConfig.Base,
+		prDraft:      prConfig.Draft,
+		prProvider:   prConfig.Provider,
+		useTemplate:  prConfig.UseTemplate,
+		showDuration: 1500 * time.Millisecond,
+	}
+
+	// Set content renderer
+	m.SetContentRenderer(m.renderContent)
+
+	// For PR-only workflow, we'll generate PR content directly
+	// without going through commit generation
+	return m
+}

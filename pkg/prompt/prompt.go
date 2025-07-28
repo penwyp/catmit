@@ -282,3 +282,35 @@ func (b *Builder) Build(seed string, diff string, commits []string, branch strin
 	user := b.BuildUserPrompt(seed, diff, commits, branch, files)
 	return system + "\n\n" + user
 }
+
+// BuildPRSystemPrompt builds the system prompt for PR generation
+func (b *Builder) BuildPRSystemPrompt() string {
+	langPart := ""
+	switch b.lang {
+	case "zh":
+		langPart = " 用中文撰写PR标题和描述。"
+	case "en":
+		langPart = " Write PR title and description in English."
+	default:
+		langPart = ""
+	}
+
+	return `You are an AI assistant that generates pull request titles and descriptions based on commit history.
+Generate a concise PR title (one line) and a detailed description explaining the changes.
+Format: First line is the title, followed by a blank line, then the description.` + langPart
+}
+
+// BuildPRUserPrompt builds the user prompt for PR generation
+func (b *Builder) BuildPRUserPrompt(commits []string) string {
+	if len(commits) == 0 {
+		return "No commits found."
+	}
+
+	prompt := "Based on these commits, generate a PR title and description:\n\n"
+	prompt += "Commits:\n"
+	for _, commit := range commits {
+		prompt += commit + "\n"
+	}
+
+	return prompt
+}

@@ -7,14 +7,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/errors"
-	"github.com/penwyp/catmit/internal/git"
-	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/internal/ui"
 	"github.com/penwyp/catmit/pkg/gitinfo"
 	"go.uber.org/zap"
@@ -45,53 +42,6 @@ func (w *Workflow) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Early PR existence check if --pr is requested - do this BEFORE any other operations
-	if w.config.CreatePR && !w.config.DryRun {
-		if w.config.Debug {
-			w.logger.Debug("Starting early PR existence check",
-				zap.String("remote", w.config.PRConfig.Remote),
-				zap.String("baseBranch", w.config.PRConfig.BaseBranch))
-		}
-		
-		exists, prURL, err := w.checkPRExists(ctx)
-		if w.config.Debug {
-			w.logger.Debug("Early PR check completed",
-				zap.Bool("exists", exists),
-				zap.String("prURL", prURL),
-				zap.Error(err))
-		}
-		
-		if err != nil {
-			// Log error but continue - PR check is not critical
-			if w.config.Debug {
-				w.logger.Debug("Failed to check PR existence, continuing", zap.Error(err))
-			}
-		} else if exists {
-			// PR already exists, display URL and exit immediately - no further operations
-			if w.config.Debug {
-				w.logger.Debug("PR exists, exiting early", zap.String("prURL", prURL))
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-			} else {
-				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-			}
-			return nil
-		} else {
-			if w.config.Debug {
-				w.logger.Debug("No existing PR found, continuing with workflow")
-			}
-		}
-	}
-
-	// Special case: if --pr is requested without -y and no changes, just create PR
-	if w.config.CreatePR && !w.config.AutoConfirm && !w.config.DryRun {
-		if handled, err := w.handlePROnlyCase(ctx); handled {
-			return err
-		}
-	}
-
 	// Execute appropriate workflow based on flags
 	if w.config.DryRun {
 		return w.runDryRun(ctx)
@@ -114,60 +64,6 @@ func (w *Workflow) checkGitRepository(ctx context.Context) error {
 	return nil
 }
 
-// handlePROnlyCase handles the special case where user wants to create PR without changes
-func (w *Workflow) handlePROnlyCase(ctx context.Context) (bool, error) {
-	col := w.deps.GetCollector()
-	_, err := col.ComprehensiveDiff(ctx)
-	if err != nil && errors.Is(err, gitinfo.ErrNoDiff) {
-		// No changes, but user wants to create PR
-		committer := w.deps.GetCommitterWithPRConfig(w.config.PRConfig)
-
-		// Check if we need to push first
-		needsPush, err := committer.NeedsPush(ctx)
-		if err != nil {
-			if w.config.Debug {
-				w.logger.Debug("Failed to check if push is needed", zap.Error(err))
-			}
-			needsPush = false
-		}
-
-		if needsPush {
-			fmt.Fprintln(w.output, RenderStatusBar("Pushing branch...", false))
-			if err := committer.Push(ctx); err != nil {
-				return true, errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Branch pushed successfully", true))
-		}
-
-		// PR existence already checked in early check - no need to check again
-
-		// Create PR even with no changes
-		fmt.Fprintln(w.output, RenderStatusBar("Creating pull request...", false))
-		prURL, err := committer.CreatePullRequest(ctx)
-		if err != nil {
-			var prExists *pr.ErrPRAlreadyExists
-			if errors.As(err, &prExists) {
-				fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-				if prExists.URL != "" {
-					fmt.Fprintf(w.output, "PR URL: %s\n", prExists.URL)
-				} else {
-					fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-				}
-				return true, nil
-			}
-			return true, errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
-		}
-		fmt.Fprintln(w.output, RenderStatusBar("Pull request created successfully", true))
-		if prURL != "" {
-			fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-		}
-		return true, nil
-	}
-
-	// If there's an error other than NoDiff or there are changes, continue normal flow
-	return false, nil
-}
-
 // runDryRun executes the dry-run workflow
 func (w *Workflow) runDryRun(ctx context.Context) error {
 	message, err := w.generateCommitMessage(ctx)
@@ -181,66 +77,15 @@ func (w *Workflow) runDryRun(ctx context.Context) error {
 
 // runAutomatic executes the automatic commit workflow (-y flag)
 func (w *Workflow) runAutomatic(ctx context.Context) error {
-	// PR existence already checked in early check - no need to check again
-
 	message, err := w.generateCommitMessage(ctx)
 	if err != nil {
-		// Special case: if --pr is requested and there are no changes
-		if errors.Is(err, gitinfo.ErrNoDiff) && w.config.CreatePR {
-			// Try to create PR without changes
-			committer := w.deps.GetCommitterWithPRConfig(w.config.PRConfig)
-
-			// Check if we need to push first
-			needsPush, pushErr := committer.NeedsPush(ctx)
-			if pushErr != nil {
-				if w.config.Debug {
-					w.logger.Debug("Failed to check if push is needed", zap.Error(pushErr))
-				}
-				needsPush = false
-			}
-
-			if needsPush {
-				fmt.Fprintln(w.output, RenderStatusBar("Pushing branch...", false))
-				if pushErr := committer.Push(ctx); pushErr != nil {
-					return errors.Wrap(errors.ErrTypeGit, "failed to push branch", pushErr)
-				}
-				fmt.Fprintln(w.output, RenderStatusBar("Branch pushed successfully", true))
-			}
-
-			// Create PR even with no changes
-			fmt.Fprintln(w.output, RenderStatusBar("Creating pull request...", false))
-			prURL, prErr := committer.CreatePullRequest(ctx)
-			if prErr != nil {
-				var prExists *pr.ErrPRAlreadyExists
-				if errors.As(prErr, &prExists) {
-					fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-					if prExists.URL != "" {
-						fmt.Fprintf(w.output, "PR URL: %s\n", prExists.URL)
-					} else {
-						fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-					}
-					return nil
-				}
-				return errors.Wrap(errors.ErrTypePR, "failed to create pull request", prErr)
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request created successfully", true))
-			if prURL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-			}
-			return nil
-		}
 		return err
 	}
 
 	// Commit the changes
 	fmt.Fprintln(w.output, RenderStatusBar("Committing...", false))
 
-	var committer git.Committer
-	if w.config.CreatePR {
-		committer = w.deps.GetCommitterWithPRConfig(w.config.PRConfig)
-	} else {
-		committer = w.deps.GetCommitter()
-	}
+	committer := w.deps.GetCommitter()
 
 	// Stage all changes if flagStageAll is true
 	if w.config.StageAll {
@@ -263,44 +108,17 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 		fmt.Fprintln(w.output, RenderStatusBar("Pushed successfully", true))
 	}
 
-	// Create pull request if requested
-	if w.config.CreatePR {
-		// Show PR preview in automatic mode
-		if err := w.showPRPreview(ctx, message); err != nil {
-			return err
-		}
-		if err := w.createPullRequest(ctx, committer); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
 // runInteractive executes the interactive TUI workflow
 func (w *Workflow) runInteractive(ctx context.Context) error {
-	// PR existence already checked in early check - no need to check again
-
 	col := w.deps.GetCollector()
 	promptBuilder := w.deps.GetPromptBuilder(w.config.Language)
 	client := w.deps.GetClient()
-	var committer git.Committer
-	if w.config.CreatePR {
-		committer = w.deps.GetCommitterWithPRConfig(w.config.PRConfig)
-	} else {
-		committer = w.deps.GetCommitter()
-	}
+	committer := w.deps.GetCommitter()
 
-	prConfig := ui.PRConfig{
-		CreatePR:    w.config.CreatePR,
-		Remote:      w.config.PRConfig.Remote,
-		Base:        w.config.PRConfig.BaseBranch,
-		Draft:       w.config.PRConfig.Draft,
-		Provider:    w.config.PRConfig.Provider,
-		UseTemplate: w.config.PRConfig.UseTemplate,
-	}
-
-	mainModel := ui.NewMainModelWithPRConfig(
+	mainModel := ui.NewMainModel(
 		ctx,
 		col,
 		promptBuilder,
@@ -311,7 +129,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 		time.Duration(w.config.Timeout)*time.Second,
 		w.config.Push,
 		w.config.StageAll,
-		prConfig,
+		false, // createPR is always false in main workflow
 	)
 
 	finalModel, err := tea.NewProgram(mainModel).Run()
@@ -362,11 +180,6 @@ func (w *Workflow) generateCommitMessage(ctx context.Context) (string, error) {
 	diffText, err := col.ComprehensiveDiff(ctx)
 	if err != nil {
 		if errors.Is(err, gitinfo.ErrNoDiff) {
-			if w.config.CreatePR {
-				// Special handling for PR creation without changes
-				// Return early to handle in the calling function
-				return "", err
-			}
 			if w.config.Debug {
 				w.logger.Debug("No staged, unstaged, or untracked changes detected")
 			}
@@ -410,135 +223,4 @@ func (w *Workflow) generateCommitMessage(ctx context.Context) (string, error) {
 	}
 
 	return message, nil
-}
-
-// createPullRequest handles PR creation logic
-func (w *Workflow) createPullRequest(ctx context.Context, committer git.Committer) error {
-	// Check if we need to push first
-	if !w.config.Push {
-		needsPush, err := committer.NeedsPush(ctx)
-		if err != nil {
-			if w.config.Debug {
-				w.logger.Debug("Failed to check if push is needed", zap.Error(err))
-			}
-			needsPush = false
-		}
-
-		if needsPush {
-			fmt.Fprintln(w.output, RenderStatusBar("Pushing branch for PR...", false))
-			if err := committer.Push(ctx); err != nil {
-				return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
-			}
-			fmt.Fprintln(w.output, RenderStatusBar("Branch pushed successfully", true))
-		}
-	}
-
-	fmt.Fprintln(w.output, RenderStatusBar("Creating pull request...", false))
-	prURL, err := committer.CreatePullRequest(ctx)
-	if err != nil {
-		var prExists *pr.ErrPRAlreadyExists
-		if errors.As(err, &prExists) {
-			fmt.Fprintln(w.output, RenderStatusBar("Pull request already exists", true))
-			if prExists.URL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prExists.URL)
-			} else {
-				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
-			}
-			return nil
-		}
-		return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
-	}
-	fmt.Fprintln(w.output, RenderStatusBar("Pull request created successfully", true))
-	if prURL != "" {
-		fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
-	}
-	return nil
-}
-
-// checkPRExists checks if a PR already exists for the current branch
-func (w *Workflow) checkPRExists(ctx context.Context) (bool, string, error) {
-	// Get the PR creator from dependencies
-	prCreator := w.deps.GetPRCreator()
-	if prCreator == nil {
-		// PR creator not available, cannot check
-		if w.config.Debug {
-			w.logger.Debug("PR creator not available, cannot check PR existence")
-		}
-		return false, "", nil
-	}
-
-	// Create PR options for checking
-	remote := w.config.PRConfig.Remote
-	if remote == "" {
-		remote = "origin"
-	}
-	
-	options := pr.CreateOptions{
-		Remote:     remote,
-		BaseBranch: w.config.PRConfig.BaseBranch,
-		Draft:      w.config.PRConfig.Draft,
-	}
-
-	if w.config.Debug {
-		w.logger.Debug("Calling prCreator.CheckExists",
-			zap.String("remote", options.Remote),
-			zap.String("baseBranch", options.BaseBranch),
-			zap.Bool("draft", options.Draft))
-	}
-
-	// Check if PR exists
-	exists, prURL, err := prCreator.CheckExists(ctx, options)
-	if err != nil {
-		if w.config.Debug {
-			w.logger.Debug("prCreator.CheckExists returned error", zap.Error(err))
-		}
-		return false, "", err
-	}
-
-	if w.config.Debug {
-		w.logger.Debug("prCreator.CheckExists result",
-			zap.Bool("exists", exists),
-			zap.String("prURL", prURL))
-	}
-
-	return exists, prURL, nil
-}
-
-// showPRPreview displays PR details before creation
-func (w *Workflow) showPRPreview(ctx context.Context, message string) error {
-	// Parse commit message as PR title and body
-	lines := strings.Split(message, "\n")
-	title := lines[0]
-	body := ""
-	if len(lines) > 1 {
-		body = strings.Join(lines[1:], "\n")
-		body = strings.TrimSpace(body)
-	}
-
-	// Get branch name for display
-	col := w.deps.GetCollector()
-	branchName, err := col.BranchName(ctx)
-	if err != nil {
-		branchName = "current branch"
-	}
-
-	// Display PR preview
-	fmt.Fprintln(w.output, "")
-	fmt.Fprintln(w.output, RenderStatusBar("Pull Request Preview", true))
-	fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
-	fmt.Fprintf(w.output, "  Title: %s\n", title)
-	if body != "" {
-		fmt.Fprintln(w.output, "  Body:")
-		// Indent body lines
-		bodyLines := strings.Split(body, "\n")
-		for _, line := range bodyLines {
-			fmt.Fprintf(w.output, "    %s\n", line)
-		}
-	}
-	if w.config.PRConfig.Draft {
-		fmt.Fprintln(w.output, "  Draft: Yes")
-	}
-	fmt.Fprintln(w.output, "")
-
-	return nil
 }

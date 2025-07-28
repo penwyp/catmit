@@ -45,15 +45,7 @@ var (
 	flagPush     bool   // automatically push after successful commit
 	flagStageAll bool   // automatically stage all changes (tracked and untracked) if none are staged
 	flagVersion  bool   // show version information
-	flagPR       bool   // create pull request after successful push
 	flagSeed     string // seed text for commit message generation
-
-	// PR-specific flags
-	flagPRRemote   string // remote to use for pull request
-	flagPRBase     string // base branch for pull request (defaults to provider's default branch)
-	flagPRDraft    bool   // create pull request as draft
-	flagPRProvider string // override detected provider (github, gitlab, gitea, bitbucket)
-	flagPRTemplate bool   // use PR template if available
 )
 
 func init() {
@@ -71,15 +63,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
-	rootCmd.Flags().BoolVarP(&flagPR, "pr", "c", false, "create pull request after successful push")
 	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
-
-	// PR-specific flags
-	rootCmd.Flags().StringVar(&flagPRRemote, "pr-remote", "origin", "remote to use for pull request")
-	rootCmd.Flags().StringVar(&flagPRBase, "pr-base", "", "base branch for pull request (defaults to provider's default branch)")
-	rootCmd.Flags().BoolVar(&flagPRDraft, "pr-draft", false, "create pull request as draft")
-	rootCmd.Flags().StringVar(&flagPRProvider, "pr-provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
-	rootCmd.Flags().BoolVar(&flagPRTemplate, "pr-template", true, "use PR template if available")
 
 	// Add check-auth command
 	// Note: debug flag is not available in init(), will be false by default
@@ -131,15 +115,7 @@ func run(cmd *cobra.Command, args []string) error {
 		DryRun:      flagDryRun,
 		Push:        flagPush,
 		StageAll:    flagStageAll,
-		CreatePR:    flagPR,
 		SeedText:    seedText,
-		PRConfig: app.PRConfig{
-			Remote:      flagPRRemote,
-			BaseBranch:  flagPRBase,
-			Draft:       flagPRDraft,
-			Provider:    flagPRProvider,
-			UseTemplate: flagPRTemplate,
-		},
 	}
 
 	// Validate configuration
