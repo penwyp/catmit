@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/internal/errors"
@@ -101,7 +102,9 @@ func (m *CommitWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle phase-specific keyboard input
 		switch m.phase {
 		case WorkflowPhaseReview:
-			return m.updateReview(msg)
+			if cmd := m.BaseWorkflowModel.updateReview(msg); cmd != nil {
+				return m, cmd
+			}
 		case WorkflowPhasePRPreview:
 			return m.updatePRPreview(msg)
 		}

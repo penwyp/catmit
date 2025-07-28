@@ -118,7 +118,16 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 	client := w.deps.GetClient()
 	committer := w.deps.GetCommitter()
 
-	mainModel := ui.NewMainModel(
+	// Create commit workflow model for regular workflow
+	prConfig := ui.PRConfig{
+		CreatePR: false, // No PR creation in main workflow
+		Remote:   "origin",
+		Base:     "",
+		Draft:    false,
+		Provider: "",
+	}
+	
+	mainModel := ui.NewCommitWorkflowModel(
 		ctx,
 		col,
 		promptBuilder,
@@ -129,7 +138,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 		time.Duration(w.config.Timeout)*time.Second,
 		w.config.Push,
 		w.config.StageAll,
-		false, // createPR is always false in main workflow
+		prConfig,
 	)
 
 	finalModel, err := tea.NewProgram(mainModel).Run()
@@ -137,7 +146,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 		return errors.Wrap(errors.ErrTypeUnknown, "failed to run TUI", err)
 	}
 
-	m, ok := finalModel.(*ui.MainModel)
+	m, ok := finalModel.(*ui.CommitWorkflowModel)
 	if !ok {
 		return errors.Newf(errors.ErrTypeUnknown, "internal error: unexpected model type, got %T", finalModel)
 	}

@@ -260,34 +260,30 @@ func (m *BaseWorkflowModel) handleCancel() tea.Cmd {
 }
 
 // updateReview handles keyboard input during the Review phase
-func (m *BaseWorkflowModel) updateReview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// This is a helper method that derived models can use in their Update method
+func (m *BaseWorkflowModel) updateReview(msg tea.KeyMsg) tea.Cmd {
 	if m.editing {
 		switch msg.String() {
 		case "esc":
 			m.editing = false
 			m.textArea.Blur()
 			m.updateActionsForPhase()
-			return m, nil
+			return nil
 		case "ctrl+s":
 			m.message = strings.TrimSpace(m.textArea.Value())
 			m.editing = false
 			m.textArea.Blur()
 			m.updateActionsForPhase()
-			return m, nil
+			return nil
 		default:
 			var cmd tea.Cmd
 			m.textArea, cmd = m.textArea.Update(msg)
-			return m, cmd
+			return cmd
 		}
 	}
 
 	// Let BaseModel handle navigation and action execution
-	cmd := m.HandleKeyboard(msg)
-	if cmd != nil {
-		return m, cmd
-	}
-
-	return m, nil
+	return m.HandleKeyboard(msg)
 }
 
 // State getters
@@ -311,6 +307,10 @@ func (m *BaseWorkflowModel) GetError() error {
 }
 
 // These methods must be implemented by derived models
+
+// Init and Update must be implemented by derived models to satisfy tea.Model interface
+// Init() tea.Cmd
+// Update(tea.Msg) (tea.Model, tea.Cmd)
 
 // getPhaseTitle gets the title for the current phase
 func (m *BaseWorkflowModel) getPhaseTitle() string {

@@ -211,8 +211,8 @@ func (w *PRWorkflow) runInteractive(ctx context.Context) error {
 		UseTemplate: w.config.PRConfig.UseTemplate,
 	}
 
-	// Create a PR-only model
-	mainModel := ui.NewPROnlyModel(
+	// Create a PR workflow model
+	prModel := ui.NewPRWorkflowModel(
 		ctx,
 		col,
 		promptBuilder,
@@ -223,13 +223,13 @@ func (w *PRWorkflow) runInteractive(ctx context.Context) error {
 		prConfig,
 	)
 
-	finalModel, err := tea.NewProgram(mainModel).Run()
+	finalModel, err := tea.NewProgram(prModel).Run()
 	if err != nil {
 		return errors.Wrap(errors.ErrTypeUnknown, "failed to run TUI", err)
 	}
 
 	// Check if the model is the expected type
-	if _, ok := finalModel.(*ui.MainModel); !ok {
+	if _, ok := finalModel.(*ui.PRWorkflowModel); !ok {
 		return errors.Newf(errors.ErrTypeUnknown, "internal error: unexpected model type, got %T", finalModel)
 	}
 
