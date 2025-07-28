@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/penwyp/catmit/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -64,25 +65,25 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create rebase workflow: %w", err)
 	}
 
-	// Analyze the repository
-	analysis, err := workflow.Analyze(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to analyze repository: %w", err)
-	}
-
-	if !analysis.CanRebase {
-		fmt.Println(analysis.Message)
-		return nil
-	}
-
-	// Generate commit message
-	message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
-	if err != nil {
-		return fmt.Errorf("failed to generate commit message: %w", err)
-	}
-
 	// Handle dry-run mode
 	if historyDryRun {
+		// Analyze the repository
+		analysis, err := workflow.Analyze(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to analyze repository: %w", err)
+		}
+
+		if !analysis.CanRebase {
+			fmt.Println(analysis.Message)
+			return nil
+		}
+
+		// Generate commit message
+		message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
+		if err != nil {
+			return fmt.Errorf("failed to generate commit message: %w", err)
+		}
+
 		fmt.Println("=== DRY RUN MODE ===")
 		fmt.Printf("Would squash %d commits from branch '%s'\n", len(analysis.UnpushedCommits), analysis.CurrentBranch)
 		fmt.Println("\nGenerated commit message:")
@@ -93,6 +94,23 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 
 	// Handle yes mode
 	if historyYes {
+		// Analyze the repository
+		analysis, err := workflow.Analyze(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to analyze repository: %w", err)
+		}
+
+		if !analysis.CanRebase {
+			fmt.Println(analysis.Message)
+			return nil
+		}
+
+		// Generate commit message
+		message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
+		if err != nil {
+			return fmt.Errorf("failed to generate commit message: %w", err)
+		}
+
 		fmt.Println("Generated commit message:")
 		fmt.Println(message)
 
@@ -107,15 +125,23 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 	}
 
 	// TUI mode
-	model := ui.NewRebaseModel(workflow)
-	if err := model.Run(); err != nil {
+	model := ui.NewRebaseWorkflowModel(ctx, workflow)
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
 
+	// Check if it's the expected model type
+	rebaseModel, ok := finalModel.(*ui.RebaseWorkflowModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type")
+	}
+
 	// If user accepted and rebase was successful
-	if model.IsAccepted() {
+	if rebaseModel.IsAccepted() {
 		fmt.Println("\n✓ Rebase completed successfully")
-		if backupBranch := model.GetBackupBranch(); backupBranch != "" {
+		if backupBranch := rebaseModel.GetBackupBranch(); backupBranch != "" {
 			fmt.Printf("Backup branch: %s\n", backupBranch)
 		}
 	}

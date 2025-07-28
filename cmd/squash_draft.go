@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/penwyp/catmit/internal/squash"
 	"github.com/penwyp/catmit/internal/ui"
 	"github.com/spf13/cobra"
@@ -117,15 +118,23 @@ func runSquash(cmd *cobra.Command, args []string) error {
 	}
 
 	// TUI mode
-	model := ui.NewSquashModel(squashInstance, messages)
-	if err := model.Run(); err != nil {
+	model := ui.NewSquashWorkflowModel(ctx, squashInstance, messages)
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
 
+	// Check if it's the expected model type
+	squashModel, ok := finalModel.(*ui.SquashWorkflowModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type")
+	}
+
 	// If user accepted the result, print it
-	if model.IsAccepted() {
-		fmt.Println(model.GetResult())
-		if model.IsCopySuccess() {
+	if squashModel.IsAccepted() {
+		fmt.Println(squashModel.GetResult())
+		if squashModel.IsCopySuccess() {
 			fmt.Fprintln(os.Stderr, "✓ Copied to clipboard")
 		}
 	}
