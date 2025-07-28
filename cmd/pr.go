@@ -27,12 +27,11 @@ var (
 
 var prCmd = &cobra.Command{
 	Use:   "pr",
-	Short: "Create a pull request for the current branch",
-	Long: `Create a pull request for the current branch with AI-generated title and description.
+	Short: "Create pull requests with AI-generated descriptions",
+	Long: `Create pull requests with AI-generated titles and descriptions.
 
-This command analyzes the commits on your current branch and generates an appropriate
-PR title and description. It supports multiple Git providers (GitHub, GitLab, Gitea)
-and can use PR templates if available.`,
+Analyzes commits on your current branch to generate appropriate PR content.
+Supports GitHub, GitLab, and other providers with template integration.`,
 	Example: `  # Create PR interactively
   catmit pr
 

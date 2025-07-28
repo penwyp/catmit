@@ -23,16 +23,12 @@ func GetVersionString() string {
 
 var rootCmd = &cobra.Command{
 	Use:   "catmit [SEED_TEXT]",
-	Short: "AI-powered commit message generator with comprehensive change analysis",
-	Long: `catmit is an AI-powered tool that generates high-quality Git commit messages 
-by analyzing your staged changes, unstaged modifications, and untracked files.
+	Short: "Generate AI-powered Git commit messages",
+	Long: `Generate high-quality Git commit messages using AI analysis of your changes.
 
-Features:
-- Analyzes all types of changes including untracked files
-- Follows Conventional Commits specification
-- Smart token budgeting for large changesets
-- Interactive review and editing capabilities
-- Multiple language support (English/Chinese)`,
+Catmit analyzes staged changes, unstaged modifications, and untracked files
+to create conventional commit messages. Features intelligent token budgeting
+for large changesets and supports multiple languages.`,
 	RunE: run,
 }
 

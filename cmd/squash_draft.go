@@ -25,12 +25,11 @@ var (
 
 var squashDraftCmd = &cobra.Command{
 	Use:   "squash-draft",
-	Short: "Consolidate multiple commit messages into one",
-	Long: `Squash command helps you consolidate multiple commit messages into a single,
-comprehensive commit message using LLM.
+	Short: "Merge commit messages using AI",
+	Long: `Merge multiple commit messages into a single, comprehensive message using AI.
 
-Opens your default editor to input commit messages (one per line).
-The generated message will be automatically copied to your clipboard.`,
+Opens your editor to input commit messages, then generates a unified message
+that captures all changes. Automatically copies the result to your clipboard.`,
 	Example: `  # Default mode (opens editor)
   catmit squash-draft
 
