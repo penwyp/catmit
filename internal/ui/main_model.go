@@ -396,7 +396,13 @@ func (m *MainModel) regenerateCommitMessage() tea.Cmd {
 	// Reset state to loading phase
 	m.phase = PhaseLoading
 	m.loadingStage = StagePrompt
-	// Rebuild prompt and query again
+	
+	// For PR-only workflow, use PR-specific prompt building
+	if m.isPROnly {
+		return m.buildPRPromptCmd()
+	}
+	
+	// For regular workflow, rebuild prompt and query again
 	return buildSmartPromptCmd(m.promptBuild, m.collector, m.ctx, m.seed)
 }
 
@@ -630,15 +636,19 @@ func (m *MainModel) renderCommitContent() string {
 			content.WriteString("\n" + m.spinner.View() + " " + progressStyle.Render("Preparing to create PR..."))
 		}
 	case CommitStageCreatingPR:
-		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
-		if m.enablePush {
-			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+		if !m.isPROnly {
+			content.WriteString("✓ " + successStyle.Render("Committed successfully"))
+			if m.enablePush {
+				content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			}
 		}
 		content.WriteString("\n" + m.spinner.View() + " " + progressStyle.Render("Creating pull request..."))
 	case CommitStagePRFailed:
-		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
-		if m.enablePush {
-			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+		if !m.isPROnly {
+			content.WriteString("✓ " + successStyle.Render("Committed successfully"))
+			if m.enablePush {
+				content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			}
 		}
 		if m.createPR {
 			errorText := "Pull request creation failed"
@@ -653,14 +663,17 @@ func (m *MainModel) renderCommitContent() string {
 			content.WriteString("\n✗ " + errorStyle.Render(errorText))
 		}
 	case CommitStagePRCreated, CommitStageDone:
-		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
-		if m.enablePush {
-			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+		if !m.isPROnly {
+			content.WriteString("✓ " + successStyle.Render("Committed successfully"))
+			if m.enablePush {
+				content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			}
 		}
 		if m.createPR {
 			content.WriteString("\n✓ " + successStyle.Render("Pull request created successfully"))
 			if m.prURL != "" {
-				content.WriteString("\n  " + descStyle.Render(m.prURL))
+				content.WriteString("\n\n" + descStyle.Render("Pull Request URL:"))
+				content.WriteString("\n" + descStyle.Render(m.prURL))
 			}
 		}
 	}
@@ -778,13 +791,30 @@ func (m *MainModel) preparePRPreview() tea.Cmd {
 			})
 		}
 
+		// Get provider and base branch info if not already set
+		providerName := m.prProvider
+		baseBranch := m.prBase
+		
+		// If provider not specified, try to detect it from remote URL pattern
+		if providerName == "" {
+			// Simple provider detection based on common patterns
+			// This is a simplified version - the actual detection happens in PR creator
+			providerName = "github" // Default assumption for preview
+		}
+		
+		// If base branch not specified, use a reasonable default
+		if baseBranch == "" {
+			// Common default branches
+			baseBranch = "main" // Most common default
+		}
+		
 		prData := PRPreviewData{
 			Title:       title,
 			Body:        body,
-			Base:        m.prBase,
+			Base:        baseBranch,
 			Head:        branchName,
 			Remote:      m.prRemote,
-			Provider:    m.prProvider,
+			Provider:    providerName,
 			IsDraft:     m.prDraft,
 			HasChanges:  len(fileChanges) > 0,
 			FileChanges: fileChanges,
