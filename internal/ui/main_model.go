@@ -265,11 +265,21 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return finalTimeoutMsg{}
 			})
 		}
-		m.commitStage = CommitStageDone
-		m.finalStartTime = time.Now()
-		return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
-			return finalTimeoutMsg{}
-		})
+		// Push succeeded
+		m.commitStage = CommitStagePushed
+		if m.createPR {
+			// Need to create PR after push
+			return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+				return delayedCreatePRMsg{}
+			})
+		} else {
+			// No PR needed, we're done
+			m.commitStage = CommitStageDone
+			m.finalStartTime = time.Now()
+			return m, tea.Tick(m.showDuration, func(time.Time) tea.Msg {
+				return finalTimeoutMsg{}
+			})
+		}
 
 	case finalTimeoutMsg:
 		m.done = true
