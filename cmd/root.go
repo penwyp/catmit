@@ -55,15 +55,15 @@ func init() {
 	// Disable automatic help command
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 
-	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "commit message language (ISO 639-1)")
-	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
-	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
-	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
 	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
+	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
+	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "commit message language (ISO 639-1)")
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
-	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
-	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
 	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
+	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
+	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
+	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
+	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
 
 	// Add check-auth command
 	// Note: debug flag is not available in init(), will be false by default

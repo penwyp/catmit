@@ -45,11 +45,11 @@ The generated message will be automatically copied to your clipboard.`,
 func init() {
 	rootCmd.AddCommand(squashDraftCmd)
 
-	squashDraftCmd.Flags().BoolVarP(&squashYes, "yes", "y", false, "Skip confirmation and output directly")
-	squashDraftCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
-	squashDraftCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
 	squashDraftCmd.Flags().BoolVar(&squashDebug, "debug", false, "Enable debug output for troubleshooting")
 	squashDraftCmd.Flags().BoolVar(&squashDryRun, "dry-run", false, "Preview without copying to clipboard")
+	squashDraftCmd.Flags().StringVarP(&squashLang, "lang", "l", "en", "Output language (en/zh)")
+	squashDraftCmd.Flags().IntVarP(&squashTimeout, "timeout", "t", 30, "Timeout in seconds")
+	squashDraftCmd.Flags().BoolVarP(&squashYes, "yes", "y", false, "Skip confirmation and output directly")
 }
 
 func runSquash(cmd *cobra.Command, args []string) error {
