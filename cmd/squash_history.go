@@ -40,11 +40,11 @@ A backup branch is created before the operation for safety.`,
 func init() {
 	rootCmd.AddCommand(squashHistoryCmd)
 
-	squashHistoryCmd.Flags().BoolVar(&historyDebug, "debug", false, "Enable debug output for troubleshooting")
-	squashHistoryCmd.Flags().BoolVar(&historyDryRun, "dry-run", false, "Preview without executing rebase")
-	squashHistoryCmd.Flags().StringVarP(&historyLang, "lang", "l", "en", "Output language (en/zh)")
-	squashHistoryCmd.Flags().IntVarP(&historyTimeout, "timeout", "t", 30, "Timeout in seconds")
-	squashHistoryCmd.Flags().BoolVarP(&historyYes, "yes", "y", false, "Skip confirmation and execute directly")
+	squashHistoryCmd.Flags().BoolVar(&historyDebug, "debug", false, "enable debug output for troubleshooting")
+	squashHistoryCmd.Flags().BoolVar(&historyDryRun, "dry-run", false, "preview without executing")
+	squashHistoryCmd.Flags().StringVarP(&historyLang, "lang", "l", "en", "output language (en/zh)")
+	squashHistoryCmd.Flags().IntVarP(&historyTimeout, "timeout", "t", 30, "timeout in seconds")
+	squashHistoryCmd.Flags().BoolVarP(&historyYes, "yes", "y", false, "skip confirmation and execute directly")
 }
 
 func runSquashHistory(cmd *cobra.Command, args []string) error {

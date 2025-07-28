@@ -52,15 +52,15 @@ func init() {
 
 	// Common flags
 	prCmd.Flags().BoolVar(&prDebug, "debug", false, "enable debug output for troubleshooting")
-	prCmd.Flags().BoolVar(&prDryRun, "dry-run", false, "preview PR creation without actually creating")
-	prCmd.Flags().StringVarP(&prLang, "lang", "l", "en", "language for PR description (ISO 639-1)")
-	prCmd.Flags().IntVarP(&prTimeout, "timeout", "t", 30, "API timeout in seconds")
+	prCmd.Flags().BoolVar(&prDryRun, "dry-run", false, "preview PR creation without executing")
+	prCmd.Flags().StringVarP(&prLang, "lang", "l", "en", "output language (en/zh)")
+	prCmd.Flags().IntVarP(&prTimeout, "timeout", "t", 30, "timeout in seconds")
 	prCmd.Flags().BoolVarP(&prYes, "yes", "y", false, "skip confirmation and create PR immediately")
 
 	// PR-specific flags
-	prCmd.Flags().StringVar(&prBase, "base", "", "base branch for pull request (defaults to provider's default branch)")
+	prCmd.Flags().StringVar(&prBase, "base", "", "base branch for pull request")
 	prCmd.Flags().BoolVar(&prDraft, "draft", false, "create pull request as draft")
-	prCmd.Flags().StringVar(&prProvider, "provider", "", "override detected provider (github, gitlab, gitea, bitbucket)")
+	prCmd.Flags().StringVar(&prProvider, "provider", "", "override detected git provider")
 	prCmd.Flags().StringVar(&prRemote, "remote", "origin", "remote to use for pull request")
 	prCmd.Flags().BoolVar(&prTemplate, "template", true, "use PR template if available")
 }

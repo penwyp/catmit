@@ -56,12 +56,12 @@ func init() {
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 
 	rootCmd.Flags().BoolVar(&flagDebug, "debug", false, "enable debug output for troubleshooting")
-	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "print message but do not commit")
-	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "commit message language (ISO 639-1)")
+	rootCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "preview message without committing")
+	rootCmd.Flags().StringVarP(&flagLang, "lang", "l", "en", "output language (en/zh)")
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", true, "automatically push after successful commit")
 	rootCmd.Flags().StringVarP(&flagSeed, "seed", "s", "", "seed text for commit message generation")
-	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes (tracked and untracked) if none are staged")
-	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "API timeout in seconds")
+	rootCmd.Flags().BoolVar(&flagStageAll, "stage-all", true, "automatically stage all changes if none are staged")
+	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 20, "timeout in seconds")
 	rootCmd.Flags().BoolVar(&flagVersion, "version", false, "show version information")
 	rootCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation and commit immediately")
 
