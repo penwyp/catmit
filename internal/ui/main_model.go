@@ -656,8 +656,8 @@ func (m *MainModel) getPhaseTitle() string {
 // startCommit starts the commit process
 func (m *MainModel) startCommit() tea.Cmd {
 	return func() tea.Msg {
-		// Before commit, check if staging is needed and perform it
-		if m.stageAll && !m.committer.HasStagedChanges(m.ctx) {
+		// Stage all changes if stageAll is enabled
+		if m.stageAll {
 			if err := m.committer.StageAll(m.ctx); err != nil {
 				return commitDoneMsg{err: errors.Wrap(errors.ErrTypeGit, "staging failed", err)}
 			}

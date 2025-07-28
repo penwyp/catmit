@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -241,8 +242,8 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 		committer = w.deps.GetCommitter()
 	}
 
-	// Only stage all if there are no staged changes and flagStageAll is true
-	if w.config.StageAll && !committer.HasStagedChanges(ctx) {
+	// Stage all changes if flagStageAll is true
+	if w.config.StageAll {
 		if err := committer.StageAll(ctx); err != nil {
 			return errors.Wrap(errors.ErrTypeGit, "failed to stage all files", err)
 		}
@@ -264,6 +265,10 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 
 	// Create pull request if requested
 	if w.config.CreatePR {
+		// Show PR preview in automatic mode
+		if err := w.showPRPreview(ctx, message); err != nil {
+			return err
+		}
 		if err := w.createPullRequest(ctx, committer); err != nil {
 			return err
 		}
@@ -497,4 +502,43 @@ func (w *Workflow) checkPRExists(ctx context.Context) (bool, string, error) {
 	}
 
 	return exists, prURL, nil
+}
+
+// showPRPreview displays PR details before creation
+func (w *Workflow) showPRPreview(ctx context.Context, message string) error {
+	// Parse commit message as PR title and body
+	lines := strings.Split(message, "\n")
+	title := lines[0]
+	body := ""
+	if len(lines) > 1 {
+		body = strings.Join(lines[1:], "\n")
+		body = strings.TrimSpace(body)
+	}
+
+	// Get branch name for display
+	col := w.deps.GetCollector()
+	branchName, err := col.BranchName(ctx)
+	if err != nil {
+		branchName = "current branch"
+	}
+
+	// Display PR preview
+	fmt.Fprintln(w.output, "")
+	fmt.Fprintln(w.output, RenderStatusBar("Pull Request Preview", true))
+	fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
+	fmt.Fprintf(w.output, "  Title: %s\n", title)
+	if body != "" {
+		fmt.Fprintln(w.output, "  Body:")
+		// Indent body lines
+		bodyLines := strings.Split(body, "\n")
+		for _, line := range bodyLines {
+			fmt.Fprintf(w.output, "    %s\n", line)
+		}
+	}
+	if w.config.PRConfig.Draft {
+		fmt.Fprintln(w.output, "  Draft: Yes")
+	}
+	fmt.Fprintln(w.output, "")
+
+	return nil
 }

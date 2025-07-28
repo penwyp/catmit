@@ -55,14 +55,20 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		return false, "", nil
 	}
 
-	// Temporary debug output
-	fmt.Printf("[DEBUG] checkGiteaPR: Found %d PRs, checking for branch '%s'\n", len(prs), branch)
+	if c.logger != nil {
+		c.logger.Debug("Checking for existing pull requests",
+			zap.Int("pr_count", len(prs)),
+			zap.String("target_branch", branch))
+	}
 
 	// Check each PR to find one matching the current branch
 	for _, pr := range prs {
-		// Temporary debug output
-		fmt.Printf("[DEBUG] checkGiteaPR: Checking PR %s with head '%s' (repo owner: '%s')\n", 
-			pr.URL, pr.Head.Name, pr.Head.Repo.Owner.Login)
+		if c.logger != nil {
+			c.logger.Debug("Examining pull request",
+				zap.String("pr_url", pr.URL),
+				zap.String("pr_head_name", pr.Head.Name),
+				zap.String("pr_head_repo_owner", pr.Head.Repo.Owner.Login))
+		}
 		
 		if c.logger != nil {
 			c.logger.Debug("Checking PR for branch match",
@@ -84,15 +90,19 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		// Check for cross-fork format: "owner:branch"
 		if strings.Contains(pr.Head.Name, ":") {
 			parts := strings.SplitN(pr.Head.Name, ":", 2)
-			// Temporary debug output
-			fmt.Printf("[DEBUG] checkGiteaPR: Cross-fork check - split '%s' into %d parts\n", pr.Head.Name, len(parts))
-			if len(parts) == 2 {
-				fmt.Printf("[DEBUG] checkGiteaPR: Comparing parts[1]='%s' with branch='%s'\n", parts[1], branch)
+			if c.logger != nil {
+				c.logger.Debug("Checking cross-fork format",
+					zap.String("pr_head", pr.Head.Name),
+					zap.Int("parts_count", len(parts)))
+				if len(parts) == 2 {
+					c.logger.Debug("Comparing branch names",
+						zap.String("pr_branch", parts[1]),
+						zap.String("target_branch", branch))
+				}
 			}
 			
 			if len(parts) == 2 && parts[1] == branch {
 				// Cross-fork match
-				fmt.Printf("[DEBUG] checkGiteaPR: MATCH FOUND! Cross-fork PR %s\n", pr.URL)
 				if c.logger != nil {
 					c.logger.Debug("Found cross-fork branch match",
 						zap.String("pr_head", pr.Head.Name),
@@ -113,6 +123,8 @@ func (c *Creator) checkGiteaPR(ctx context.Context, branch string, remoteInfo pr
 		}
 	}
 
-	fmt.Printf("[DEBUG] checkGiteaPR: No matching PR found\n")
+	if c.logger != nil {
+		c.logger.Debug("No existing pull request found for branch", zap.String("branch", branch))
+	}
 	return false, "", nil
 }
