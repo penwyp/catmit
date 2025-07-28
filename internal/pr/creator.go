@@ -44,6 +44,7 @@ type GitRunner interface {
 	GetCurrentBranch(ctx context.Context) (string, error)
 	GetCommitMessage(ctx context.Context, ref string) (string, error)
 	GetDefaultBranch(ctx context.Context, remote string) (string, error)
+	GetParentBranch(ctx context.Context, remote string) (string, error)
 }
 
 // ProviderDetector interface for detecting provider
@@ -186,12 +187,19 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 
 	// Get base branch (if not specified)
 	if options.BaseBranch == "" {
-		defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
+		// First try to detect which branch the current branch is based on
+		parentBranch, err := c.git.GetParentBranch(ctx, options.Remote)
 		if err != nil {
-			// If failed to get, use common default value
-			options.BaseBranch = "main"
+			// If that fails, fall back to default branch detection
+			defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
+			if err != nil {
+				// If failed to get, use common default value
+				options.BaseBranch = "main"
+			} else {
+				options.BaseBranch = defaultBranch
+			}
 		} else {
-			options.BaseBranch = defaultBranch
+			options.BaseBranch = parentBranch
 		}
 	}
 

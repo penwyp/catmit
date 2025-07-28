@@ -73,6 +73,9 @@ type MainModel struct {
 
 	// Template related
 	useTemplate bool // Whether to try using template
+	
+	// Workflow mode
+	isPROnly bool // Whether this is a PR-only workflow (skip commit generation)
 }
 
 // PRConfig holds PR configuration
@@ -150,6 +153,7 @@ func NewMainModelWithPRConfig(
 		prProvider:   prConfig.Provider,
 		useTemplate:  prConfig.UseTemplate,
 		showDuration: 1500 * time.Millisecond,
+		isPROnly:     false, // Regular workflow includes commit generation
 	}
 
 	// Set content renderer
@@ -160,8 +164,12 @@ func NewMainModelWithPRConfig(
 
 // Init starts the first phase
 func (m *MainModel) Init() tea.Cmd {
-	// For now, skip PR check in UI and start with collection
-	// The PR check is handled at the workflow level
+	// For PR-only workflow, skip change collection and go directly to PR generation
+	if m.isPROnly {
+		return tea.Batch(m.spinner.Tick, m.collectPRDataCmd())
+	}
+	
+	// For regular workflow, start with collection
 	return tea.Batch(m.spinner.Tick, collectCmd(m.collector, m.ctx))
 }
 
@@ -197,6 +205,11 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Loading phase message handling
 	case diffCollectedMsg:
+		if m.isPROnly {
+			// For PR-only workflow, skip preprocessing and go directly to PR prompt building
+			m.loadingStage = StagePrompt
+			return m, m.buildPRPromptCmd()
+		}
 		m.loadingStage = StagePreprocess
 		return m, preprocessCmd(m.collector, m.ctx)
 
@@ -834,6 +847,7 @@ func NewPROnlyModel(
 		prProvider:   prConfig.Provider,
 		useTemplate:  prConfig.UseTemplate,
 		showDuration: 1500 * time.Millisecond,
+		isPROnly:     true, // PR-only workflow skips commit generation
 	}
 
 	// Set content renderer
@@ -842,4 +856,48 @@ func NewPROnlyModel(
 	// For PR-only workflow, we'll generate PR content directly
 	// without going through commit generation
 	return m
+}
+
+// collectPRDataCmd collects commit data for PR generation
+func (m *MainModel) collectPRDataCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Collect recent commits for PR generation
+		commits, err := m.collector.RecentCommits(m.ctx, 20)
+		if err != nil {
+			return errorMsg{err}
+		}
+		
+		// Get branch name
+		branch, _ := m.collector.BranchName(m.ctx)
+		
+		// For PR-only, we simulate a "diff collected" message with commit info
+		// but no actual diff since all changes are committed
+		return diffCollectedMsg{
+			diff:    "", // No uncommitted changes
+			commits: commits,
+			branch:  branch,
+			files:   []string{}, // No changed files
+		}
+	}
+}
+
+// buildPRPromptCmd builds prompts specifically for PR generation
+func (m *MainModel) buildPRPromptCmd() tea.Cmd {
+	return func() tea.Msg {
+		// For PR-only workflow, we use PR-specific prompts
+		systemPrompt := m.promptBuild.BuildPRSystemPrompt()
+		
+		// Get recent commits for PR content generation
+		commits, err := m.collector.RecentCommits(m.ctx, 20)
+		if err != nil {
+			return errorMsg{err}
+		}
+		
+		userPrompt := m.promptBuild.BuildPRUserPrompt(commits)
+		
+		return smartPromptBuiltMsg{
+			systemPrompt: systemPrompt,
+			userPrompt:   userPrompt,
+		}
+	}
 }

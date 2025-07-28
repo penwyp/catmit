@@ -39,6 +39,64 @@ func (r *realRunner) GetDefaultBranch(ctx context.Context, remote string) (strin
 	return "main", nil
 }
 
+// GetParentBranch tries to determine which branch the current branch was created from
+// by finding the common ancestor with remote branches
+func (r *realRunner) GetParentBranch(ctx context.Context, remote string) (string, error) {
+	// Get the current branch
+	currentBranch, err := r.Run(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	currentBranch = strings.TrimSpace(currentBranch)
+	
+	// Get all remote branches
+	output, err := r.Run(ctx, "git", "branch", "-r", "--format=%(refname:short)")
+	if err != nil {
+		return "", err
+	}
+	
+	remoteBranches := strings.Split(strings.TrimSpace(output), "\n")
+	
+	// Check common base branches first
+	commonBranches := []string{"main", "master", "develop", "trunk"}
+	for _, branch := range commonBranches {
+		remoteBranch := remote + "/" + branch
+		for _, rb := range remoteBranches {
+			if strings.TrimSpace(rb) == remoteBranch {
+				// Check if there's a merge-base
+				_, err := r.Run(ctx, "git", "merge-base", remoteBranch, "HEAD")
+				if err == nil {
+					return branch, nil
+				}
+			}
+		}
+	}
+	
+	// If no common branches found, try to find any branch with merge-base
+	for _, rb := range remoteBranches {
+		rb = strings.TrimSpace(rb)
+		if !strings.HasPrefix(rb, remote+"/") {
+			continue
+		}
+		
+		// Skip HEAD
+		if strings.HasSuffix(rb, "/HEAD") {
+			continue
+		}
+		
+		// Check if there's a merge-base
+		_, err := r.Run(ctx, "git", "merge-base", rb, "HEAD")
+		if err == nil {
+			// Extract branch name
+			branch := strings.TrimPrefix(rb, remote+"/")
+			return branch, nil
+		}
+	}
+	
+	// Fallback to default branch detection
+	return r.GetDefaultBranch(ctx, remote)
+}
+
 // GetDefaultBranchWithRunner detects the default branch using a provided runner
 // This allows using the function with different runner implementations
 func GetDefaultBranchWithRunner(ctx context.Context, runner Runner, remote string) (string, error) {

@@ -37,6 +37,8 @@ type promptInterface interface {
 	BuildSystemPrompt() string
 	BuildUserPrompt(seed, diff string, commits []string, branch string, files []string) string
 	BuildUserPromptWithBudget(ctx context.Context, collector interface{}, seed string) (string, error)
+	BuildPRSystemPrompt() string
+	BuildPRUserPrompt(commits []string) string
 }
 
 type clientInterface interface {
