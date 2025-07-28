@@ -70,6 +70,14 @@ func (mockPrompt) BuildUserPromptWithBudget(ctx context.Context, collector inter
 	return "user prompt with budget", nil
 }
 
+func (mockPrompt) BuildPRSystemPrompt() string {
+	return "PR system prompt"
+}
+
+func (mockPrompt) BuildPRUserPrompt(commits []string) string {
+	return "PR user prompt"
+}
+
 type mockClient struct {
 	msg string
 	err error
