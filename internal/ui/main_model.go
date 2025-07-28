@@ -314,6 +314,27 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case startCommitPhaseMsg:
 		m.phase = PhaseCommit
+		
+		// For PR-only workflow, skip commit and go directly to PR creation
+		if m.isPROnly {
+			// Check if we need to push first
+			needsPush, err := m.committer.NeedsPush(m.ctx)
+			if err != nil {
+				// Log error but continue
+				needsPush = false
+			}
+			
+			if needsPush {
+				m.commitStage = CommitStagePushing
+				return m, m.startPush()
+			} else {
+				// Go directly to PR creation
+				m.commitStage = CommitStageCreatingPR
+				return m, m.startCreatePR()
+			}
+		}
+		
+		// Normal workflow: commit first
 		m.commitStage = CommitStageCommitting
 		return m, m.startCommit()
 
