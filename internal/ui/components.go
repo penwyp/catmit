@@ -105,30 +105,6 @@ func DefaultStyles() UIStyles {
 	}
 }
 
-// truncateContent intelligently truncates content, preserving important information
-func truncateContent(content string, maxWidth int) string {
-	if maxWidth <= 0 {
-		return ""
-	}
-
-	// If the content length is within the limit, return directly
-	if lipgloss.Width(content) <= maxWidth {
-		return content
-	}
-
-	// Check character by character to ensure the truncated width does not exceed the limit
-	var result strings.Builder
-	for _, r := range content {
-		testStr := result.String() + string(r)
-		if lipgloss.Width(testStr) > maxWidth {
-			break
-		}
-		result.WriteRune(r)
-	}
-
-	return result.String()
-}
-
 // wordWrap wraps text, supporting CJK characters
 func wordWrap(s string, width int) string {
 	if width <= 0 {

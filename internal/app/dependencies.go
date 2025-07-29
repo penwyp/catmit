@@ -115,6 +115,8 @@ type Config struct {
 	Push        bool
 	StageAll    bool
 	SeedText    string
+	CreatePR    bool
+	PRConfig    PRConfig
 }
 
 // Validate validates the configuration

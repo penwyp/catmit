@@ -42,12 +42,6 @@ func (r *realRunner) GetDefaultBranch(ctx context.Context, remote string) (strin
 // GetParentBranch tries to determine which branch the current branch was created from
 // by finding the common ancestor with remote branches
 func (r *realRunner) GetParentBranch(ctx context.Context, remote string) (string, error) {
-	// Get the current branch
-	currentBranch, err := r.Run(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return "", err
-	}
-	currentBranch = strings.TrimSpace(currentBranch)
 	
 	// Get all remote branches
 	output, err := r.Run(ctx, "git", "branch", "-r", "--format=%(refname:short)")

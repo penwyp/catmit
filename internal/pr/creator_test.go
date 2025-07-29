@@ -92,6 +92,11 @@ func (m *MockGitRunner) GetDefaultBranch(ctx context.Context, remote string) (st
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGitRunner) GetParentBranch(ctx context.Context, remote string) (string, error) {
+	args := m.Called(ctx, remote)
+	return args.String(0), args.Error(1)
+}
+
 // MockCommandRunner simulates a command runner
 type MockCommandRunner struct {
 	mock.Mock

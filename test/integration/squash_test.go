@@ -197,7 +197,7 @@ func TestSquash_UIModel(t *testing.T) {
 	}
 
 	// Create UI model
-	model := ui.NewSquashModel(s, messages)
+	model := ui.NewSquashWorkflowModel(context.Background(), s, messages)
 
 	// Test initialization
 	initCmd := model.Init()

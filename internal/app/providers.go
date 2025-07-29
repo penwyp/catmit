@@ -330,12 +330,6 @@ func (a *GitRunnerAdapter) GetDefaultBranch(ctx context.Context, remote string) 
 }
 
 func (a *GitRunnerAdapter) GetParentBranch(ctx context.Context, remote string) (string, error) {
-	// Get the current branch
-	currentBranch, err := a.runner.Run(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return "", err
-	}
-	currentBranch = strings.TrimSpace(currentBranch)
 	
 	// Get all remote branches
 	output, err := a.runner.Run(ctx, "git", "branch", "-r", "--format=%(refname:short)")

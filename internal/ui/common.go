@@ -27,20 +27,10 @@ type createPRDoneMsg struct {
 // Decision represents the user's choice in the Review UI
 type Decision int
 
-// buttonState defines the index of the buttons
-type buttonState int
-
 const (
 	DecisionNone Decision = iota
 	DecisionAccept
 	DecisionCancel
-)
-
-const (
-	buttonAccept buttonState = iota
-	buttonEdit
-	buttonRegenerate
-	buttonCancel
 )
 
 // ReviewModel is used to display the commit message for user confirmation/editing.

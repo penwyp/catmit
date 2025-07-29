@@ -26,8 +26,8 @@ var (
 
 var squashDraftCmd = &cobra.Command{
 	Use:   "squash-draft",
-	Short: "Merge commit messages using AI",
-	Long: `Merge multiple commit messages into a single, comprehensive message using AI.
+	Short: "Consolidate commit messages using AI",
+	Long: `Merge multiple commit messages into a single, comprehensive commit message using AI.
 
 Opens your editor to input commit messages, then generates a unified message
 that captures all changes. Automatically copies the result to your clipboard.`,
