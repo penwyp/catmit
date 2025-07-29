@@ -11,14 +11,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/internal/rebase"
+	"github.com/penwyp/catmit/pkg/githistory"
 )
+
+// rebaseWorkflowInterface defines the interface for rebase workflow operations
+type rebaseWorkflowInterface interface {
+	Analyze(ctx context.Context) (*rebase.AnalysisResult, error)
+	GenerateCommitMessage(ctx context.Context, commits []githistory.Commit) (string, error)
+	ExecuteRebase(ctx context.Context, analysis *rebase.AnalysisResult, message string) error
+}
 
 // RebaseWorkflowModel handles the squash-history workflow
 type RebaseWorkflowModel struct {
 	*BaseWorkflowModel
 
 	// Rebase-specific fields
-	workflow     *rebase.Workflow
+	workflow     rebaseWorkflowInterface
 	analysis     *rebase.AnalysisResult
 	backupBranch string
 	
@@ -33,7 +41,7 @@ type RebaseWorkflowModel struct {
 // NewRebaseWorkflowModel creates a new rebase workflow model
 func NewRebaseWorkflowModel(
 	ctx context.Context,
-	workflow *rebase.Workflow,
+	workflow rebaseWorkflowInterface,
 ) *RebaseWorkflowModel {
 	base := NewBaseWorkflowModel(
 		"Analyzing Repository",

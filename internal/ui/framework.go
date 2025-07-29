@@ -222,6 +222,11 @@ func (m *BaseModel) GetSelected() int {
 	return m.selected
 }
 
+// GetActions returns the current actions
+func (m *BaseModel) GetActions() []Action {
+	return m.actions
+}
+
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
