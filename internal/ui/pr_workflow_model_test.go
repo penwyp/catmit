@@ -650,8 +650,7 @@ func TestPRWorkflowModel_View(t *testing.T) {
 	view := model.View()
 
 	// Check that the view contains expected elements
-	// The view shows "Progress (en)" not "Creating PR (en)"
-	assert.Contains(t, view, "Progress (en)")
+	assert.Contains(t, view, "Creating PR (en)")
 	assert.Contains(t, view, "Title:")
 	assert.Contains(t, view, "feat: awesome PR")
 	assert.Contains(t, view, "Creating pull request...")

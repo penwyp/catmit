@@ -509,4 +509,19 @@ func (m *PRWorkflowModel) startCreatePR() tea.Cmd {
 	}
 }
 
+// View renders the interface with PR-specific title
+func (m *PRWorkflowModel) View() string {
+	// Update title based on phase and lang
+	title := m.getPhaseTitle()
+	if m.lang != "" {
+		title += " (" + m.lang + ")"
+	}
+	m.SetTitle(title)
+
+	// Update actions based on phase
+	m.updateActionsForPhase()
+
+	return m.BaseModel.View()
+}
+
 // min function is already defined in framework.go, no need to redefine
