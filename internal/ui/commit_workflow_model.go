@@ -247,6 +247,21 @@ func (m *CommitWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the unified interface
+func (m *CommitWorkflowModel) View() string {
+	// Update title based on phase and lang
+	title := m.getPhaseTitle()
+	if m.lang != "" {
+		title += " (" + m.lang + ")"
+	}
+	m.SetTitle(title)
+
+	// Update actions based on phase
+	m.updateActionsForPhase()
+
+	return m.BaseModel.View()
+}
+
 // updateActionsForPhase updates available actions based on current phase
 func (m *CommitWorkflowModel) updateActionsForPhase() {
 	switch m.phase {
