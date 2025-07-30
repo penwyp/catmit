@@ -890,7 +890,11 @@ func TestPRWorkflowModel_UpdateActionsForPhase(t *testing.T) {
 	// Test PR preview phase
 	model.phase = WorkflowPhasePRPreview
 	model.updateActionsForPhase()
-	assert.Nil(t, model.actions)
+	assert.Equal(t, 2, len(model.actions))
+	assert.Equal(t, "A", model.actions[0].Key)
+	assert.Equal(t, "ccept", model.actions[0].Label)
+	assert.Equal(t, "C", model.actions[1].Key)
+	assert.Equal(t, "ancel", model.actions[1].Label)
 	
 	// Test commit phase
 	model.phase = WorkflowPhaseCommit

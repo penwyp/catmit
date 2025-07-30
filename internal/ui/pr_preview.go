@@ -120,11 +120,10 @@ func (m *PRPreviewModel) View() string {
 	// Operation hints
 	hintStyle := lipgloss.NewStyle().Foreground(m.styles.Colors.Gray).Italic(true)
 	if !m.showDetails && m.data.Body != "" && len(strings.Split(m.data.Body, "\n")) > 5 {
-		content.WriteString(hintStyle.Render("[D] Show details") + "  ")
+		content.WriteString(hintStyle.Render("[D] Show details") + "\n")
 	} else if m.showDetails {
-		content.WriteString(hintStyle.Render("[D] Hide details") + "  ")
+		content.WriteString(hintStyle.Render("[D] Hide details") + "\n")
 	}
-	content.WriteString(hintStyle.Render("[Enter] Continue  [Esc] Cancel") + "\n")
 
 	return content.String()
 }

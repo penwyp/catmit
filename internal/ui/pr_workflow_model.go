@@ -237,8 +237,11 @@ func (m *PRWorkflowModel) updateActionsForPhase() {
 			})
 		}
 	case WorkflowPhasePRPreview:
-		// PR preview actions handled by PRPreviewModel
-		m.SetActions(nil)
+		// PR preview actions
+		m.SetActions([]Action{
+			{Key: "A", Label: "ccept", Handler: m.handlePRAccept},
+			{Key: "C", Label: "ancel", Handler: m.handleCancel},
+		})
 	case WorkflowPhaseCommit:
 		// No actions during PR creation
 		m.SetActions(nil)
@@ -259,6 +262,13 @@ func (m *PRWorkflowModel) handleRegenerate() tea.Cmd {
 	m.loadingStage = StagePrompt
 	// Rebuild PR prompt and query again
 	return m.buildPRPromptCmd()
+}
+
+func (m *PRWorkflowModel) handlePRAccept() tea.Cmd {
+	// Continue to PR creation phase
+	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
+		return startCommitPhaseMsg{}
+	})
 }
 
 // Phase-specific rendering
@@ -391,17 +401,16 @@ func (m *PRWorkflowModel) updatePRPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.prPreview.ToggleDetails()
 		}
 		return m, nil
-	case "enter", " ":
-		// Continue to PR creation phase
-		return m, tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
-			return startCommitPhaseMsg{}
-		})
-	case "c", "C", "q", "Q", "esc":
-		m.reviewDecision = DecisionCancel
-		m.done = true
-		return m, tea.Quit
+	case "a", "A", "enter":
+		// Accept: Continue to PR creation phase
+		return m, m.handlePRAccept()
+	case "c", "C", "esc", "ctrl+c":
+		// Cancel
+		return m, m.handleCancel()
 	}
-	return m, nil
+	
+	// Let BaseModel handle action execution for other keys
+	return m, m.HandleKeyboard(msg)
 }
 
 func (m *PRWorkflowModel) preparePRPreview() tea.Cmd {
