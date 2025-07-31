@@ -43,6 +43,7 @@ type promptInterface interface {
 
 type clientInterface interface {
 	GetCommitMessage(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	GetCommitMessageStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error)
 }
 
 // LoadingModel displays a spinner during time-consuming steps.
@@ -68,6 +69,14 @@ type LoadingModel struct {
 
 	message string
 	err     error
+	
+	// Streaming response accumulation
+	streamingContent string
+	isStreaming     bool
+	streamChan      <-chan string
+	streamErrChan   <-chan error
+	streamCtx       context.Context
+	streamCancel    context.CancelFunc
 }
 
 // NewLoadingModel creates a new LoadingModel with injected dependencies and initial settings.
@@ -146,11 +155,35 @@ func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case smartPromptBuiltMsg:
 		// Smart prompt built, enter Query stage
 		m.stage = StageQuery
-		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
+		m.isStreaming = true
+		return m, queryStreamCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
 	case promptBuiltMsg:
 		// Traditional prompt built, enter Query stage (fallback path)
 		m.stage = StageQuery
-		return m, queryCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
+		m.isStreaming = true
+		return m, queryStreamCmd(m.client, m.ctx, msg.systemPrompt, msg.userPrompt, m.apiTimeout)
+	case startStreamMsg:
+		// Store stream channels and start listening
+		m.streamChan = msg.contentChan
+		m.streamErrChan = msg.errChan
+		m.streamCtx = msg.ctx
+		m.streamCancel = msg.cancel
+		return m, listenToStream(msg.contentChan, msg.errChan, msg.ctx)
+	case streamChunkMsg:
+		// Accumulate streaming content
+		m.streamingContent += msg.content
+		// Continue listening for more chunks
+		return m, listenToStream(m.streamChan, m.streamErrChan, m.streamCtx)
+	case streamDoneMsg:
+		// Streaming completed
+		m.stage = StageDone
+		m.message = m.streamingContent
+		m.isStreaming = false
+		// Clean up streaming resources
+		if m.streamCancel != nil {
+			m.streamCancel()
+		}
+		return m, tea.Quit
 	case queryDoneMsg:
 		m.stage = StageDone
 		m.message = msg.message
@@ -184,6 +217,13 @@ func (m *LoadingModel) View() string {
 		status = "Crafting prompt…"
 		statusStyle = lipgloss.NewStyle().Foreground(colors.Blue)
 	case StageQuery:
+		if m.isStreaming && m.streamingContent != "" {
+			// Show streaming content while generating
+			status = "Generating commit message…"
+			statusStyle = lipgloss.NewStyle().Foreground(colors.Green)
+			// Add the streaming content below the status
+			return m.spinner.View() + " " + statusStyle.Render(status) + "\n\n" + m.streamingContent
+		}
 		status = "Generating commit message…"
 		statusStyle = lipgloss.NewStyle().Foreground(colors.Green)
 	default:
@@ -236,6 +276,19 @@ type delayedPromptMsg struct {
 type queryDoneMsg struct {
 	message        string
 	rawLLMResponse string // Original response before any processing
+}
+
+type streamChunkMsg struct {
+	content string
+}
+
+type streamDoneMsg struct{}
+
+type startStreamMsg struct {
+	contentChan <-chan string
+	errChan     <-chan error
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 type errorMsg struct{ err error }
@@ -298,5 +351,45 @@ func queryCmd(cli clientInterface, ctx context.Context, systemPrompt, userPrompt
 		// For now, both message and rawLLMResponse are the same
 		// In the future, message might be processed/cleaned version
 		return queryDoneMsg{message: msg, rawLLMResponse: msg}
+	}
+}
+
+func queryStreamCmd(cli clientInterface, ctx context.Context, systemPrompt, userPrompt string, apiTimeout time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		// Create timeout context only for API call
+		apiCtx, cancel := context.WithTimeout(ctx, apiTimeout)
+		
+		contentChan, errChan := cli.GetCommitMessageStream(apiCtx, systemPrompt, userPrompt)
+		
+		// Return a command that starts listening to the stream
+		return startStreamMsg{
+			contentChan: contentChan,
+			errChan:     errChan,
+			ctx:         apiCtx,
+			cancel:      cancel,
+		}
+	}
+}
+
+// listenToStream creates a command that listens to streaming channels
+func listenToStream(contentChan <-chan string, errChan <-chan error, ctx context.Context) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case content, ok := <-contentChan:
+			if !ok {
+				// Stream completed
+				return streamDoneMsg{}
+			}
+			// Return chunk and continue listening
+			return streamChunkMsg{content: content}
+		case err := <-errChan:
+			if err != nil {
+				return errorMsg{err}
+			}
+			// No error, continue listening
+			return listenToStream(contentChan, errChan, ctx)
+		case <-ctx.Done():
+			return errorMsg{ctx.Err()}
+		}
 	}
 }

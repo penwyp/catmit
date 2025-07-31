@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 // Supports different LLM APIs (OpenAI-compatible and non-compatible).
 type LLMProvider interface {
 	GetCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	GetCompletionStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error)
 }
 
 // Client is responsible for interacting with the LLM API.
@@ -98,9 +100,10 @@ func NewOpenAICompatibleProvider() *OpenAICompatibleProvider {
 type chatRequest struct {
 	Model               string        `json:"model"`
 	Messages            []chatMessage `json:"messages"`
-	MaxTokens           int           `json:"max_tokens"`
-	MaxCompletionTokens int           `json:"max_completion_tokens"`
+	MaxTokens           int           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int           `json:"max_completion_tokens,omitempty"`
 	Temperature         float64       `json:"temperature"`
+	Stream              bool          `json:"stream,omitempty"`
 }
 
 type chatMessage struct {
@@ -127,6 +130,24 @@ type chatResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
+}
+
+// streamResponse represents a streaming response chunk from the API
+type streamResponse struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index        int       `json:"index"`
+		Delta        deltaMessage `json:"delta"`
+		FinishReason *string   `json:"finish_reason"`
+	} `json:"choices"`
+}
+
+type deltaMessage struct {
+	Role    string `json:"role,omitempty"`
+	Content string `json:"content,omitempty"`
 }
 
 // maskAPIKey masks the API key for logging purposes
@@ -168,11 +189,12 @@ func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemProm
 		{Role: "user", Content: userPrompt},
 	}
 
+	// Different APIs may have different requirements for max_tokens
+	// Volcengine Ark doesn't allow both max_tokens and max_completion_tokens
 	reqBody := chatRequest{
 		Model:               p.model,
 		Messages:            messages,
 		MaxTokens:           128,
-		MaxCompletionTokens: 128,
 		Temperature:         0.7,
 	}
 
@@ -215,10 +237,17 @@ func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemProm
 
 	// Non-200 responses are handled as errors, including status code but not response body to avoid leaking sensitive info.
 	if resp.StatusCode != http.StatusOK {
+		// Log response body for debugging (only in debug mode)
+		errorBody := string(bodyBytes)
+		if len(errorBody) > 500 {
+			errorBody = errorBody[:500] + "..."
+		}
+		
 		// Handle specific status codes
 		switch resp.StatusCode {
 		case http.StatusBadRequest:
-			return "", errors.ErrInvalidInput
+			// Return a new error with the response body for debugging
+			return "", errors.New(errors.ErrTypeValidation, fmt.Sprintf("invalid input parameters: %s", errorBody))
 		case http.StatusUnauthorized:
 			return "", errors.ErrLLMAPIKey
 		case http.StatusForbidden:
@@ -291,4 +320,176 @@ func (c *Client) GetCommitMessage(ctx context.Context, systemPrompt, userPrompt 
 	}
 
 	return result, err
+}
+
+// GetCommitMessageStream calls the LLM API to generate a commit message with streaming.
+// Returns channels for content chunks and errors.
+func (c *Client) GetCommitMessageStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error) {
+	// Detailed debug logging
+	if c.logger != nil {
+		// Get provider details for logging
+		if oaiProvider, ok := c.provider.(*OpenAICompatibleProvider); ok {
+			c.logger.Debug("LLM API Stream Request Details",
+				zap.String("api_url", oaiProvider.apiURL),
+				zap.String("api_key_masked", maskAPIKey(oaiProvider.apiKey)),
+				zap.String("model", oaiProvider.model),
+				zap.String("system_prompt_preview", truncateForLog(systemPrompt, 100)),
+				zap.String("user_prompt_preview", truncateForLog(userPrompt, 100)),
+				zap.Int("system_prompt_length", len(systemPrompt)),
+				zap.Int("user_prompt_length", len(userPrompt)))
+		} else {
+			c.logger.Debug("LLM API Stream Request",
+				zap.String("system_prompt_preview", truncateForLog(systemPrompt, 100)),
+				zap.String("user_prompt_preview", truncateForLog(userPrompt, 100)),
+				zap.Int("system_prompt_length", len(systemPrompt)),
+				zap.Int("user_prompt_length", len(userPrompt)))
+		}
+	}
+
+	// Delegate actual call to Provider
+	return c.provider.GetCompletionStream(ctx, systemPrompt, userPrompt)
+}
+
+// GetCompletionStream implements the OpenAI-compatible streaming API call.
+func (p *OpenAICompatibleProvider) GetCompletionStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error) {
+	contentChan := make(chan string, 100)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(contentChan)
+		defer close(errChan)
+
+		// Check if API Key is set
+		if p.apiKey == "" {
+			errChan <- errors.ErrLLMAPIKey
+			return
+		}
+
+		// Build request body, separating system and user messages
+		messages := []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		}
+
+		// Different APIs may have different requirements for max_tokens
+		// Volcengine Ark doesn't allow both max_tokens and max_completion_tokens
+		reqBody := chatRequest{
+			Model:               p.model,
+			Messages:            messages,
+			MaxTokens:           128,
+			Temperature:         0.7,
+			Stream:              true,
+		}
+
+		data, err := json.Marshal(reqBody)
+		if err != nil {
+			errChan <- errors.Wrap(errors.ErrTypeLLM, "failed to marshal request", err)
+			return
+		}
+
+		// Build HTTP request
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiURL, bytes.NewReader(data))
+		if err != nil {
+			errChan <- errors.Wrap(errors.ErrTypeLLM, "failed to create request", err)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
+		if p.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		}
+
+		// Send request
+		resp, err := p.httpClient.Do(req)
+		if err != nil {
+			// If context is cancelled or deadline exceeded, return appropriate error type
+			if ctx.Err() == context.DeadlineExceeded {
+				errChan <- errors.ErrLLMTimeout
+				return
+			}
+			if strings.Contains(err.Error(), "timeout") {
+				errChan <- errors.ErrLLMTimeout
+				return
+			}
+			// Other network errors
+			errChan <- errors.WrapRetryable(errors.ErrTypeLLM, "network request failed", err)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		// Non-200 responses are handled as errors
+		if resp.StatusCode != http.StatusOK {
+			// Read error body for debugging
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			errorBody := string(bodyBytes)
+			if len(errorBody) > 500 {
+				errorBody = errorBody[:500] + "..."
+			}
+			
+			// Handle specific status codes
+			switch resp.StatusCode {
+			case http.StatusBadRequest:
+				// Return a new error with the response body for debugging
+				errChan <- errors.New(errors.ErrTypeValidation, fmt.Sprintf("invalid input parameters: %s", errorBody))
+			case http.StatusUnauthorized:
+				errChan <- errors.ErrLLMAPIKey
+			case http.StatusForbidden:
+				errChan <- errors.ErrLLMAPIKey
+			case http.StatusTooManyRequests:
+				errChan <- errors.ErrLLMRateLimit
+			case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
+				errChan <- errors.NewRetryable(errors.ErrTypeLLM, fmt.Sprintf("API server error: status %d", resp.StatusCode))
+			default:
+				errChan <- errors.New(errors.ErrTypeLLM, fmt.Sprintf("API error: status %d", resp.StatusCode))
+			}
+			return
+		}
+
+		// Read SSE stream
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				errChan <- errors.Wrap(errors.ErrTypeLLM, "failed to read stream", err)
+				return
+			}
+
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			// Parse SSE format
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				
+				// Check for stream end
+				if data == "[DONE]" {
+					break
+				}
+
+				// Parse JSON
+				var chunk streamResponse
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					// Skip invalid chunks
+					continue
+				}
+
+				// Extract content from chunk
+				if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
+					select {
+					case contentChan <- chunk.Choices[0].Delta.Content:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return contentChan, errChan
 }
