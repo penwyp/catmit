@@ -101,6 +101,26 @@ func (m *mockPRClient) GetCommitMessage(ctx context.Context, systemPrompt, userP
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockPRClient) GetCommitMessageStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error) {
+	args := m.Called(ctx, systemPrompt, userPrompt)
+	
+	contentChan := make(chan string, 1)
+	errChan := make(chan error, 1)
+	
+	go func() {
+		defer close(contentChan)
+		defer close(errChan)
+		
+		if args.Error(1) != nil {
+			errChan <- args.Error(1)
+			return
+		}
+		contentChan <- args.String(0)
+	}()
+	
+	return contentChan, errChan
+}
+
 // mockPRCommitter implements commitInterface
 type mockPRCommitter struct {
 	mock.Mock

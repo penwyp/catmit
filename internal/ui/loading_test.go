@@ -87,6 +87,24 @@ func (m mockClient) GetCommitMessage(ctx context.Context, systemPrompt, userProm
 	return m.msg, m.err
 }
 
+func (m mockClient) GetCommitMessageStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error) {
+	contentChan := make(chan string, 1)
+	errChan := make(chan error, 1)
+	
+	go func() {
+		defer close(contentChan)
+		defer close(errChan)
+		
+		if m.err != nil {
+			errChan <- m.err
+			return
+		}
+		contentChan <- m.msg
+	}()
+	
+	return contentChan, errChan
+}
+
 // -------------------------------------------------------
 
 func runModel(m tea.Model) (tea.Model, error) {

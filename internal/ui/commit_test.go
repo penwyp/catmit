@@ -101,6 +101,26 @@ func (m *mockCommitClient) GetCommitMessage(ctx context.Context, systemPrompt, u
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockCommitClient) GetCommitMessageStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan string, <-chan error) {
+	args := m.Called(ctx, systemPrompt, userPrompt)
+	
+	contentChan := make(chan string, 1)
+	errChan := make(chan error, 1)
+	
+	go func() {
+		defer close(contentChan)
+		defer close(errChan)
+		
+		if args.Error(1) != nil {
+			errChan <- args.Error(1)
+			return
+		}
+		contentChan <- args.String(0)
+	}()
+	
+	return contentChan, errChan
+}
+
 // mockCommitCommitter implements commitInterface
 type mockCommitCommitter struct {
 	mock.Mock
