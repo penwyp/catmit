@@ -37,7 +37,7 @@
 - 🔧 **灵活使用**: 支持交互式和自动化（CI/CD）模式
 - 📊 **智能分析**: 分析 git 历史、文件变更和仓库上下文
 - 🎯 **高准确率**: 生成上下文相关的提交信息，质量达 95% 以上
-- 🔌 **多种提供商**: 支持 DeepSeek、OpenAI、火山引擎方舟等任何 OpenAI 兼容 API
+- 🔌 **多种提供商**: 支持 DeepSeek、OpenAI、Azure OpenAI、火山引擎方舟等任何 OpenAI 兼容 API
 
 ## 📖 使用方法
 
@@ -155,6 +155,20 @@ export CATMIT_LLM_MODEL="gpt-4"
 
 **获取 API 密钥：** [OpenAI API 密钥](https://platform.openai.com/api-keys)
 
+### ☁️ Azure OpenAI
+```bash
+# 必需
+export CATMIT_LLM_PROVIDER="azure"
+export CATMIT_LLM_API_KEY="your-azure-api-key"
+export CATMIT_LLM_API_URL="https://your-resource.openai.azure.com"
+export CATMIT_LLM_MODEL="your-deployment-name"
+```
+
+**设置步骤：**
+1. 从 [Azure OpenAI 服务](https://azure.microsoft.com/zh-cn/products/ai-services/openai-service) 获取 API 密钥
+2. 将 `your-resource` 替换为你的 Azure OpenAI 资源名称
+3. 将 `your-deployment-name` 替换为你的模型部署名称（例如：`gpt-4`、`gpt-35-turbo`）
+
 ### 🔧 其他 OpenAI 兼容提供商
 ```bash
 # 必需 - 根据你的提供商调整
@@ -167,9 +181,10 @@ export CATMIT_LLM_MODEL="your-model-name"
 
 | 变量 | 描述 | 必需 | 默认值 |
 |------|------|------|--------|
+| `CATMIT_LLM_PROVIDER` | LLM 提供商类型（设置为 `azure` 或留空使用 OpenAI 兼容） | ❌ 否 | OpenAI 兼容 |
 | `CATMIT_LLM_API_KEY` | 你选择的提供商的 API 密钥 | ✅ 是 | - |
-| `CATMIT_LLM_API_URL` | OpenAI 兼容 API 端点 | ❌ 否 | `https://api.deepseek.com/v1/chat/completions` |
-| `CATMIT_LLM_MODEL` | 用于补全的模型名称 | ❌ 否 | `deepseek-chat` |
+| `CATMIT_LLM_API_URL` | API 端点（OpenAI 兼容为完整 URL，Azure 为基础 URL） | ❌ 否 | `https://api.deepseek.com/v1/chat/completions` |
+| `CATMIT_LLM_MODEL` | 模型名称（OpenAI 兼容）或部署名称（Azure） | ❌ 否 | `deepseek-chat` |
 | `CATMIT_CONFIG_PATH` | 配置文件路径 | ❌ 否 | `~/.config/catmit/config.yaml` |
 
 ### 提供商映射配置

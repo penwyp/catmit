@@ -37,7 +37,7 @@
 - 🔧 **Flexible Usage**: Works in both interactive and automated (CI/CD) modes
 - 📊 **Smart Analysis**: Analyzes git history, file changes, and repository context
 - 🎯 **High Accuracy**: Generates contextually relevant commit messages with >95% quality
-- 🔌 **Multiple Providers**: Supports DeepSeek, OpenAI, Volcengine Ark, and any OpenAI-compatible API
+- 🔌 **Multiple Providers**: Supports DeepSeek, OpenAI, Azure OpenAI, Volcengine Ark, and any OpenAI-compatible API
 
 ## 📖 Usage
 
@@ -383,6 +383,20 @@ export CATMIT_LLM_MODEL="gpt-4"
 
 **Get your API key:** [OpenAI API Keys](https://platform.openai.com/api-keys)
 
+### ☁️ Azure OpenAI
+```bash
+# Required
+export CATMIT_LLM_PROVIDER="azure"
+export CATMIT_LLM_API_KEY="your-azure-api-key"
+export CATMIT_LLM_API_URL="https://your-resource.openai.azure.com"
+export CATMIT_LLM_MODEL="your-deployment-name"
+```
+
+**Setup:**
+1. Get your API key from [Azure OpenAI Service](https://azure.microsoft.com/en-us/products/ai-services/openai-service)
+2. Replace `your-resource` with your Azure OpenAI resource name
+3. Replace `your-deployment-name` with your model deployment name (e.g., `gpt-4`, `gpt-35-turbo`)
+
 ### 🔧 Other OpenAI-Compatible Providers
 ```bash
 # Required - adjust for your provider
@@ -395,9 +409,10 @@ export CATMIT_LLM_MODEL="your-model-name"
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
+| `CATMIT_LLM_PROVIDER` | LLM provider type (`azure` or leave empty for OpenAI-compatible) | ❌ No | OpenAI-compatible |
 | `CATMIT_LLM_API_KEY` | API key for your chosen provider | ✅ Yes | - |
-| `CATMIT_LLM_API_URL` | OpenAI-compatible API endpoint | ❌ No | `https://api.deepseek.com/v1/chat/completions` |
-| `CATMIT_LLM_MODEL` | Model name for completions | ❌ No | `deepseek-chat` |
+| `CATMIT_LLM_API_URL` | API endpoint (full URL for OpenAI-compatible, base URL for Azure) | ❌ No | `https://api.deepseek.com/v1/chat/completions` |
+| `CATMIT_LLM_MODEL` | Model name (for OpenAI-compatible) or deployment name (for Azure) | ❌ No | `deepseek-chat` |
 | `CATMIT_CONFIG_PATH` | Path to configuration file | ❌ No | `~/.config/catmit/config.yaml` |
 
 ### Provider Mapping Configuration
