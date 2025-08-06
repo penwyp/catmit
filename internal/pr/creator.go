@@ -114,102 +114,19 @@ func (c *Creator) WithLogger(logger *zap.Logger) *Creator {
 
 // Create creates a pull request
 func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, error) {
-	// Set default value for remote if not specified
-	if options.Remote == "" {
-		options.Remote = "origin"
-	}
-
-	if c.logger != nil {
-		c.logger.Debug("Starting PR creation",
-			zap.String("remote", options.Remote),
-			zap.String("base_branch", options.BaseBranch),
-			zap.Bool("draft", options.Draft))
-	}
-
-	// Get remote URL
-	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
+	// Prepare all context needed for PR creation
+	prContext, err := c.PrepareContext(ctx, options)
 	if err != nil {
-		return "", errors.Wrap(errors.ErrTypeGit, "failed to get remote URL", err)
+		return "", err
 	}
 
-	if c.logger != nil {
-		c.logger.Debug("Remote URL retrieved",
-			zap.String("remote", options.Remote),
-			zap.String("url", remoteURL))
-	}
+	// Use the resolved options from context
+	options = prContext.Options
+	remoteInfo := prContext.RemoteInfo
+	headBranch := prContext.CurrentBranch
 
-	// Detect provider
-	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
-	if err != nil {
-		return "", errors.Wrap(errors.ErrTypeProvider, "failed to detect provider", err)
-	}
-
-	if c.logger != nil {
-		c.logger.Debug("Provider detected",
-			zap.String("provider", remoteInfo.Provider),
-			zap.String("host", remoteInfo.Host),
-			zap.String("owner", remoteInfo.Owner),
-			zap.String("repo", remoteInfo.Repo))
-	}
-
-	// Check if provider is supported
-	if remoteInfo.Provider == "unknown" {
-		return "", errors.ErrProviderNotSupported
-	}
-
-	// Detect CLI status
-	cliStatus, err := c.cliDetector.DetectCLI(ctx, remoteInfo.Provider)
-	if err != nil {
-		return "", errors.Wrap(errors.ErrTypePR, "failed to detect CLI", err)
-	}
-
-	// Check if CLI is installed
-	if !cliStatus.Installed {
-		return "", errors.ErrCLINotInstalled.WithSuggestion(fmt.Sprintf("Please install %s CLI tool", cliStatus.Name))
-	}
-
-	// Check if CLI is authenticated
-	if !cliStatus.Authenticated {
-		return "", errors.ErrCLINotAuthed.WithSuggestion(fmt.Sprintf("Please run %s auth login to authenticate", cliStatus.Name))
-	}
-
-	// Check version requirements
-	if minVersion, ok := minVersionRequirements[remoteInfo.Provider]; ok {
-		meetsRequirement, err := c.cliDetector.CheckMinVersion(cliStatus.Version, minVersion)
-		if err != nil {
-			return "", errors.Wrap(errors.ErrTypePR, "failed to check version", err)
-		}
-		if !meetsRequirement {
-			return "", errors.New(errors.ErrTypePR, fmt.Sprintf("%s version %s is below minimum required version %s",
-				cliStatus.Name, cliStatus.Version, minVersion)).WithSuggestion(fmt.Sprintf("Please upgrade %s to %s or higher", cliStatus.Name, minVersion))
-		}
-	}
-
-	// Get base branch (if not specified)
-	if options.BaseBranch == "" {
-		// First try to detect which branch the current branch is based on
-		parentBranch, err := c.git.GetParentBranch(ctx, options.Remote)
-		if err != nil {
-			// If that fails, fall back to default branch detection
-			defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
-			if err != nil {
-				// If failed to get, use common default value
-				options.BaseBranch = "main"
-			} else {
-				options.BaseBranch = defaultBranch
-			}
-		} else {
-			options.BaseBranch = parentBranch
-		}
-	}
-
-	// Get current branch (if needed)
-	var headBranch string
+	// Set head branch if needed for provider-specific requirements
 	if options.HeadBranch == "" {
-		headBranch, err = c.git.GetCurrentBranch(ctx)
-		if err != nil {
-			return "", errors.Wrap(errors.ErrTypeGit, "failed to get current branch", err)
-		}
 		if remoteInfo.Provider == "gitea" {
 			options.HeadBranch = headBranch
 		}
@@ -393,59 +310,165 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 	return prURL, nil
 }
 
-// CheckExists checks if a PR already exists for the current branch
-func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool, string, error) {
-	// 1. Detect provider and remote info
-	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
-	if err != nil {
-		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to get remote URL", err)
-	}
+// PreparedPRContext contains resolved context for PR operations
+type PreparedPRContext struct {
+	Options        CreateOptions
+	RemoteInfo     provider.RemoteInfo
+	CLIStatus      cli.CLIStatus
+	CurrentBranch  string
+}
 
-	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
-	if err != nil {
-		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to detect provider", err)
+// PrepareContext resolves all context needed for PR operations (creation and existence checks)
+// This extracts the common logic that was duplicated between Create and CheckExists
+func (c *Creator) PrepareContext(ctx context.Context, options CreateOptions) (*PreparedPRContext, error) {
+	// Set default value for remote if not specified
+	if options.Remote == "" {
+		options.Remote = "origin"
 	}
 
 	if c.logger != nil {
-		c.logger.Debug("checking PR existence",
+		c.logger.Debug("Preparing PR context",
+			zap.String("remote", options.Remote),
+			zap.String("base_branch", options.BaseBranch),
+			zap.Bool("draft", options.Draft))
+	}
+
+	// Get remote URL
+	remoteURL, err := c.git.GetRemoteURL(ctx, options.Remote)
+	if err != nil {
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to get remote URL", err)
+	}
+
+	if c.logger != nil {
+		c.logger.Debug("Remote URL retrieved",
+			zap.String("remote", options.Remote),
+			zap.String("url", remoteURL))
+	}
+
+	// Detect provider
+	remoteInfo, err := c.providerDetector.DetectFromRemote(ctx, remoteURL)
+	if err != nil {
+		return nil, errors.Wrap(errors.ErrTypeProvider, "failed to detect provider", err)
+	}
+
+	if c.logger != nil {
+		c.logger.Debug("Provider detected",
 			zap.String("provider", remoteInfo.Provider),
 			zap.String("host", remoteInfo.Host),
 			zap.String("owner", remoteInfo.Owner),
 			zap.String("repo", remoteInfo.Repo))
 	}
 
-	// 2. Check if CLI is available
+	// Check if provider is supported
+	if remoteInfo.Provider == "unknown" {
+		return nil, errors.ErrProviderNotSupported
+	}
+
+	// Detect CLI status
 	cliStatus, err := c.cliDetector.DetectCLI(ctx, remoteInfo.Provider)
 	if err != nil {
-		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to detect CLI", err)
+		return nil, errors.Wrap(errors.ErrTypePR, "failed to detect CLI", err)
 	}
 
+	// Check if CLI is installed
 	if !cliStatus.Installed {
-		// If CLI is not installed, we cannot check PR existence
-		// Return false to allow the workflow to continue
-		return false, "", nil
+		return nil, errors.ErrCLINotInstalled.WithSuggestion(fmt.Sprintf("Please install %s CLI tool", cliStatus.Name))
 	}
 
+	// Check if CLI is authenticated
 	if !cliStatus.Authenticated {
-		// If CLI is not authenticated, we cannot check PR existence
-		// Return false to allow the workflow to continue
-		return false, "", nil
+		return nil, errors.ErrCLINotAuthed.WithSuggestion(fmt.Sprintf("Please run %s auth login to authenticate", cliStatus.Name))
 	}
 
-	// 3. Get current branch
+	// Check version requirements
+	if minVersion, ok := minVersionRequirements[remoteInfo.Provider]; ok {
+		meetsRequirement, err := c.cliDetector.CheckMinVersion(cliStatus.Version, minVersion)
+		if err != nil {
+			return nil, errors.Wrap(errors.ErrTypePR, "failed to check version", err)
+		}
+		if !meetsRequirement {
+			return nil, errors.New(errors.ErrTypePR, fmt.Sprintf("%s version %s is below minimum required version %s",
+				cliStatus.Name, cliStatus.Version, minVersion)).WithSuggestion(fmt.Sprintf("Please upgrade %s to %s or higher", cliStatus.Name, minVersion))
+		}
+	}
+
+	// Get base branch (if not specified)
+	if options.BaseBranch == "" {
+		// First try to detect which branch the current branch is based on
+		parentBranch, err := c.git.GetParentBranch(ctx, options.Remote)
+		if err != nil {
+			// If that fails, fall back to default branch detection
+			defaultBranch, err := c.git.GetDefaultBranch(ctx, options.Remote)
+			if err != nil {
+				// If failed to get, use common default value
+				options.BaseBranch = "main"
+			} else {
+				options.BaseBranch = defaultBranch
+			}
+		} else {
+			options.BaseBranch = parentBranch
+		}
+	}
+
+	// Get current branch
 	currentBranch, err := c.git.GetCurrentBranch(ctx)
 	if err != nil {
-		return false, "", errors.Wrapf(errors.ErrTypePR, "failed to get current branch", err)
+		return nil, errors.Wrap(errors.ErrTypeGit, "failed to get current branch", err)
 	}
 
-	// 4. Build and execute check command based on provider
+	if c.logger != nil {
+		c.logger.Debug("PR context prepared",
+			zap.String("current_branch", currentBranch),
+			zap.String("base_branch", options.BaseBranch),
+			zap.String("provider", remoteInfo.Provider))
+	}
+
+	return &PreparedPRContext{
+		Options:       options,
+		RemoteInfo:    remoteInfo,
+		CLIStatus:     cliStatus,
+		CurrentBranch: currentBranch,
+	}, nil
+}
+
+// CheckExists checks if a PR already exists for the current branch
+func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool, string, error) {
+	// Prepare context with complete provider/remote/base branch resolution
+	prContext, err := c.PrepareContext(ctx, options)
+	if err != nil {
+		// If context preparation fails due to CLI issues, gracefully continue
+		if errors.Is(err, errors.ErrCLINotInstalled) || errors.Is(err, errors.ErrCLINotAuthed) {
+			if c.logger != nil {
+				c.logger.Debug("CLI not available for PR existence check, continuing", zap.Error(err))
+			}
+			return false, "", nil
+		}
+		// For other errors, return them
+		return false, "", err
+	}
+
+	remoteInfo := prContext.RemoteInfo
+	currentBranch := prContext.CurrentBranch
+	baseBranch := prContext.Options.BaseBranch
+
+	if c.logger != nil {
+		c.logger.Debug("checking PR existence with full context",
+			zap.String("provider", remoteInfo.Provider),
+			zap.String("current_branch", currentBranch),
+			zap.String("base_branch", baseBranch),
+			zap.String("remote", prContext.Options.Remote),
+			zap.String("owner", remoteInfo.Owner),
+			zap.String("repo", remoteInfo.Repo))
+	}
+
+	// Build and execute check command based on provider with base branch context
 	switch remoteInfo.Provider {
 	case "github":
-		return c.checkGitHubPR(ctx, currentBranch, remoteInfo)
+		return c.checkGitHubPRWithBase(ctx, currentBranch, baseBranch, remoteInfo)
 	case "gitlab":
-		return c.checkGitLabMR(ctx, currentBranch, remoteInfo)
+		return c.checkGitLabMRWithBase(ctx, currentBranch, baseBranch, remoteInfo)
 	case "gitea":
-		return c.checkGiteaPR(ctx, currentBranch, remoteInfo)
+		return c.checkGiteaPRWithBase(ctx, currentBranch, baseBranch, remoteInfo)
 	default:
 		// For unknown providers, return false
 		return false, "", nil
@@ -456,6 +479,9 @@ func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool,
 type GitHubPullRequest struct {
 	URL   string `json:"url"`
 	State string `json:"state"`
+	Base  struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
 }
 
 // checkGitHubPR checks if a GitHub PR exists for the current branch
@@ -534,6 +560,159 @@ func (c *Creator) checkGitLabMR(ctx context.Context, branch string, remoteInfo p
 	for _, mr := range mrs {
 		if mr.SourceBranch == branch && mr.State == "opened" {
 			return true, mr.WebURL, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// checkGitHubPRWithBase checks if a GitHub PR exists for the current branch targeting a specific base branch
+func (c *Creator) checkGitHubPRWithBase(ctx context.Context, branch, baseBranch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
+	// Use gh pr list to check for existing PRs
+	// --head flag to filter by source branch
+	// --base flag to filter by base branch  
+	// --json to get structured output including base ref
+	// -R to specify the repository
+	args := []string{"pr", "list", "--head", branch, "--base", baseBranch, "--json", "url,state,base",
+		"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+	output, err := c.commandRunner.Run(ctx, "gh", args...)
+	if err != nil {
+		// If command fails, assume no PR exists
+		return false, "", nil
+	}
+
+	// Parse JSON output
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "[]" || outputStr == "" {
+		// No PRs found
+		return false, "", nil
+	}
+
+	var prs []GitHubPullRequest
+	if err := json.Unmarshal([]byte(outputStr), &prs); err != nil {
+		// If JSON parsing fails, fall back to no PR exists
+		return false, "", nil
+	}
+
+	// Check each PR to find one that is open and targets the correct base branch
+	for _, pr := range prs {
+		if pr.State == "OPEN" && pr.Base.Ref == baseBranch {
+			return true, pr.URL, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// GitLabMergeRequestWithBase represents a merge request with base info in glab CLI JSON output
+type GitLabMergeRequestWithBase struct {
+	IID          int    `json:"iid"`
+	WebURL       string `json:"web_url"`
+	State        string `json:"state"`
+	SourceBranch string `json:"source_branch"`
+	TargetBranch string `json:"target_branch"`
+}
+
+// checkGitLabMRWithBase checks if a GitLab MR exists for the current branch targeting a specific base branch
+func (c *Creator) checkGitLabMRWithBase(ctx context.Context, branch, baseBranch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
+	// Use glab mr list with JSON output to get structured data
+	// --output json for structured output
+	// --source-branch to filter by source branch
+	// --target-branch to filter by target branch
+	// -R to specify the repository
+	args := []string{"mr", "list", "--output", "json", "--source-branch", branch, "--target-branch", baseBranch,
+		"-R", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+	output, err := c.commandRunner.Run(ctx, "glab", args...)
+	if err != nil {
+		// If command fails, assume no MR exists
+		return false, "", nil
+	}
+
+	// Parse JSON output
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" || outputStr == "[]" {
+		// No MRs found
+		return false, "", nil
+	}
+
+	var mrs []GitLabMergeRequestWithBase
+	if err := json.Unmarshal([]byte(outputStr), &mrs); err != nil {
+		// If JSON parsing fails, fall back to no MR exists
+		return false, "", nil
+	}
+
+	// Check each MR to find one matching the current branch, base branch and is open
+	for _, mr := range mrs {
+		if mr.SourceBranch == branch && mr.TargetBranch == baseBranch && mr.State == "opened" {
+			return true, mr.WebURL, nil
+		}
+	}
+
+	return false, "", nil
+}
+
+// checkGiteaPRWithBase checks if a Gitea PR exists for the current branch targeting a specific base branch
+func (c *Creator) checkGiteaPRWithBase(ctx context.Context, branch, baseBranch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
+	// For now, use the same logic as the existing checkGiteaPR but we could enhance this
+	// to include base branch filtering when Gitea CLI supports it
+	// Use tea pulls list with JSON output to get structured data
+	// --output json for structured output
+	// --fields to get needed fields including base info
+	// --state open to get only open PRs
+	// --repo to specify the repository
+	args := []string{"pulls", "list", "--output", "json", "--fields", "index,head,base,url", "--state", "open", "--repo", fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)}
+
+	output, err := c.commandRunner.Run(ctx, "tea", args...)
+	if err != nil {
+		// If command fails, assume no PR exists
+		return false, "", nil
+	}
+
+	// Parse JSON output - using the existing Gitea structures but checking base branch
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" || outputStr == "[]" {
+		// No PRs found
+		return false, "", nil
+	}
+
+	// Parse as generic interface to handle the nested structure
+	var prs []map[string]interface{}
+	if err := json.Unmarshal([]byte(outputStr), &prs); err != nil {
+		// If JSON parsing fails, fall back to no PR exists
+		return false, "", nil
+	}
+
+	// Check each PR to find one matching the current branch and base branch
+	for _, pr := range prs {
+		// Extract head and base information
+		if head, ok := pr["head"].(map[string]interface{}); ok {
+			if base, ok := pr["base"].(map[string]interface{}); ok {
+				// Check source branch
+				var sourceBranch string
+				if name, ok := head["name"].(string); ok {
+					sourceBranch = name
+					// Handle cross-fork format (owner:branch)
+					if strings.Contains(sourceBranch, ":") {
+						parts := strings.Split(sourceBranch, ":")
+						if len(parts) == 2 {
+							sourceBranch = parts[1]
+						}
+					}
+				}
+
+				// Check target branch
+				var targetBranch string
+				if name, ok := base["name"].(string); ok {
+					targetBranch = name
+				}
+
+				// If both branches match, return the PR
+				if sourceBranch == branch && targetBranch == baseBranch {
+					if url, ok := pr["url"].(string); ok {
+						return true, url, nil
+					}
+				}
+			}
 		}
 	}
 

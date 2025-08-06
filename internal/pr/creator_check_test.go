@@ -2,6 +2,7 @@ package pr
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -217,11 +218,18 @@ func TestCreator_CheckExists_DifferentRemotes(t *testing.T) {
 				Version:       "2.40.0",
 			}, nil).Once()
 
+			// Mock the version check that PrepareContext now calls
+			mockCLI.On("CheckMinVersion", "2.40.0", "2.0.0").Return(true, nil).Once()
+
+			// Mock the base branch detection that PrepareContext now calls
+			mockGit.On("GetParentBranch", ctx, tt.remote).Return("", fmt.Errorf("no parent")).Once()
+			mockGit.On("GetDefaultBranch", ctx, tt.remote).Return("main", nil).Once()
+
 			mockGit.On("GetCurrentBranch", ctx).Return("feature-branch", nil).Once()
 
-			// The key assertion: verify it checks the correct repository
+			// The key assertion: verify it checks the correct repository with base branch
 			mockRunner.On("Run", ctx, "gh",
-				"pr", "list", "--head", "feature-branch", "--json", "url,state",
+				"pr", "list", "--head", "feature-branch", "--base", "main", "--json", "url,state,base",
 				"-R", tt.expectedRepo,
 			).Return([]byte(`[]`), nil).Once()
 

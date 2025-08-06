@@ -371,9 +371,16 @@ func TestCreator_CheckExists(t *testing.T) {
 				}
 				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
 
-				// Setup command execution for PR check
-				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state", "-R", "owner/repo").
-					Return([]byte(`[{"url":"https://github.com/owner/repo/pull/123","state":"OPEN"}]`), nil)
+				// Mock the version check that PrepareContext now calls
+				cliDetector.On("CheckMinVersion", "2.0.0", "2.0.0").Return(true, nil)
+
+				// Mock the base branch detection that PrepareContext now calls
+				git.On("GetParentBranch", mock.Anything, "origin").Return("", fmt.Errorf("no parent"))
+				git.On("GetDefaultBranch", mock.Anything, "origin").Return("main", nil)
+
+				// Setup command execution for PR check with base branch
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--base", "main", "--json", "url,state,base", "-R", "owner/repo").
+					Return([]byte(`[{"url":"https://github.com/owner/repo/pull/123","state":"OPEN","base":{"ref":"main"}}]`), nil)
 			},
 			expectedExists: true,
 			expectedURL:    "https://github.com/owner/repo/pull/123",
@@ -405,8 +412,15 @@ func TestCreator_CheckExists(t *testing.T) {
 				}
 				cliDetector.On("DetectCLI", mock.Anything, "github").Return(status, nil)
 
-				// Setup command execution for PR check - empty result
-				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--json", "url,state", "-R", "owner/repo").
+				// Mock the version check that PrepareContext now calls
+				cliDetector.On("CheckMinVersion", "2.0.0", "2.0.0").Return(true, nil)
+
+				// Mock the base branch detection that PrepareContext now calls
+				git.On("GetParentBranch", mock.Anything, "origin").Return("", fmt.Errorf("no parent"))
+				git.On("GetDefaultBranch", mock.Anything, "origin").Return("main", nil)
+
+				// Setup command execution for PR check with base branch - empty result
+				cmdRunner.On("Run", mock.Anything, "gh", "pr", "list", "--head", "feature-branch", "--base", "main", "--json", "url,state,base", "-R", "owner/repo").
 					Return([]byte(`[]`), nil)
 			},
 			expectedExists: false,
