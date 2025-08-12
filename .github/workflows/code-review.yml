@@ -1,0 +1,118 @@
+name: Automated Code Review
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  test-and-review:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install Python dependencies
+      run: |
+        pip install -r .github/scripts/requirements.txt
+    
+    - name: Run tests
+      id: test
+      run: |
+        go test -v ./... > test_results.txt 2>&1
+        echo "exit_code=$?" >> $GITHUB_OUTPUT
+      continue-on-error: true
+    
+    - name: Install analysis tools
+      run: |
+        go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+        go install github.com/jgautheron/goconst/cmd/goconst@latest
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+    
+    - name: Run code analysis
+      id: analysis
+      run: |
+        echo "## Code Analysis Results" > analysis_report.md
+        echo "" >> analysis_report.md
+        
+        echo "### Cyclomatic Complexity (>15)" >> analysis_report.md
+        gocyclo -over 15 . >> complexity.txt || true
+        if [ -s complexity.txt ]; then
+          echo '```' >> analysis_report.md
+          cat complexity.txt >> analysis_report.md
+          echo '```' >> analysis_report.md
+          echo "has_complexity_issues=true" >> $GITHUB_OUTPUT
+        else
+          echo "No complexity issues found." >> analysis_report.md
+        fi
+        echo "" >> analysis_report.md
+        
+        echo "### Duplicate Constants" >> analysis_report.md
+        goconst ./... >> constants.txt || true
+        if [ -s constants.txt ]; then
+          echo '```' >> analysis_report.md
+          cat constants.txt >> analysis_report.md
+          echo '```' >> analysis_report.md
+          echo "has_const_issues=true" >> $GITHUB_OUTPUT
+        else
+          echo "No duplicate constants found." >> analysis_report.md
+        fi
+        echo "" >> analysis_report.md
+        
+        echo "### Large Files" >> analysis_report.md
+        # Different thresholds for test files vs source files
+        find . -name "*_test.go" -not -path "./vendor/*" -exec wc -l {} + | awk '$1 > 1000 {print $2 " (" $1 " lines) [TEST FILE]"}' > large_files.txt
+        find . -name "*.go" -not -name "*_test.go" -not -path "./vendor/*" -exec wc -l {} + | awk '$1 > 800 {print $2 " (" $1 " lines) [SOURCE FILE]"}' >> large_files.txt
+        if [ -s large_files.txt ]; then
+          echo '```' >> analysis_report.md
+          cat large_files.txt >> analysis_report.md
+          echo '```' >> analysis_report.md
+          echo "has_large_files=true" >> $GITHUB_OUTPUT
+        else
+          echo "No large files found." >> analysis_report.md
+        fi
+        echo "" >> analysis_report.md
+        
+        echo "### Static Analysis Issues" >> analysis_report.md
+        staticcheck ./... >> static.txt || true
+        if [ -s static.txt ]; then
+          echo '```' >> analysis_report.md
+          cat static.txt >> analysis_report.md
+          echo '```' >> analysis_report.md
+          echo "has_static_issues=true" >> $GITHUB_OUTPUT
+        else
+          echo "No static analysis issues found." >> analysis_report.md
+        fi
+    
+    - name: Generate AI Analysis and Create Issues/PRs
+      if: |
+        steps.test.outputs.exit_code != '0' || 
+        steps.analysis.outputs.has_complexity_issues == 'true' ||
+        steps.analysis.outputs.has_const_issues == 'true' ||
+        steps.analysis.outputs.has_large_files == 'true' ||
+        steps.analysis.outputs.has_static_issues == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        TEST_EXIT_CODE: ${{ steps.test.outputs.exit_code }}
+        HAS_COMPLEXITY: ${{ steps.analysis.outputs.has_complexity_issues }}
+        HAS_CONST_ISSUES: ${{ steps.analysis.outputs.has_const_issues }}
+        HAS_LARGE_FILES: ${{ steps.analysis.outputs.has_large_files }}
+        HAS_STATIC_ISSUES: ${{ steps.analysis.outputs.has_static_issues }}
+      run: python .github/scripts/code_review.py
