@@ -1,0 +1,277 @@
+package errors
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestDefaultHandler_Handle(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		verbose    bool
+		expectNil  bool
+		expectType ErrorType
+	}{
+		{
+			name:      "nil error",
+			err:       nil,
+			verbose:   false,
+			expectNil: true,
+		},
+		{
+			name:       "CatmitError",
+			err:        New(ErrTypeGit, "git error"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeGit,
+		},
+		{
+			name:       "standard error - git",
+			err:        errors.New("not a git repository"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeGit,
+		},
+		{
+			name:       "standard error - network",
+			err:        errors.New("connection timeout"),
+			verbose:    true,
+			expectNil:  false,
+			expectType: ErrTypeTimeout,
+		},
+		{
+			name:       "standard error - auth",
+			err:        errors.New("unauthorized access"),
+			verbose:    false,
+			expectNil:  false,
+			expectType: ErrTypeAuth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewHandler(tt.verbose)
+			result := handler.Handle(tt.err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				var catmitErr *CatmitError
+				assert.True(t, As(result, &catmitErr))
+				assert.Equal(t, tt.expectType, catmitErr.Type)
+			}
+		})
+	}
+}
+
+func TestDefaultHandler_HandleWithRetry(t *testing.T) {
+	t.Run("non-retryable error", func(t *testing.T) {
+		handler := NewHandler(false)
+		err := New(ErrTypeGit, "git error")
+		callCount := 0
+
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			return err
+		})
+
+		assert.NotNil(t, result)
+		assert.Equal(t, 0, callCount) // Should not call the operation function
+	})
+
+	t.Run("retryable error - success on retry", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    3,
+			RetryInterval: time.Millisecond,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		callCount := 0
+
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			if callCount == 2 {
+				return nil // Succeed on the second attempt
+			}
+			return err
+		})
+
+		assert.Nil(t, result)
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("retryable error - all retries fail", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    2,
+			RetryInterval: time.Millisecond,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+		callCount := 0
+
+		result := handler.HandleWithRetry(context.Background(), err, func() error {
+			callCount++
+			return err
+		})
+
+		assert.NotNil(t, result)
+		assert.Equal(t, 2, callCount) // Initial attempt + 1 retry
+
+		var catmitErr *CatmitError
+		assert.True(t, As(result, &catmitErr))
+		assert.Contains(t, catmitErr.Message, "2 次重试后失败")
+	})
+
+	t.Run("context cancelled", func(t *testing.T) {
+		handler := &DefaultHandler{
+			MaxRetries:    3,
+			RetryInterval: time.Second,
+			Verbose:       false,
+		}
+		err := NewRetryable(ErrTypeNetwork, "network error")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		result := handler.HandleWithRetry(ctx, err, func() error {
+			return err
+		})
+
+		assert.NotNil(t, result)
+	})
+
+	t.Run("nil operation", func(t *testing.T) {
+		handler := NewHandler(false)
+		err := NewRetryable(ErrTypeNetwork, "network error")
+
+		result := handler.HandleWithRetry(context.Background(), err, nil)
+
+		assert.NotNil(t, result)
+	})
+}
+
+// TestDefaultHandler_inferErrorType tests the inferErrorType method of DefaultHandler.
+// It checks that the error type, message, and suggestion are correctly inferred for various error scenarios.
+func TestDefaultHandler_inferErrorType(t *testing.T) {
+	tests := []struct {
+		name           string
+		err            error
+		expectedType   ErrorType
+		expectedMsg    string
+		hasSuggestion  bool
+	}{
+		{
+			name:          "git repository error",
+			err:           errors.New("fatal: not a git repository"),
+			expectedType:  ErrTypeGit,
+			expectedMsg:   "Not a Git repository",
+			hasSuggestion: true,
+		},
+		{
+			name:          "no changes error",
+			err:           errors.New("nothing to commit, working tree clean"),
+			expectedType:  ErrTypeGit,
+			expectedMsg:   "No changes to commit",
+			hasSuggestion: true,
+		},
+		{
+			name:          "timeout error",
+			err:           errors.New("context deadline exceeded"),
+			expectedType:  ErrTypeTimeout,
+			expectedMsg:   "Operation timed out",
+			hasSuggestion: true,
+		},
+		{
+			name:          "network error",
+			err:           errors.New("connection refused"),
+			expectedType:  ErrTypeNetwork,
+			expectedMsg:   "Network error",
+			hasSuggestion: true,
+		},
+		{
+			name:          "auth error",
+			err:           errors.New("authentication failed"),
+			expectedType:  ErrTypeAuth,
+			expectedMsg:   "Authentication failed",
+			hasSuggestion: true,
+		},
+		{
+			name:          "rate limit error",
+			err:           errors.New("API rate limit exceeded"),
+			expectedType:  ErrTypeLLM,
+			expectedMsg:   "API rate limit exceeded",
+			hasSuggestion: true,
+		},
+		{
+			name:          "unknown error",
+			err:           errors.New("something went wrong"),
+			expectedType:  ErrTypeUnknown,
+			expectedMsg:   "something went wrong",
+			hasSuggestion: false,
+		},
+	}
+
+	handler := &DefaultHandler{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.inferErrorType(tt.err)
+
+			assert.Equal(t, tt.expectedType, result.Type)
+			assert.Equal(t, tt.expectedMsg, result.Message)
+			assert.Equal(t, tt.err, result.Cause)
+
+			if tt.hasSuggestion {
+				assert.NotEmpty(t, result.Suggestion)
+			} else {
+				assert.Empty(t, result.Suggestion)
+			}
+		})
+	}
+}
+
+func TestDefaultHandler_getErrorIcon(t *testing.T) {
+	tests := []struct {
+		errType ErrorType
+		icon    string
+	}{
+		{ErrTypeGit, "🔧"},
+		{ErrTypeProvider, "🔗"},
+		{ErrTypePR, "📝"},
+		{ErrTypeConfig, "⚙️"},
+		{ErrTypeNetwork, "🌐"},
+		{ErrTypeAuth, "🔐"},
+		{ErrTypeTimeout, "⏱️"},
+		{ErrTypeValidation, "✅"},
+		{ErrTypeLLM, "🤖"},
+		{ErrTypeUnknown, "❌"},
+		{ErrorType(999), "❌"}, // Unknown type
+	}
+
+	handler := &DefaultHandler{}
+
+	for _, tt := range tests {
+		t.Run(tt.errType.String(), func(t *testing.T) {
+			icon := handler.getErrorIcon(tt.errType)
+			assert.Equal(t, tt.icon, icon)
+		})
+	}
+}
+
+// Add String method for ErrorType for test output
+func (e ErrorType) String() string {
+	names := []string{
+		"Unknown", "Git", "Provider", "PR", "Config",
+		"Network", "Auth", "Timeout", "Validation", "LLM",
+	}
+	if int(e) < len(names) {
+		return names[e]
+	}
+	return "Invalid"
+}
