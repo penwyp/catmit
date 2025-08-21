@@ -87,17 +87,11 @@ func (m *RebaseWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Handle analysis confirmation
+		// Handle analysis confirmation with action-based navigation
 		if m.needsAnalysisConfirmation {
-			switch msg.String() {
-			case "y", "Y":
-				m.needsAnalysisConfirmation = false
-				m.phase = WorkflowPhaseLoading
-				m.loadingStage = StageQuery
-				return m, m.generateRebaseMessage()
-			case "n", "N", "q", "ctrl+c":
-				m.done = true
-				return m, tea.Quit
+			// Use the base model's keyboard handler for action navigation
+			if cmd := m.BaseModel.HandleKeyboard(msg); cmd != nil {
+				return m, cmd
 			}
 			return m, nil
 		}
@@ -194,7 +188,11 @@ func (m *RebaseWorkflowModel) View() string {
 // updateActionsForPhase updates available actions
 func (m *RebaseWorkflowModel) updateActionsForPhase() {
 	if m.needsAnalysisConfirmation {
-		m.SetActions(nil) // No button actions during confirmation
+		// Set Continue/Abort actions for analysis confirmation
+		m.SetActions([]Action{
+			{Key: "C", Label: "ontinue", Handler: m.handleAnalysisContinue},
+			{Key: "A", Label: "bort", Handler: m.handleAnalysisAbort},
+		})
 		return
 	}
 
@@ -220,6 +218,18 @@ func (m *RebaseWorkflowModel) updateActionsForPhase() {
 }
 
 // Action handlers
+func (m *RebaseWorkflowModel) handleAnalysisContinue() tea.Cmd {
+	m.needsAnalysisConfirmation = false
+	m.phase = WorkflowPhaseLoading
+	m.loadingStage = StageQuery
+	return m.generateRebaseMessage()
+}
+
+func (m *RebaseWorkflowModel) handleAnalysisAbort() tea.Cmd {
+	m.done = true
+	return tea.Quit
+}
+
 func (m *RebaseWorkflowModel) handleAccept() tea.Cmd {
 	m.accepted = true
 	m.reviewDecision = DecisionAccept
@@ -262,7 +272,6 @@ func (m *RebaseWorkflowModel) renderAnalysisConfirmation() string {
 	infoStyle := lipgloss.NewStyle().Foreground(colors.Cyan)
 	normalStyle := lipgloss.NewStyle()
 	dimStyle := lipgloss.NewStyle().Foreground(colors.DarkGray)
-	helpStyle := lipgloss.NewStyle().Foreground(colors.LightGray)
 
 	var content strings.Builder
 	
@@ -270,9 +279,7 @@ func (m *RebaseWorkflowModel) renderAnalysisConfirmation() string {
 	content.WriteString(infoStyle.Render(fmt.Sprintf("Commits to squash: %d", len(m.analysis.UnpushedCommits))) + "\n\n")
 	
 	content.WriteString(normalStyle.Render("The following commits will be squashed:") + "\n")
-	content.WriteString(dimStyle.Render(rebase.FormatCommitList(m.analysis.UnpushedCommits)) + "\n\n")
-	
-	content.WriteString(helpStyle.Render("Continue? (y/n): "))
+	content.WriteString(dimStyle.Render(rebase.FormatCommitList(m.analysis.UnpushedCommits)))
 	
 	return content.String()
 }
