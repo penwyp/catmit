@@ -417,6 +417,8 @@ func shouldIgnoreFile(filePath string) bool {
 	// Normalize path (use forward slashes)
 	filePath = filepath.ToSlash(filePath)
 	fileName := filepath.Base(filePath)
+	lowerPath := strings.ToLower(filePath)
+	lowerName := strings.ToLower(fileName)
 
 	// 1. Lock and dependency files
 	lockFiles := []string{
@@ -457,7 +459,19 @@ func shouldIgnoreFile(filePath string) bool {
 		}
 	}
 
-	// 4. Log and temporary files
+	// 4. Generated files (API docs, protobuf outputs)
+	if strings.HasSuffix(lowerName, ".pb.go") {
+		return true
+	}
+	if strings.Contains(lowerName, "swagger") ||
+		strings.Contains(lowerPath, "/swagger/") ||
+		strings.HasSuffix(lowerName, ".swagger.json") ||
+		strings.HasSuffix(lowerName, ".swagger.yaml") ||
+		strings.HasSuffix(lowerName, ".swagger.yml") {
+		return true
+	}
+
+	// 5. Log and temporary files
 	if strings.HasSuffix(fileName, ".log") ||
 		strings.HasSuffix(fileName, ".tmp") ||
 		strings.HasSuffix(fileName, ".temp") ||
@@ -468,6 +482,65 @@ func shouldIgnoreFile(filePath string) bool {
 	}
 
 	return false
+}
+
+// filterDiffByIgnoredFiles removes diff sections for ignored files.
+func filterDiffByIgnoredFiles(diff string) string {
+	if strings.TrimSpace(diff) == "" {
+		return diff
+	}
+
+	lines := strings.Split(diff, "\n")
+	var filtered []string
+	skip := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			skip = false
+			fields := strings.Fields(line)
+			if len(fields) >= 4 {
+				aPath := strings.TrimPrefix(fields[2], "a/")
+				bPath := strings.TrimPrefix(fields[3], "b/")
+				if shouldIgnoreFile(aPath) || shouldIgnoreFile(bPath) {
+					skip = true
+				}
+			}
+		}
+
+		if !skip {
+			filtered = append(filtered, line)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(filtered, "\n"))
+}
+
+// filterStatusPorcelain removes ignored files from porcelain status output.
+func filterStatusPorcelain(status string) string {
+	if strings.TrimSpace(status) == "" {
+		return status
+	}
+
+	lines := strings.Split(strings.TrimSpace(status), "\n")
+	var filtered []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "## ") || len(line) < 3 {
+			continue
+		}
+
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx != -1 {
+			path = path[idx+4:]
+		}
+		if shouldIgnoreFile(path) {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+
+	return strings.TrimSpace(strings.Join(filtered, "\n"))
 }
 
 // parseGitStatusPorcelain parses the output of `git status --porcelain -b`
@@ -1008,7 +1081,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 
 	// 4. Combine all diffs
 	combined := strings.Join(diffParts, "\n\n")
-	combined = strings.TrimSpace(combined)
+	combined = strings.TrimSpace(filterDiffByIgnoredFiles(combined))
 
 	if combined == "" {
 		// Check if there are any changes at all
@@ -1016,6 +1089,7 @@ func (c *Collector) ComprehensiveDiff(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", errors.Wrap(errors.ErrTypeGit, "git status failed", err)
 		}
+		status = filterStatusPorcelain(status)
 		if strings.TrimSpace(status) == "" {
 			return "", ErrNoDiff
 		}
@@ -1041,14 +1115,14 @@ func (c *Collector) CombinedDiff(ctx context.Context) (string, error) {
 	}
 
 	combined := string(staged) + string(unstaged)
-	combined = strings.TrimSpace(combined)
+	combined = strings.TrimSpace(filterDiffByIgnoredFiles(combined))
 	if combined == "" {
 		// If the diff is empty (possibly due to new file deletions, etc.), check git status.
 		status, err := c.runner.Run(ctx, "git", "status", "--porcelain")
 		if err != nil {
 			return "", errors.Wrap(errors.ErrTypeGit, "git status --porcelain failed", err)
 		}
-		statusStr := strings.TrimSpace(string(status))
+		statusStr := filterStatusPorcelain(string(status))
 		if statusStr == "" {
 			return "", ErrNoDiff
 		}

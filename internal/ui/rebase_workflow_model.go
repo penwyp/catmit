@@ -29,6 +29,7 @@ type RebaseWorkflowModel struct {
 	workflow     rebaseWorkflowInterface
 	analysis     *rebase.AnalysisResult
 	backupBranch string
+	timeoutSecs  int // Timeout in seconds for operations
 	
 	// State tracking
 	accepted     bool
@@ -42,6 +43,7 @@ type RebaseWorkflowModel struct {
 func NewRebaseWorkflowModel(
 	ctx context.Context,
 	workflow rebaseWorkflowInterface,
+	timeoutSecs int,
 ) *RebaseWorkflowModel {
 	base := NewBaseWorkflowModel(
 		"Analyzing Repository",
@@ -50,12 +52,13 @@ func NewRebaseWorkflowModel(
 		nil, // no client needed (workflow has its own)
 		nil, // no committer needed
 		"",  // no language preference
-		60*time.Second,
+		time.Duration(timeoutSecs)*time.Second,
 	)
 
 	m := &RebaseWorkflowModel{
 		BaseWorkflowModel: base,
 		workflow:          workflow,
+		timeoutSecs:       timeoutSecs,
 	}
 
 	// Override content renderer
@@ -364,21 +367,33 @@ func (m *RebaseWorkflowModel) getPhaseTitle() string {
 // Commands for async operations
 func (m *RebaseWorkflowModel) analyzeRepository() tea.Cmd {
 	return func() tea.Msg {
-		result, err := m.workflow.Analyze(m.ctx)
+		// Create a new context with timeout for this operation
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
+		defer cancel()
+		
+		result, err := m.workflow.Analyze(ctx)
 		return rebaseAnalysisMsg{result: result, err: err}
 	}
 }
 
 func (m *RebaseWorkflowModel) generateRebaseMessage() tea.Cmd {
 	return func() tea.Msg {
-		message, err := m.workflow.GenerateCommitMessage(m.ctx, m.analysis.UnpushedCommits)
+		// Create a new context with timeout for this operation
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
+		defer cancel()
+		
+		message, err := m.workflow.GenerateCommitMessage(ctx, m.analysis.UnpushedCommits)
 		return rebaseGeneratedMsg{message: message, err: err}
 	}
 }
 
 func (m *RebaseWorkflowModel) executeRebase() tea.Cmd {
 	return func() tea.Msg {
-		err := m.workflow.ExecuteRebase(m.ctx, m.analysis, m.message)
+		// Create a new context with timeout for this operation
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
+		defer cancel()
+		
+		err := m.workflow.ExecuteRebase(ctx, m.analysis, m.message)
 		
 		// Extract backup branch name
 		backupBranch := ""

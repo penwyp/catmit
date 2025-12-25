@@ -285,6 +285,11 @@ func TestShouldIgnoreFile(t *testing.T) {
 		{name: "bak_file", filePath: "config.bak", expected: true},
 		{name: "swp_file", filePath: ".file.swp", expected: true},
 
+		// Generated files
+		{name: "swagger_json", filePath: "docs/swagger/apiv2.swagger.json", expected: true},
+		{name: "swagger_dir", filePath: "idl/pbgen/proto/apidocs.swagger.json", expected: true},
+		{name: "protobuf_go", filePath: "idl/pbgen/proto/v2/monitoring.pb.go", expected: true},
+
 		// Nested path tests
 		{name: "nested_build", filePath: "frontend/build/static/js/main.js", expected: true},
 		{name: "nested_source", filePath: "src/components/Button.tsx", expected: false},

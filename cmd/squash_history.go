@@ -56,20 +56,23 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = deps.logger.Sync() }()
 
-	// Create context with timeout
-	ctx, cancel := createContext(cmd, historyTimeout)
-	defer cancel()
+	// Create base context without timeout for workflow creation
+	baseCtx := cmd.Context()
 
-	// Create rebase workflow
-	workflow, err := createRebaseWorkflow(ctx, deps.llmClient, historyLang, historyDebug, deps.logger)
+	// Create rebase workflow with base context
+	workflow, err := createRebaseWorkflow(baseCtx, deps.llmClient, historyLang, historyDebug, deps.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create rebase workflow: %w", err)
 	}
 
 	// Handle dry-run mode
 	if historyDryRun {
+		// Create context with timeout for analysis
+		analysisCtx, analysisCancel := createContext(cmd, historyTimeout)
+		defer analysisCancel()
+
 		// Analyze the repository
-		analysis, err := workflow.Analyze(ctx)
+		analysis, err := workflow.Analyze(analysisCtx)
 		if err != nil {
 			return fmt.Errorf("failed to analyze repository: %w", err)
 		}
@@ -79,8 +82,12 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		// Create new context with timeout for message generation
+		genCtx, genCancel := createContext(cmd, historyTimeout)
+		defer genCancel()
+
 		// Generate commit message
-		message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
+		message, err := workflow.GenerateCommitMessage(genCtx, analysis.UnpushedCommits)
 		if err != nil {
 			return fmt.Errorf("failed to generate commit message: %w", err)
 		}
@@ -95,8 +102,12 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 
 	// Handle yes mode
 	if historyYes {
+		// Create context with timeout for analysis
+		analysisCtx, analysisCancel := createContext(cmd, historyTimeout)
+		defer analysisCancel()
+
 		// Analyze the repository
-		analysis, err := workflow.Analyze(ctx)
+		analysis, err := workflow.Analyze(analysisCtx)
 		if err != nil {
 			return fmt.Errorf("failed to analyze repository: %w", err)
 		}
@@ -106,8 +117,12 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		// Create new context with timeout for message generation
+		genCtx, genCancel := createContext(cmd, historyTimeout)
+		defer genCancel()
+
 		// Generate commit message
-		message, err := workflow.GenerateCommitMessage(ctx, analysis.UnpushedCommits)
+		message, err := workflow.GenerateCommitMessage(genCtx, analysis.UnpushedCommits)
 		if err != nil {
 			return fmt.Errorf("failed to generate commit message: %w", err)
 		}
@@ -115,9 +130,13 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 		fmt.Println("Generated commit message:")
 		fmt.Println(message)
 
+		// Create new context with timeout for rebase execution
+		rebaseCtx, rebaseCancel := createContext(cmd, historyTimeout)
+		defer rebaseCancel()
+
 		// Execute rebase
 		fmt.Println("\nExecuting rebase...")
-		if err := workflow.ExecuteRebase(ctx, analysis, message); err != nil {
+		if err := workflow.ExecuteRebase(rebaseCtx, analysis, message); err != nil {
 			return fmt.Errorf("rebase failed: %w", err)
 		}
 
@@ -125,8 +144,8 @@ func runSquashHistory(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// TUI mode
-	model := ui.NewRebaseWorkflowModel(ctx, workflow)
+	// TUI mode - pass historyTimeout so the model can create its own contexts
+	model := ui.NewRebaseWorkflowModel(baseCtx, workflow, historyTimeout)
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()
 	if err != nil {

@@ -40,7 +40,7 @@ func (m *mockRebaseWorkflow) ExecuteRebase(ctx context.Context, analysis *rebase
 // Helper to create test model
 func createTestRebaseModel(workflow rebaseWorkflowInterface) *RebaseWorkflowModel {
 	ctx := context.Background()
-	model := NewRebaseWorkflowModel(ctx, workflow)
+	model := NewRebaseWorkflowModel(ctx, workflow, 30) // 30 seconds timeout for tests
 	model.width = 80
 	model.height = 24
 	return model
