@@ -24,6 +24,11 @@ type OAuthAccountStore interface {
 	Upsert(ctx context.Context, account OAuthAccount) error
 }
 
+// OAuthAccountLookup allows querying persisted OAuth accounts.
+type OAuthAccountLookup interface {
+	GetLatestByProvider(ctx context.Context, provider string) (OAuthAccount, bool, error)
+}
+
 // MemoryOAuthAccountStore is a minimal in-memory store for MVP.
 type MemoryOAuthAccountStore struct {
 	mu   sync.Mutex
@@ -52,4 +57,22 @@ func (s *MemoryOAuthAccountStore) Get(provider, providerUserID string) (OAuthAcc
 	defer s.mu.Unlock()
 	v, ok := s.data[provider+":"+providerUserID]
 	return v, ok
+}
+
+func (s *MemoryOAuthAccountStore) GetLatestByProvider(_ context.Context, provider string) (OAuthAccount, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var latest OAuthAccount
+	found := false
+	for _, v := range s.data {
+		if v.Provider != provider {
+			continue
+		}
+		if !found || v.UpdatedAt.After(latest.UpdatedAt) {
+			latest = v
+			found = true
+		}
+	}
+	return latest, found, nil
 }

@@ -49,9 +49,9 @@ func NewOpenAICompatibleProvider() *OpenAICompatibleProvider {
 
 // GetCompletion implements the OpenAI-compatible API call.
 func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	// Check if API Key is set
-	if p.apiKey == "" {
-		return "", errors.ErrLLMAPIKey
+	bearerToken, _, err := resolveLLMBearerToken(ctx, p.apiKey)
+	if err != nil {
+		return "", err
 	}
 
 	// Build request body, separating system and user messages
@@ -81,9 +81,7 @@ func (p *OpenAICompatibleProvider) GetCompletion(ctx context.Context, systemProm
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if p.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
+	req.Header.Set("Authorization", "Bearer "+bearerToken)
 
 	// Send request
 	resp, err := p.httpClient.Do(req)
@@ -158,9 +156,9 @@ func (p *OpenAICompatibleProvider) GetCompletionStream(ctx context.Context, syst
 		defer close(contentChan)
 		defer close(errChan)
 
-		// Check if API Key is set
-		if p.apiKey == "" {
-			errChan <- errors.ErrLLMAPIKey
+		bearerToken, _, err := resolveLLMBearerToken(ctx, p.apiKey)
+		if err != nil {
+			errChan <- err
 			return
 		}
 
@@ -195,9 +193,7 @@ func (p *OpenAICompatibleProvider) GetCompletionStream(ctx context.Context, syst
 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "text/event-stream")
-		if p.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+p.apiKey)
-		}
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
 
 		// Send request
 		resp, err := p.httpClient.Do(req)

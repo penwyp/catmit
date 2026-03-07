@@ -77,3 +77,32 @@ func (s *GormOAuthAccountStore) Upsert(ctx context.Context, account OAuthAccount
 		return tx.Save(&existing).Error
 	})
 }
+
+func (s *GormOAuthAccountStore) GetLatestByProvider(ctx context.Context, provider string) (OAuthAccount, bool, error) {
+	if provider == "" {
+		return OAuthAccount{}, false, fmt.Errorf("provider is required")
+	}
+
+	var model OAuthAccountModel
+	err := s.db.WithContext(ctx).
+		Where("provider = ?", provider).
+		Order("updated_at DESC").
+		First(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return OAuthAccount{}, false, nil
+		}
+		return OAuthAccount{}, false, err
+	}
+
+	return OAuthAccount{
+		Provider:       model.Provider,
+		ProviderUserID: model.ProviderUserID,
+		Email:          model.Email,
+		AccessToken:    model.AccessToken,
+		RefreshToken:   model.RefreshToken,
+		IDToken:        model.IDToken,
+		TokenExpiresAt: model.TokenExpiresAt,
+		UpdatedAt:      model.UpdatedAt,
+	}, true, nil
+}

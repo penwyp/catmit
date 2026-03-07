@@ -661,7 +661,16 @@ export CATMIT_OAUTH_OPENAI_ISSUER="https://auth.openai.com"
 export CATMIT_OAUTH_OPENAI_SCOPES="openid profile email"
 export CATMIT_OAUTH_OIDC_MODE="placeholder"   # strict | placeholder | disabled
 export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # enable sqlite persistence + GORM auto-migrate
+export CATMIT_AUTH_PREFERENCE="apikey"  # apikey | oauth (default: apikey)
+export CATMIT_OAUTH_PROVIDER="openai"   # token lookup provider, default openai
 ```
+
+### Credential Priority in LLM Requests
+
+For OpenAI-compatible requests, catmit resolves bearer token in this order:
+
+- Default (`CATMIT_AUTH_PREFERENCE=apikey`): `CATMIT_LLM_API_KEY` → OAuth access token from sqlite store
+- OAuth first (`CATMIT_AUTH_PREFERENCE=oauth`): OAuth access token → `CATMIT_LLM_API_KEY`
 
 ### OIDC Verification Notes
 
