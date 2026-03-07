@@ -15,10 +15,12 @@ import (
 )
 
 const (
-	defaultOAuthSQLitePath  = "./catmit_oauth.db"
-	defaultOAuthProvider    = "openai"
-	defaultOpenAITokenURL   = "https://auth.openai.com/oauth/token"
-	tokenRefreshGracePeriod = 30 * time.Second
+	defaultOAuthSQLitePath   = "./catmit_oauth.db"
+	defaultOAuthProvider     = "openai"
+	defaultOpenAITokenURL    = "https://auth.openai.com/oauth/token"
+	tokenRefreshGracePeriod  = 30 * time.Second
+	refreshMaxAttempts       = 3
+	refreshInitialBackoffDur = 300 * time.Millisecond
 )
 
 // resolveLLMBearerToken resolves bearer token with fixed priority:
@@ -94,6 +96,32 @@ func refreshAccessToken(ctx context.Context, account oauth.OAuthAccount) (oauth.
 		tokenEndpoint = defaultOpenAITokenURL
 	}
 
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	backoff := refreshInitialBackoffDur
+	var lastErr error
+
+	for attempt := 1; attempt <= refreshMaxAttempts; attempt++ {
+		updated, retryable, err := refreshAccessTokenOnce(ctx, httpClient, tokenEndpoint, account)
+		if err == nil {
+			return updated, nil
+		}
+		lastErr = err
+		if !retryable || attempt == refreshMaxAttempts {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return oauth.OAuthAccount{}, ctx.Err()
+		case <-time.After(backoff):
+			backoff *= 2
+		}
+	}
+
+	return oauth.OAuthAccount{}, lastErr
+}
+
+func refreshAccessTokenOnce(ctx context.Context, httpClient *http.Client, tokenEndpoint string, account oauth.OAuthAccount) (oauth.OAuthAccount, bool, error) {
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", strings.TrimSpace(account.RefreshToken))
@@ -103,27 +131,30 @@ func refreshAccessToken(ctx context.Context, account oauth.OAuthAccount) (oauth.
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return oauth.OAuthAccount{}, err
+		return oauth.OAuthAccount{}, false, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return oauth.OAuthAccount{}, err
+		if ctx.Err() != nil {
+			return oauth.OAuthAccount{}, false, ctx.Err()
+		}
+		return oauth.OAuthAccount{}, true, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return oauth.OAuthAccount{}, fmt.Errorf("refresh token endpoint returned %s", resp.Status)
+		retryable := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests
+		return oauth.OAuthAccount{}, retryable, fmt.Errorf("refresh token endpoint returned %s", resp.Status)
 	}
 
 	var tr refreshTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return oauth.OAuthAccount{}, err
+		return oauth.OAuthAccount{}, true, err
 	}
 	if strings.TrimSpace(tr.AccessToken) == "" {
-		return oauth.OAuthAccount{}, fmt.Errorf("refresh token response missing access_token")
+		return oauth.OAuthAccount{}, false, fmt.Errorf("refresh token response missing access_token")
 	}
 
 	updated := account
@@ -137,5 +168,5 @@ func refreshAccessToken(ctx context.Context, account oauth.OAuthAccount) (oauth.
 	if tr.ExpiresIn > 0 {
 		updated.TokenExpiresAt = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
 	}
-	return updated, nil
+	return updated, false, nil
 }

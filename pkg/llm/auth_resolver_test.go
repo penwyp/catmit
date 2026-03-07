@@ -68,12 +68,18 @@ func TestResolveLLMBearerToken_AutoRefresh(t *testing.T) {
 	withTempWD(t)
 	ctx := context.Background()
 
+	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("parse form: %v", err)
 		}
 		if got := r.Form.Get("grant_type"); got != "refresh_token" {
 			t.Fatalf("grant_type = %q", got)
+		}
+		if attempts < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "new-access-token",
@@ -104,6 +110,9 @@ func TestResolveLLMBearerToken_AutoRefresh(t *testing.T) {
 	}
 	if token != "new-access-token" || source != "oauth" {
 		t.Fatalf("got token=%q source=%q", token, source)
+	}
+	if attempts != 3 {
+		t.Fatalf("refresh attempts = %d, want 3", attempts)
 	}
 }
 
