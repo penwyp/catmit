@@ -145,6 +145,8 @@ func (h *Handler) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		RefreshToken:   tokenResp.RefreshToken,
 		IDToken:        tokenResp.IDToken,
 		TokenExpiresAt: expiresAt,
+		ClientID:       h.provider.ClientID(),
+		TokenEndpoint:  h.provider.TokenEndpoint(),
 	}); err != nil {
 		http.Error(w, "failed to persist oauth account", http.StatusInternalServerError)
 		return

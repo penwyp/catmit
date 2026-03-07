@@ -16,6 +16,8 @@ type OAuthAccount struct {
 	RefreshToken   string
 	IDToken        string
 	TokenExpiresAt time.Time
+	ClientID       string
+	TokenEndpoint  string
 	UpdatedAt      time.Time
 }
 

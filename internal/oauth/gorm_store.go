@@ -19,6 +19,8 @@ type OAuthAccountModel struct {
 	RefreshToken   string    `gorm:"type:text"`
 	IDToken        string    `gorm:"type:text"`
 	TokenExpiresAt time.Time `gorm:"index"`
+	ClientID       string    `gorm:"size:191"`
+	TokenEndpoint  string    `gorm:"size:512"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -57,6 +59,8 @@ func (s *GormOAuthAccountStore) Upsert(ctx context.Context, account OAuthAccount
 		RefreshToken:   account.RefreshToken,
 		IDToken:        account.IDToken,
 		TokenExpiresAt: account.TokenExpiresAt,
+		ClientID:       account.ClientID,
+		TokenEndpoint:  account.TokenEndpoint,
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -74,6 +78,8 @@ func (s *GormOAuthAccountStore) Upsert(ctx context.Context, account OAuthAccount
 		existing.RefreshToken = model.RefreshToken
 		existing.IDToken = model.IDToken
 		existing.TokenExpiresAt = model.TokenExpiresAt
+		existing.ClientID = model.ClientID
+		existing.TokenEndpoint = model.TokenEndpoint
 		return tx.Save(&existing).Error
 	})
 }
@@ -103,6 +109,8 @@ func (s *GormOAuthAccountStore) GetLatestByProvider(ctx context.Context, provide
 		RefreshToken:   model.RefreshToken,
 		IDToken:        model.IDToken,
 		TokenExpiresAt: model.TokenExpiresAt,
+		ClientID:       model.ClientID,
+		TokenEndpoint:  model.TokenEndpoint,
 		UpdatedAt:      model.UpdatedAt,
 	}, true, nil
 }

@@ -685,16 +685,16 @@ export CATMIT_OAUTH_OPENAI_ISSUER="https://auth.openai.com"
 export CATMIT_OAUTH_OPENAI_SCOPES="openid profile email"
 export CATMIT_OAUTH_OIDC_MODE="placeholder"   # strict | placeholder | disabled
 export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # 启用 sqlite 持久化 + GORM 自动迁移
-export CATMIT_AUTH_PREFERENCE="apikey"  # apikey | oauth（默认 apikey）
-export CATMIT_OAUTH_PROVIDER="openai"   # token 查询 provider，默认 openai
 ```
 
 ### LLM 请求中的凭据优先级
 
-对 OpenAI 兼容请求，catmit 按如下顺序选择 Bearer Token：
+对 OpenAI 兼容请求，catmit 固定按如下顺序选择 Bearer Token：
 
-- 默认（`CATMIT_AUTH_PREFERENCE=apikey`）：`CATMIT_LLM_API_KEY` → sqlite 中的 OAuth access token
-- OAuth 优先（`CATMIT_AUTH_PREFERENCE=oauth`）：sqlite 中的 OAuth access token → `CATMIT_LLM_API_KEY`
+1. `CATMIT_LLM_API_KEY`
+2. 本地 sqlite（`./catmit_oauth.db`）中的 OAuth access token
+
+当 OAuth token 临近过期且存在 `refresh_token` 时，catmit 会在发起 LLM 请求前自动刷新。
 
 ### OIDC 校验说明
 
