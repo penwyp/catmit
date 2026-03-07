@@ -692,7 +692,7 @@ export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # 启用 sqlite 持久�
 对 OpenAI 兼容请求，catmit 固定按如下顺序选择 Bearer Token：
 
 1. `CATMIT_LLM_API_KEY`
-2. 本地 sqlite（`./catmit_oauth.db`）中的 OAuth access token
+2. 本地 sqlite（`$CATMIT_OAUTH_DB_SQLITE_PATH`，默认 `./catmit_oauth.db`）中的 OAuth access token
 
 当 OAuth token 临近过期且存在 `refresh_token` 时，catmit 会在发起 LLM 请求前自动刷新。
 

@@ -67,6 +67,7 @@ func TestResolveLLMBearerToken_Priority(t *testing.T) {
 func TestResolveLLMBearerToken_AutoRefresh(t *testing.T) {
 	withTempWD(t)
 	ctx := context.Background()
+	t.Setenv(openAIClientSecretEnv, "secret-1")
 
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +77,9 @@ func TestResolveLLMBearerToken_AutoRefresh(t *testing.T) {
 		}
 		if got := r.Form.Get("grant_type"); got != "refresh_token" {
 			t.Fatalf("grant_type = %q", got)
+		}
+		if got := r.Form.Get("client_secret"); got != "secret-1" {
+			t.Fatalf("client_secret = %q", got)
 		}
 		if attempts < 3 {
 			w.WriteHeader(http.StatusBadGateway)
@@ -121,5 +125,63 @@ func TestResolveLLMBearerToken_NoCredentials(t *testing.T) {
 	token, source, err := resolveLLMBearerToken(context.Background(), "")
 	if err == nil {
 		t.Fatalf("expected error, got token=%q source=%q", token, source)
+	}
+}
+
+func TestResolveLLMBearerToken_UsesConfiguredSQLitePath(t *testing.T) {
+	withTempWD(t)
+	ctx := context.Background()
+	customPath := filepath.Join(t.TempDir(), "oauth_custom.db")
+	t.Setenv(oauthSQLitePathEnv, customPath)
+
+	store, err := oauth.NewSQLiteOAuthAccountStore(customPath)
+	if err != nil {
+		t.Fatalf("create oauth store: %v", err)
+	}
+	if err := store.Upsert(ctx, oauth.OAuthAccount{
+		Provider:       "openai",
+		ProviderUserID: "u1",
+		AccessToken:    "oauth-token-from-custom-path",
+		TokenExpiresAt: time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("seed oauth token: %v", err)
+	}
+
+	token, source, err := resolveLLMBearerToken(ctx, "")
+	if err != nil {
+		t.Fatalf("resolve token: %v", err)
+	}
+	if token != "oauth-token-from-custom-path" || source != "oauth" {
+		t.Fatalf("got token=%q source=%q", token, source)
+	}
+}
+
+func TestResolveLLMBearerToken_RefreshFailureWithExpiredTokenReturnsError(t *testing.T) {
+	withTempWD(t)
+	ctx := context.Background()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	store, err := oauth.NewSQLiteOAuthAccountStore(filepath.Clean(defaultOAuthSQLitePath))
+	if err != nil {
+		t.Fatalf("create oauth store: %v", err)
+	}
+	if err := store.Upsert(ctx, oauth.OAuthAccount{
+		Provider:       "openai",
+		ProviderUserID: "u1",
+		AccessToken:    "expired-token",
+		RefreshToken:   "refresh-token",
+		TokenExpiresAt: time.Now().Add(-time.Minute),
+		TokenEndpoint:  server.URL,
+	}); err != nil {
+		t.Fatalf("seed oauth token: %v", err)
+	}
+
+	_, _, err = resolveLLMBearerToken(ctx, "")
+	if err == nil {
+		t.Fatalf("expected error when refresh fails for expired token")
 	}
 }

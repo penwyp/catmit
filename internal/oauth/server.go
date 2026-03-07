@@ -15,6 +15,7 @@ import (
 const (
 	OpenAIStartPath    = "/auth/openai/start"
 	OpenAICallbackPath = "/auth/openai/callback"
+	defaultLocalUserID = "__local_oauth_user__"
 )
 
 // HandlerConfig controls OAuth callback handling behavior.
@@ -137,9 +138,15 @@ func (h *Handler) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		expiresAt = h.now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	}
 
+	providerUserID := strings.TrimSpace(claims.Subject)
+	if providerUserID == "" {
+		// In disabled OIDC mode we may not have sub; keep a stable local identity.
+		providerUserID = defaultLocalUserID
+	}
+
 	if err := h.accountStore.Upsert(r.Context(), OAuthAccount{
 		Provider:       h.provider.Name(),
-		ProviderUserID: claims.Subject,
+		ProviderUserID: providerUserID,
 		Email:          claims.Email,
 		AccessToken:    tokenResp.AccessToken,
 		RefreshToken:   tokenResp.RefreshToken,

@@ -21,6 +21,9 @@ const (
 	tokenRefreshGracePeriod  = 30 * time.Second
 	refreshMaxAttempts       = 3
 	refreshInitialBackoffDur = 300 * time.Millisecond
+	oauthSQLitePathEnv       = "CATMIT_OAUTH_DB_SQLITE_PATH"
+	openAIClientIDEnv        = "CATMIT_OAUTH_OPENAI_CLIENT_ID"
+	openAIClientSecretEnv    = "CATMIT_OAUTH_OPENAI_CLIENT_SECRET"
 )
 
 // resolveLLMBearerToken resolves bearer token with fixed priority:
@@ -43,14 +46,15 @@ func resolveLLMBearerToken(ctx context.Context, explicitAPIKey string) (string, 
 }
 
 func loadOAuthAccessToken(ctx context.Context) (string, error) {
-	if _, err := os.Stat(defaultOAuthSQLitePath); err != nil {
+	sqlitePath := oauthSQLitePath()
+	if _, err := os.Stat(sqlitePath); err != nil {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
 		return "", errors.Wrap(errors.ErrTypeConfig, "failed to stat OAuth sqlite store", err)
 	}
 
-	store, err := oauth.NewSQLiteOAuthAccountStore(defaultOAuthSQLitePath)
+	store, err := oauth.NewSQLiteOAuthAccountStore(sqlitePath)
 	if err != nil {
 		return "", errors.Wrap(errors.ErrTypeConfig, "failed to open OAuth sqlite store", err)
 	}
@@ -65,7 +69,11 @@ func loadOAuthAccessToken(ctx context.Context) (string, error) {
 
 	if shouldRefresh(account) && strings.TrimSpace(account.RefreshToken) != "" {
 		refreshed, refreshErr := refreshAccessToken(ctx, account)
-		if refreshErr == nil {
+		if refreshErr != nil {
+			if !account.TokenExpiresAt.IsZero() && time.Now().After(account.TokenExpiresAt) {
+				return "", errors.Wrap(errors.ErrTypeExternal, "oauth access token refresh failed and token is expired", refreshErr)
+			}
+		} else {
 			if upsertErr := store.Upsert(ctx, refreshed); upsertErr != nil {
 				return "", errors.Wrap(errors.ErrTypeConfig, "failed to persist refreshed OAuth token", upsertErr)
 			}
@@ -125,8 +133,15 @@ func refreshAccessTokenOnce(ctx context.Context, httpClient *http.Client, tokenE
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", strings.TrimSpace(account.RefreshToken))
-	if clientID := strings.TrimSpace(account.ClientID); clientID != "" {
+	clientID := strings.TrimSpace(account.ClientID)
+	if clientID == "" {
+		clientID = strings.TrimSpace(os.Getenv(openAIClientIDEnv))
+	}
+	if clientID != "" {
 		form.Set("client_id", clientID)
+	}
+	if clientSecret := strings.TrimSpace(os.Getenv(openAIClientSecretEnv)); clientSecret != "" {
+		form.Set("client_secret", clientSecret)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
@@ -169,4 +184,11 @@ func refreshAccessTokenOnce(ctx context.Context, httpClient *http.Client, tokenE
 		updated.TokenExpiresAt = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
 	}
 	return updated, false, nil
+}
+
+func oauthSQLitePath() string {
+	if v := strings.TrimSpace(os.Getenv(oauthSQLitePathEnv)); v != "" {
+		return v
+	}
+	return defaultOAuthSQLitePath
 }

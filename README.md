@@ -668,7 +668,7 @@ export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # enable sqlite persiste
 For OpenAI-compatible requests, catmit resolves bearer token in this fixed order:
 
 1. `CATMIT_LLM_API_KEY`
-2. OAuth access token from local sqlite store (`./catmit_oauth.db`)
+2. OAuth access token from local sqlite store (`$CATMIT_OAUTH_DB_SQLITE_PATH`, default `./catmit_oauth.db`)
 
 When OAuth token is near expiry and has a `refresh_token`, catmit automatically refreshes it before sending LLM requests.
 

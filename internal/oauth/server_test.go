@@ -175,6 +175,69 @@ func TestCallbackHandlerSuccessWithPlaceholderOIDC(t *testing.T) {
 	}
 }
 
+func TestCallbackHandlerSuccessWithDisabledOIDC(t *testing.T) {
+	now := time.Now()
+	provider, err := NewOpenAIProvider(OpenAIConfig{
+		ClientID:     "client-id",
+		ClientSecret: "secret",
+		RedirectURL:  "http://127.0.0.1:8085/auth/openai/callback",
+		AuthorizeURL: "https://auth.example.com/oauth/authorize",
+		TokenURL:     "https://auth.example.com/oauth/token",
+		Issuer:       "https://auth.example.com",
+		Scopes:       []string{"openid", "email"},
+		OIDCMode:     OIDCModeDisabled,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	stateStore := NewMemoryStateStore()
+	stateStore.Save("s1", AuthRequestState{
+		Provider:     "openai",
+		CodeVerifier: "verifier-1",
+		Nonce:        "nonce-123",
+		ExpiresAt:    now.Add(time.Minute),
+	})
+
+	accountStore := NewMemoryOAuthAccountStore()
+	h := NewHandler(
+		HandlerConfig{StateTTL: time.Minute},
+		provider,
+		stateStore,
+		accountStore,
+		NewIDTokenVerifier(provider.OIDCMode()),
+	)
+	h.SetHTTPClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := map[string]interface{}{
+			"access_token":  "access-1",
+			"refresh_token": "refresh-1",
+			"expires_in":    3600,
+			"token_type":    "Bearer",
+		}
+		buf, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(buf)),
+		}, nil
+	})})
+
+	req := httptest.NewRequest(http.MethodGet, OpenAICallbackPath+"?state=s1&code=code-1", nil).WithContext(context.Background())
+	w := httptest.NewRecorder()
+	h.CallbackHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	if _, ok := accountStore.Get("openai", defaultLocalUserID); !ok {
+		t.Fatalf("oauth account not persisted with local user id")
+	}
+}
+
 func buildUnsignedJWT(t *testing.T, payload map[string]interface{}) string {
 	t.Helper()
 	header := map[string]interface{}{"alg": "none", "typ": "JWT"}
