@@ -653,3 +653,46 @@ catmit/
   
   如果 catmit 对你有帮助，请考虑给它一个 ⭐！
 </div>
+## OpenAI OAuth 登录（MVP）
+
+catmit 新增了最小可用的 OpenAI OAuth 登录服务，不影响现有 CLI 的认证检查流程。
+
+### 路由
+
+- `GET /auth/openai/start`
+- `GET /auth/openai/callback`
+
+启动命令：
+
+```bash
+catmit oauth-openai --listen 127.0.0.1:8085
+```
+
+### 必填环境变量
+
+```bash
+export CATMIT_OAUTH_OPENAI_CLIENT_ID="your-client-id"
+export CATMIT_OAUTH_OPENAI_CLIENT_SECRET="your-client-secret"   # 公有客户端可选
+export CATMIT_OAUTH_OPENAI_REDIRECT_URL="http://127.0.0.1:8085/auth/openai/callback"
+```
+
+### 可选环境变量
+
+```bash
+export CATMIT_OAUTH_OPENAI_AUTHORIZE_URL="https://auth.openai.com/oauth/authorize"
+export CATMIT_OAUTH_OPENAI_TOKEN_URL="https://auth.openai.com/oauth/token"
+export CATMIT_OAUTH_OPENAI_ISSUER="https://auth.openai.com"
+export CATMIT_OAUTH_OPENAI_SCOPES="openid profile email"
+export CATMIT_OAUTH_OIDC_MODE="placeholder"   # strict | placeholder | disabled
+export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # 启用 sqlite 持久化 + GORM 自动迁移
+```
+
+### OIDC 校验说明
+
+- `placeholder`（默认）：校验 id_token 的核心 claims（iss/aud/exp/nonce），但不做签名验证。
+- `strict`：为完整 OIDC/JWKS 签名校验预留（当前构建返回明确错误）。
+- `disabled`：跳过 id_token 校验。
+
+### 数据表
+
+当设置 `CATMIT_OAUTH_DB_SQLITE_PATH` 后，catmit 会通过 GORM `AutoMigrate` 自动创建/更新 `oauth_accounts`（无需手写 SQL 迁移）。

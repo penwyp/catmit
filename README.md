@@ -628,3 +628,47 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   
   If catmit helped you, please consider giving it a ⭐!
 </div>
+
+## OpenAI OAuth Login (MVP)
+
+catmit now includes a minimal OAuth server for OpenAI login flows, without changing existing CLI auth behaviors.
+
+### Endpoints
+
+- `GET /auth/openai/start`
+- `GET /auth/openai/callback`
+
+Use command:
+
+```bash
+catmit oauth-openai --listen 127.0.0.1:8085
+```
+
+### Required Environment Variables
+
+```bash
+export CATMIT_OAUTH_OPENAI_CLIENT_ID="your-client-id"
+export CATMIT_OAUTH_OPENAI_CLIENT_SECRET="your-client-secret"   # optional for public clients
+export CATMIT_OAUTH_OPENAI_REDIRECT_URL="http://127.0.0.1:8085/auth/openai/callback"
+```
+
+### Optional Environment Variables
+
+```bash
+export CATMIT_OAUTH_OPENAI_AUTHORIZE_URL="https://auth.openai.com/oauth/authorize"
+export CATMIT_OAUTH_OPENAI_TOKEN_URL="https://auth.openai.com/oauth/token"
+export CATMIT_OAUTH_OPENAI_ISSUER="https://auth.openai.com"
+export CATMIT_OAUTH_OPENAI_SCOPES="openid profile email"
+export CATMIT_OAUTH_OIDC_MODE="placeholder"   # strict | placeholder | disabled
+export CATMIT_OAUTH_DB_SQLITE_PATH="./catmit_oauth.db"  # enable sqlite persistence + GORM auto-migrate
+```
+
+### OIDC Verification Notes
+
+- `placeholder` (default): parses and validates core id_token claims (iss/aud/exp/nonce) but does not verify signature.
+- `strict`: reserved abstraction for full OIDC signature/JWKS verification (returns explicit error in current build).
+- `disabled`: skips id_token verification.
+
+### Data Model
+
+When `CATMIT_OAUTH_DB_SQLITE_PATH` is set, catmit uses GORM `AutoMigrate` to create/update `oauth_accounts` automatically (no manual SQL migrations required).
