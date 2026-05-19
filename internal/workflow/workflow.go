@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -82,12 +81,12 @@ func (w *Workflow) runDryRun(ctx context.Context) error {
 func (w *Workflow) runAutomatic(ctx context.Context) error {
 	// Show non-streaming progress for automatic mode
 	fmt.Fprintln(w.output, output.RenderStatusBar("Generating commit message...", false))
-	
+
 	message, err := w.generateCommitMessage(ctx)
 	if err != nil {
 		return err
 	}
-	
+
 	// Display the generated message
 	fmt.Fprintln(w.output, message)
 
@@ -135,7 +134,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 		Draft:    false,
 		Provider: "",
 	}
-	
+
 	mainModel := ui.NewCommitWorkflowModel(
 		ctx,
 		col,
@@ -192,70 +191,10 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 
 // generateCommitMessage generates a commit message using the LLM
 func (w *Workflow) generateCommitMessage(ctx context.Context) (string, error) {
-	col := w.deps.GetCollector()
-
-	// Use ComprehensiveDiff to include untracked files
-	diffText, err := col.ComprehensiveDiff(ctx)
-	if err != nil {
-		if errors.Is(err, gitinfo.ErrNoDiff) {
-			if w.config.Debug {
-				w.logger.Debug("No staged, unstaged, or untracked changes detected")
-			}
-			return "", err
-		}
-		return "", errors.Wrap(errors.ErrTypeGit, "failed to collect git diff", err)
-	}
-
-	commits, err := col.RecentCommits(ctx, 10)
-	if err != nil {
-		return "", errors.Wrap(errors.ErrTypeGit, "failed to process diff", err)
-	}
-
-	builder := w.deps.GetPromptBuilder(w.config.Language)
-	systemPrompt := builder.BuildSystemPrompt()
-
-	// Try to use the new BuildUserPromptWithBudget method
-	userPrompt, err := builder.BuildUserPromptWithBudget(ctx, col, w.config.SeedText)
-	if err != nil {
-		if w.config.Debug {
-			w.logger.Debug("Smart prompt building failed, falling back to traditional method", zap.Error(err))
-		}
-		// Fallback to traditional method
-		branch, _ := col.BranchName(ctx)
-		files, _ := col.ChangedFiles(ctx)
-		userPrompt = builder.BuildUserPrompt(w.config.SeedText, diffText, commits, branch, files)
-	}
-
-	client := w.deps.GetClient()
-	// Create timeout context only for API call
-	apiCtx, apiCancel := context.WithTimeout(ctx, time.Duration(w.config.Timeout)*time.Second)
-	defer apiCancel()
-
-	// Use streaming API and collect the full message
-	contentChan, errChan := client.GetCommitMessageStream(apiCtx, systemPrompt, userPrompt)
-	
-	var fullMessage strings.Builder
-	
-	for {
-		select {
-		case content, ok := <-contentChan:
-			if !ok {
-				// Stream completed
-				return fullMessage.String(), nil
-			}
-			// Accumulate content
-			fullMessage.WriteString(content)
-		case err := <-errChan:
-			if err != nil {
-				// Preserve timeout error type
-				if errors.Is(err, errors.ErrLLMTimeout) {
-					return "", errors.Wrap(errors.ErrTypeTimeout, "failed to get commit message from LLM", err)
-				}
-				return "", errors.Wrap(errors.ErrTypeLLM, "failed to get commit message from LLM", err)
-			}
-		case <-apiCtx.Done():
-			return "", errors.Wrap(errors.ErrTypeTimeout, "API timeout", apiCtx.Err())
-		}
-	}
+	return GenerateCommitMessage(ctx, w.deps, CommitMessageOptions{
+		Language: w.config.Language,
+		Timeout:  w.config.Timeout,
+		SeedText: w.config.SeedText,
+		Debug:    w.config.Debug,
+	})
 }
-

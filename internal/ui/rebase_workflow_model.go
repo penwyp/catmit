@@ -30,11 +30,11 @@ type RebaseWorkflowModel struct {
 	analysis     *rebase.AnalysisResult
 	backupBranch string
 	timeoutSecs  int // Timeout in seconds for operations
-	
+
 	// State tracking
-	accepted     bool
-	copySuccess  bool
-	
+	accepted    bool
+	copySuccess bool
+
 	// Custom phase for analysis confirmation
 	needsAnalysisConfirmation bool
 }
@@ -92,6 +92,13 @@ func (m *RebaseWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle analysis confirmation with action-based navigation
 		if m.needsAnalysisConfirmation {
+			switch strings.ToLower(msg.String()) {
+			case "y":
+				return m, m.handleAnalysisContinue()
+			case "n":
+				return m, m.handleAnalysisAbort()
+			}
+
 			// Use the base model's keyboard handler for action navigation
 			if cmd := m.BaseModel.HandleKeyboard(msg); cmd != nil {
 				return m, cmd
@@ -136,7 +143,7 @@ func (m *RebaseWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.message = msg.message
 		m.phase = WorkflowPhaseReview
 		m.textArea.SetValue(m.message)
-		
+
 		// Try to copy to clipboard
 		if err := clipboard.WriteAll(m.message); err == nil {
 			m.copySuccess = true
@@ -277,13 +284,14 @@ func (m *RebaseWorkflowModel) renderAnalysisConfirmation() string {
 	dimStyle := lipgloss.NewStyle().Foreground(colors.DarkGray)
 
 	var content strings.Builder
-	
+
 	content.WriteString(infoStyle.Render(fmt.Sprintf("Branch: %s → %s", m.analysis.CurrentBranch, m.analysis.BaseBranch)) + "\n")
 	content.WriteString(infoStyle.Render(fmt.Sprintf("Commits to squash: %d", len(m.analysis.UnpushedCommits))) + "\n\n")
-	
+
 	content.WriteString(normalStyle.Render("The following commits will be squashed:") + "\n")
 	content.WriteString(dimStyle.Render(rebase.FormatCommitList(m.analysis.UnpushedCommits)))
-	
+	content.WriteString("\n\n" + normalStyle.Render("Continue? (y/n):"))
+
 	return content.String()
 }
 
@@ -303,12 +311,12 @@ func (m *RebaseWorkflowModel) renderExecutionContent() string {
 		content.WriteString(m.spinner.View() + " " + progressStyle.Render("Executing rebase..."))
 		content.WriteString("\n" + m.spinner.View() + " Creating backup branch")
 		content.WriteString("\n" + m.spinner.View() + " Performing interactive rebase")
-		
+
 	case CommitStageDone:
 		content.WriteString(successStyle.Render("✅ Rebase completed successfully!") + "\n\n")
 		content.WriteString(infoStyle.Render(fmt.Sprintf("Backup branch: %s", m.backupBranch)) + "\n\n")
 		content.WriteString(normalStyle.Render(rebase.GetRecoveryInstructions(m.backupBranch)))
-		
+
 	case CommitStagePushFailed: // Reusing for error state
 		content.WriteString(errorStyle.Render("❌ Error: "+m.err.Error()) + "\n\n")
 		if m.backupBranch != "" {
@@ -323,13 +331,13 @@ func (m *RebaseWorkflowModel) renderExecutionContent() string {
 func (m *RebaseWorkflowModel) renderReviewContent() string {
 	// First render the base review content
 	baseContent := m.BaseWorkflowModel.renderReviewContent()
-	
+
 	if m.copySuccess {
 		colors := DefaultColors()
 		successStyle := lipgloss.NewStyle().Foreground(colors.BrightGreen)
 		return baseContent + "\n\n" + successStyle.Render("✓ Copied to clipboard")
 	}
-	
+
 	return baseContent
 }
 
@@ -370,7 +378,7 @@ func (m *RebaseWorkflowModel) analyzeRepository() tea.Cmd {
 		// Create a new context with timeout for this operation
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
 		defer cancel()
-		
+
 		result, err := m.workflow.Analyze(ctx)
 		return rebaseAnalysisMsg{result: result, err: err}
 	}
@@ -381,7 +389,7 @@ func (m *RebaseWorkflowModel) generateRebaseMessage() tea.Cmd {
 		// Create a new context with timeout for this operation
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
 		defer cancel()
-		
+
 		message, err := m.workflow.GenerateCommitMessage(ctx, m.analysis.UnpushedCommits)
 		return rebaseGeneratedMsg{message: message, err: err}
 	}
@@ -392,15 +400,15 @@ func (m *RebaseWorkflowModel) executeRebase() tea.Cmd {
 		// Create a new context with timeout for this operation
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(m.timeoutSecs)*time.Second)
 		defer cancel()
-		
+
 		err := m.workflow.ExecuteRebase(ctx, m.analysis, m.message)
-		
+
 		// Extract backup branch name
 		backupBranch := ""
 		if m.analysis != nil {
 			backupBranch = fmt.Sprintf("%s_bak", m.analysis.CurrentBranch)
 		}
-		
+
 		return rebaseExecutedMsg{backupBranch: backupBranch, err: err}
 	}
 }

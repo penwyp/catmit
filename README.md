@@ -146,6 +146,34 @@ $ catmit squash-history
 -  **TUI Interface**: Interactive terminal UI for confirmation and monitoring
 -  **Base Branch Detection**: Auto-detects main/master as base branch
 
+### Semantic Version Tags
+```bash
+# Inspect, confirm, then commit/push/tag/push tag as needed
+catmit tag
+
+# Fully automatic release
+catmit tag --yes
+
+# Preview the release plan without writing anything
+catmit tag --dry-run
+
+# Force a specific semantic bump
+catmit tag --bump minor
+
+# Use an explicit tag
+catmit tag --tag v2.0.0
+
+# Use a different remote
+catmit tag --remote upstream
+```
+
+**Tag workflow:**
+- Detects pending worktree changes and generates a commit only when needed.
+- Pushes the current branch only when the remote branch is missing or local HEAD is ahead.
+- Reads the latest remote semantic version tag and calculates the next tag.
+- Creates an annotated tag and pushes `refs/tags/<tag>` after confirmation.
+- `--yes`/`-y` skips confirmation for fully automated release flows.
+
 ### Pull Request Creation
 ```bash
 # Create a pull request with AI-generated description

@@ -368,6 +368,34 @@ $ catmit squash-history
 -  **TUI 界面**：交互式终端界面用于确认和监控
 -  **基础分支检测**：自动检测 main/master 作为基础分支
 
+### 语义化版本标签
+```bash
+# 检查并确认后，按需执行 commit/push/tag/push tag
+catmit tag
+
+# 全自动发布
+catmit tag --yes
+
+# 只预览发布计划，不写入任何内容
+catmit tag --dry-run
+
+# 指定版本递增策略
+catmit tag --bump minor
+
+# 使用明确的 tag
+catmit tag --tag v2.0.0
+
+# 使用其他远程仓库
+catmit tag --remote upstream
+```
+
+**tag 工作流：**
+- 自动检测工作区变更，仅在需要时生成提交信息并创建 commit。
+- 仅在远程分支不存在或本地 HEAD 领先时 push 当前分支。
+- 从远程读取最新语义化版本 tag，并计算下一个 tag。
+- 确认后创建 annotated tag，并推送 `refs/tags/<tag>`。
+- `--yes`/`-y` 跳过确认，适合全自动发布流程。
+
 ### Pull Request 创建
 ```bash
 # 创建带有 AI 生成描述的 pull request
