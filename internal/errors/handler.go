@@ -186,7 +186,7 @@ func (h *DefaultHandler) getErrorIcon(errType ErrorType) string {
 	case ErrTypeTimeout:
 		return "⏱️"
 	case ErrTypeValidation:
-		return "✅"
+		return "❌"
 	case ErrTypeLLM:
 		return "🤖"
 	default:

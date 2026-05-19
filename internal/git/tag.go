@@ -15,11 +15,18 @@ type BranchStatus struct {
 	Behind       int
 }
 
+type WorktreeStatus struct {
+	HasChanges         bool
+	HasStagedChanges   bool
+	HasUnstagedChanges bool
+	HasUnmergedChanges bool
+}
+
 type TagManager interface {
 	CurrentBranch(ctx context.Context) (string, error)
 	HeadSHA(ctx context.Context, short bool) (string, error)
 	FetchRemote(ctx context.Context, remote string) error
-	HasWorktreeChanges(ctx context.Context) (bool, error)
+	WorktreeStatus(ctx context.Context) (WorktreeStatus, error)
 	StageAll(ctx context.Context) error
 	Commit(ctx context.Context, message string) error
 	BranchStatus(ctx context.Context, remote, branch string) (BranchStatus, error)
@@ -76,12 +83,12 @@ func (m *tagManager) FetchRemote(ctx context.Context, remote string) error {
 	return nil
 }
 
-func (m *tagManager) HasWorktreeChanges(ctx context.Context) (bool, error) {
+func (m *tagManager) WorktreeStatus(ctx context.Context) (WorktreeStatus, error) {
 	output, err := m.runner.Run(ctx, "git", "status", "--porcelain")
 	if err != nil {
-		return false, errors.Wrap(errors.ErrTypeGit, "failed to inspect worktree status", err)
+		return WorktreeStatus{}, errors.Wrap(errors.ErrTypeGit, "failed to inspect worktree status", err)
 	}
-	return strings.TrimSpace(output) != "", nil
+	return parseWorktreeStatus(output), nil
 }
 
 func (m *tagManager) StageAll(ctx context.Context) error {
@@ -230,4 +237,57 @@ func (m *tagManager) revisionCount(ctx context.Context, rangeSpec string) (int, 
 		return 0, errors.Wrapf(errors.ErrTypeGit, "invalid revision count for %q", err, rangeSpec)
 	}
 	return count, nil
+}
+
+func parseWorktreeStatus(output string) WorktreeStatus {
+	var status WorktreeStatus
+	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
+		if len(line) < 2 {
+			continue
+		}
+
+		indexStatus := line[0]
+		worktreeStatus := line[1]
+		if isUnmergedStatus(indexStatus, worktreeStatus) {
+			status.HasChanges = true
+			status.HasUnmergedChanges = true
+			continue
+		}
+		if indexStatus == '?' && worktreeStatus == '?' {
+			status.HasChanges = true
+			status.HasUnstagedChanges = true
+			continue
+		}
+
+		if indexStatus != ' ' && indexStatus != '?' {
+			status.HasChanges = true
+			status.HasStagedChanges = true
+		}
+		if worktreeStatus != ' ' && worktreeStatus != '?' {
+			status.HasChanges = true
+			status.HasUnstagedChanges = true
+		}
+	}
+	return status
+}
+
+func isUnmergedStatus(indexStatus, worktreeStatus byte) bool {
+	switch {
+	case indexStatus == 'U' || worktreeStatus == 'U':
+		return true
+	case indexStatus == 'A' && worktreeStatus == 'A':
+		return true
+	case indexStatus == 'D' && worktreeStatus == 'D':
+		return true
+	case indexStatus == 'D' && worktreeStatus == 'U':
+		return true
+	case indexStatus == 'U' && worktreeStatus == 'D':
+		return true
+	case indexStatus == 'A' && worktreeStatus == 'U':
+		return true
+	case indexStatus == 'U' && worktreeStatus == 'A':
+		return true
+	default:
+		return false
+	}
 }

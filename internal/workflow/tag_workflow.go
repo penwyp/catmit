@@ -116,13 +116,16 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		)
 	}
 
-	hasChanges, err := w.manager.HasWorktreeChanges(ctx)
+	worktreeStatus, err := w.manager.WorktreeStatus(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := w.validateWorktreeStatus(worktreeStatus); err != nil {
 		return nil, err
 	}
 
 	var commitMessage string
-	if hasChanges {
+	if worktreeStatus.HasChanges {
 		commitMessage, err = GenerateCommitMessage(ctx, w.deps, CommitMessageOptions{
 			Language: w.config.Language,
 			Timeout:  w.config.Timeout,
@@ -162,7 +165,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		messages = append(messages, existingMessages...)
 	}
 
-	if hasLatest && !hasChanges && len(messages) == 0 {
+	if hasLatest && !worktreeStatus.HasChanges && len(messages) == 0 {
 		return nil, errors.Newf(
 			errors.ErrTypeValidation,
 			"current HEAD already matches latest remote tag %s; no new commit is available to tag",
@@ -197,13 +200,13 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s already exists on %s", nextTag, remote)
 	}
 
-	pushBranch := hasChanges || !branchStatus.RemoteExists || branchStatus.Ahead > 0
+	pushBranch := worktreeStatus.HasChanges || !branchStatus.RemoteExists || branchStatus.Ahead > 0
 
 	return &ReleasePlan{
 		Remote:             remote,
 		Branch:             branch,
 		Head:               head,
-		CommitNeeded:       hasChanges,
+		CommitNeeded:       worktreeStatus.HasChanges,
 		CommitMessage:      commitMessage,
 		BranchRemoteExists: branchStatus.RemoteExists,
 		BranchAhead:        branchStatus.Ahead,
@@ -219,6 +222,9 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 }
 
 func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
+	if err := w.validateExecutionState(ctx, plan); err != nil {
+		return err
+	}
 	if err := w.ensureTagAvailable(ctx, plan.Remote, plan.NextTag); err != nil {
 		return err
 	}
@@ -266,6 +272,49 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 	return nil
 }
 
+func (w *TagWorkflow) validateExecutionState(ctx context.Context, plan *ReleasePlan) error {
+	branch, err := w.manager.CurrentBranch(ctx)
+	if err != nil {
+		return err
+	}
+	if branch != plan.Branch {
+		return errors.Newf(
+			errors.ErrTypeValidation,
+			"current branch changed from %s to %s after release plan was created",
+			plan.Branch,
+			branch,
+		)
+	}
+
+	head, err := w.manager.HeadSHA(ctx, true)
+	if err != nil {
+		return err
+	}
+	if head != plan.Head {
+		return errors.Newf(
+			errors.ErrTypeValidation,
+			"current HEAD changed from %s to %s after release plan was created",
+			plan.Head,
+			head,
+		)
+	}
+
+	worktreeStatus, err := w.manager.WorktreeStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if err := w.validateWorktreeStatus(worktreeStatus); err != nil {
+		return err
+	}
+	if plan.CommitNeeded && !worktreeStatus.HasChanges {
+		return errors.New(errors.ErrTypeValidation, "planned commit is no longer possible because the worktree is clean")
+	}
+	if !plan.CommitNeeded && worktreeStatus.HasChanges {
+		return errors.New(errors.ErrTypeValidation, "worktree changed after release plan was created; rerun catmit tag")
+	}
+	return nil
+}
+
 func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName string) error {
 	remoteTagExists, err := w.manager.RemoteTagExists(ctx, remote, tagName)
 	if err != nil {
@@ -281,6 +330,30 @@ func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName st
 	}
 	if localTagExists {
 		return errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", tagName)
+	}
+	return nil
+}
+
+func (w *TagWorkflow) validateWorktreeStatus(status git.WorktreeStatus) error {
+	if status.HasUnmergedChanges {
+		return errors.New(
+			errors.ErrTypeValidation,
+			"worktree has unresolved merge conflicts; resolve them before tagging",
+		)
+	}
+	if !w.config.StageAll && status.HasChanges {
+		if !status.HasStagedChanges {
+			return errors.New(
+				errors.ErrTypeValidation,
+				"worktree has changes but none are staged; stage files first or use --stage-all",
+			)
+		}
+		if status.HasUnstagedChanges {
+			return errors.New(
+				errors.ErrTypeValidation,
+				"worktree has unstaged or untracked changes; stage or clean them first, or use --stage-all",
+			)
+		}
 	}
 	return nil
 }

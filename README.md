@@ -173,6 +173,7 @@ catmit tag --remote upstream
 - Reads the latest remote semantic version tag and calculates the next tag.
 - Creates an annotated tag and pushes `refs/tags/<tag>` after confirmation.
 - `--yes`/`-y` skips confirmation for fully automated release flows.
+- With `--stage-all=false`, unstaged or untracked changes are rejected so the generated message matches the committed diff.
 
 ### Pull Request Creation
 ```bash

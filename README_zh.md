@@ -395,6 +395,7 @@ catmit tag --remote upstream
 - 从远程读取最新语义化版本 tag，并计算下一个 tag。
 - 确认后创建 annotated tag，并推送 `refs/tags/<tag>`。
 - `--yes`/`-y` 跳过确认，适合全自动发布流程。
+- 使用 `--stage-all=false` 时会拒绝 unstaged 或 untracked 变更，确保生成信息与实际提交 diff 一致。
 
 ### Pull Request 创建
 ```bash

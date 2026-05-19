@@ -101,3 +101,56 @@ func TestTagManagerCommitMessagesSince(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"feat: add tag command", "fix: cleanup"}, messages)
 }
+
+func TestParseWorktreeStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   WorktreeStatus
+	}{
+		{
+			name:   "clean",
+			output: "",
+			want:   WorktreeStatus{},
+		},
+		{
+			name:   "staged only",
+			output: "M  file.go\nA  new.go\n",
+			want: WorktreeStatus{
+				HasChanges:       true,
+				HasStagedChanges: true,
+			},
+		},
+		{
+			name:   "unstaged only",
+			output: " M file.go\n?? new.go\n",
+			want: WorktreeStatus{
+				HasChanges:         true,
+				HasUnstagedChanges: true,
+			},
+		},
+		{
+			name:   "mixed",
+			output: "MM file.go\nR  old.go -> new.go\n?? draft.md\n",
+			want: WorktreeStatus{
+				HasChanges:         true,
+				HasStagedChanges:   true,
+				HasUnstagedChanges: true,
+			},
+		},
+		{
+			name:   "unmerged",
+			output: "UU file.go\nAA both-added.go\n",
+			want: WorktreeStatus{
+				HasChanges:         true,
+				HasUnmergedChanges: true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseWorktreeStatus(tt.output))
+		})
+	}
+}

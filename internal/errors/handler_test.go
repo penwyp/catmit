@@ -160,11 +160,11 @@ func TestDefaultHandler_HandleWithRetry(t *testing.T) {
 // It checks that the error type, message, and suggestion are correctly inferred for various error scenarios.
 func TestDefaultHandler_inferErrorType(t *testing.T) {
 	tests := []struct {
-		name           string
-		err            error
-		expectedType   ErrorType
-		expectedMsg    string
-		hasSuggestion  bool
+		name          string
+		err           error
+		expectedType  ErrorType
+		expectedMsg   string
+		hasSuggestion bool
 	}{
 		{
 			name:          "git repository error",
@@ -248,7 +248,7 @@ func TestDefaultHandler_getErrorIcon(t *testing.T) {
 		{ErrTypeNetwork, "🌐"},
 		{ErrTypeAuth, "🔐"},
 		{ErrTypeTimeout, "⏱️"},
-		{ErrTypeValidation, "✅"},
+		{ErrTypeValidation, "❌"},
 		{ErrTypeLLM, "🤖"},
 		{ErrTypeUnknown, "❌"},
 		{ErrorType(999), "❌"}, // Unknown type

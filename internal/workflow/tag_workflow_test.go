@@ -25,7 +25,7 @@ func (r tagWorkflowRunner) Run(_ context.Context, command string, args ...string
 type fakeTagManager struct {
 	branch          string
 	head            string
-	hasChanges      bool
+	worktreeStatus  git.WorktreeStatus
 	branchStatus    git.BranchStatus
 	remoteTags      []string
 	commitMessages  []string
@@ -50,9 +50,9 @@ func (m *fakeTagManager) FetchRemote(_ context.Context, remote string) error {
 	return nil
 }
 
-func (m *fakeTagManager) HasWorktreeChanges(context.Context) (bool, error) {
+func (m *fakeTagManager) WorktreeStatus(context.Context) (git.WorktreeStatus, error) {
 	m.calls = append(m.calls, "status")
-	return m.hasChanges, nil
+	return m.worktreeStatus, nil
 }
 
 func (m *fakeTagManager) StageAll(context.Context) error {
@@ -149,13 +149,78 @@ func TestTagWorkflowPlanRejectsBehindBranch(t *testing.T) {
 	assert.Contains(t, err.Error(), "behind origin/main")
 }
 
+func TestTagWorkflowPlanRejectsStageAllFalseWithoutStagedChanges(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+		worktreeStatus: git.WorktreeStatus{
+			HasChanges:         true,
+			HasUnstagedChanges: true,
+		},
+		branchStatus: git.BranchStatus{RemoteExists: true},
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	workflow.config.StageAll = false
+
+	_, err := workflow.Plan(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "none are staged")
+}
+
+func TestTagWorkflowPlanRejectsUnmergedChanges(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+		worktreeStatus: git.WorktreeStatus{
+			HasChanges:         true,
+			HasUnmergedChanges: true,
+		},
+		branchStatus: git.BranchStatus{RemoteExists: true},
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+
+	_, err := workflow.Plan(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unresolved merge conflicts")
+}
+
+func TestTagWorkflowPlanRejectsStageAllFalseWithMixedChanges(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+		worktreeStatus: git.WorktreeStatus{
+			HasChanges:         true,
+			HasStagedChanges:   true,
+			HasUnstagedChanges: true,
+		},
+		branchStatus: git.BranchStatus{RemoteExists: true},
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	workflow.config.StageAll = false
+
+	_, err := workflow.Plan(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unstaged or untracked changes")
+}
+
 func TestTagWorkflowExecuteRunsCommitPushTagPushTag(t *testing.T) {
-	manager := &fakeTagManager{}
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+		worktreeStatus: git.WorktreeStatus{
+			HasChanges:       true,
+			HasStagedChanges: true,
+		},
+	}
 	workflow := newTestTagWorkflow(manager, nil, nil)
 	workflow.config.StageAll = true
 	plan := &ReleasePlan{
 		Remote:        "origin",
 		Branch:        "main",
+		Head:          "abc123",
 		CommitNeeded:  true,
 		CommitMessage: "feat: release command",
 		PushBranch:    true,
@@ -166,6 +231,9 @@ func TestTagWorkflowExecuteRunsCommitPushTagPushTag(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{
+		"current-branch",
+		"head",
+		"status",
 		"remote-tag-exists",
 		"local-tag-exists",
 		"stage",
@@ -180,12 +248,15 @@ func TestTagWorkflowExecuteRunsCommitPushTagPushTag(t *testing.T) {
 
 func TestTagWorkflowExecuteRechecksRemoteTagBeforeCreatingLocalTag(t *testing.T) {
 	manager := &fakeTagManager{
+		branch:          "main",
+		head:            "abc123",
 		remoteTagChecks: []bool{false, true},
 	}
 	workflow := newTestTagWorkflow(manager, nil, nil)
 	plan := &ReleasePlan{
 		Remote:     "origin",
 		Branch:     "main",
+		Head:       "abc123",
 		PushBranch: true,
 		NextTag:    "v1.3.0",
 	}
@@ -194,6 +265,50 @@ func TestTagWorkflowExecuteRechecksRemoteTagBeforeCreatingLocalTag(t *testing.T)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "remote tag v1.3.0 already exists")
+	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+}
+
+func TestTagWorkflowExecuteRejectsChangedHead(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "def456",
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	plan := &ReleasePlan{
+		Remote:  "origin",
+		Branch:  "main",
+		Head:    "abc123",
+		NextTag: "v1.3.0",
+	}
+
+	err := workflow.Execute(context.Background(), plan)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "current HEAD changed")
+	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+}
+
+func TestTagWorkflowExecuteRejectsDirtyWorktreeWhenPlanSkippedCommit(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+		worktreeStatus: git.WorktreeStatus{
+			HasChanges:         true,
+			HasUnstagedChanges: true,
+		},
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	plan := &ReleasePlan{
+		Remote:  "origin",
+		Branch:  "main",
+		Head:    "abc123",
+		NextTag: "v1.3.0",
+	}
+
+	err := workflow.Execute(context.Background(), plan)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "worktree changed after release plan")
 	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
 }
 
