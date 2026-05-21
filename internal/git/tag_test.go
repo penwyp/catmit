@@ -2,10 +2,11 @@ package git
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	catmitErrors "github.com/penwyp/catmit/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func TestTagManagerListRemoteTags(t *testing.T) {
 
 func TestTagManagerBranchStatus(t *testing.T) {
 	runner := newTagRunner()
-	runner.outputs["git rev-parse --verify refs/remotes/origin/main"] = "abc123\n"
+	runner.outputs["git ls-remote --heads origin refs/heads/main"] = "abc123\trefs/heads/main\n"
 	runner.outputs["git rev-list --count refs/remotes/origin/main..HEAD"] = "2\n"
 	runner.outputs["git rev-list --count HEAD..refs/remotes/origin/main"] = "0\n"
 
@@ -65,11 +66,12 @@ func TestTagManagerBranchStatus(t *testing.T) {
 	assert.True(t, status.RemoteExists)
 	assert.Equal(t, 2, status.Ahead)
 	assert.Equal(t, 0, status.Behind)
+	require.Len(t, runner.calls, 4)
+	assert.Equal(t, []string{"fetch", "--quiet", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"}, runner.calls[1].args)
 }
 
 func TestTagManagerBranchStatusMissingRemoteBranch(t *testing.T) {
 	runner := newTagRunner()
-	runner.errors["git rev-parse --verify refs/remotes/origin/feature"] = errors.New("missing ref")
 
 	manager := NewTagManager(runner)
 	status, err := manager.BranchStatus(context.Background(), "origin", "feature")
@@ -78,6 +80,30 @@ func TestTagManagerBranchStatusMissingRemoteBranch(t *testing.T) {
 	assert.False(t, status.RemoteExists)
 	assert.Equal(t, 0, status.Ahead)
 	assert.Equal(t, 0, status.Behind)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, []string{"ls-remote", "--heads", "origin", "refs/heads/feature"}, runner.calls[0].args)
+}
+
+type blockingTagRunner struct {
+	calls []tagRunnerCall
+}
+
+func (r *blockingTagRunner) Run(ctx context.Context, command string, args ...string) (string, error) {
+	r.calls = append(r.calls, tagRunnerCall{command: command, args: append([]string(nil), args...)})
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+func TestTagManagerBranchStatusTimeout(t *testing.T) {
+	runner := &blockingTagRunner{}
+	manager := NewTagManager(runner)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+
+	_, err := manager.BranchStatus(ctx, "origin", "main")
+
+	require.Error(t, err)
+	assert.Equal(t, catmitErrors.ErrTypeTimeout, catmitErrors.GetType(err))
 }
 
 func TestTagManagerPushTagUsesExplicitRef(t *testing.T) {

@@ -25,7 +25,6 @@ type WorktreeStatus struct {
 type TagManager interface {
 	CurrentBranch(ctx context.Context) (string, error)
 	HeadSHA(ctx context.Context, short bool) (string, error)
-	FetchRemote(ctx context.Context, remote string) error
 	WorktreeStatus(ctx context.Context) (WorktreeStatus, error)
 	StageAll(ctx context.Context) error
 	Commit(ctx context.Context, message string) error
@@ -75,14 +74,6 @@ func (m *tagManager) HeadSHA(ctx context.Context, short bool) (string, error) {
 	return strings.TrimSpace(output), nil
 }
 
-func (m *tagManager) FetchRemote(ctx context.Context, remote string) error {
-	_, err := m.runner.Run(ctx, "git", "fetch", "--quiet", "--tags", remote)
-	if err != nil {
-		return errors.Wrapf(errors.ErrTypeGit, "failed to fetch remote %q", err, remote)
-	}
-	return nil
-}
-
 func (m *tagManager) WorktreeStatus(ctx context.Context) (WorktreeStatus, error) {
 	output, err := m.runner.Run(ctx, "git", "status", "--porcelain")
 	if err != nil {
@@ -108,11 +99,19 @@ func (m *tagManager) Commit(ctx context.Context, message string) error {
 }
 
 func (m *tagManager) BranchStatus(ctx context.Context, remote, branch string) (BranchStatus, error) {
-	remoteRef := fmt.Sprintf("refs/remotes/%s/%s", remote, branch)
-	if _, err := m.runner.Run(ctx, "git", "rev-parse", "--verify", remoteRef); err != nil {
+	exists, err := m.remoteBranchExists(ctx, remote, branch)
+	if err != nil {
+		return BranchStatus{}, err
+	}
+	if !exists {
 		return BranchStatus{RemoteExists: false}, nil
 	}
 
+	if err := m.fetchBranch(ctx, remote, branch); err != nil {
+		return BranchStatus{}, err
+	}
+
+	remoteRef := fmt.Sprintf("refs/remotes/%s/%s", remote, branch)
 	ahead, err := m.revisionCount(ctx, remoteRef+"..HEAD")
 	if err != nil {
 		return BranchStatus{}, err
@@ -130,10 +129,30 @@ func (m *tagManager) BranchStatus(ctx context.Context, remote, branch string) (B
 	}, nil
 }
 
+func (m *tagManager) remoteBranchExists(ctx context.Context, remote, branch string) (bool, error) {
+	output, err := m.runner.Run(ctx, "git", "ls-remote", "--heads", remote, "refs/heads/"+branch)
+	if err != nil {
+		return false, wrapGitCommandError(ctx, err, "failed to inspect remote branch %s/%s", remote, branch)
+	}
+	return strings.TrimSpace(output) != "", nil
+}
+
+func (m *tagManager) fetchBranch(ctx context.Context, remote, branch string) error {
+	remoteHeadRef := "refs/heads/" + branch
+	remoteTrackingRef := fmt.Sprintf("refs/remotes/%s/%s", remote, branch)
+	refspec := "+" + remoteHeadRef + ":" + remoteTrackingRef
+
+	_, err := m.runner.Run(ctx, "git", "fetch", "--quiet", "--no-tags", remote, refspec)
+	if err != nil {
+		return wrapGitCommandError(ctx, err, "failed to fetch remote branch %s/%s", remote, branch)
+	}
+	return nil
+}
+
 func (m *tagManager) PushBranch(ctx context.Context, remote, branch string) error {
 	_, err := m.runner.Run(ctx, "git", "push", remote, branch)
 	if err != nil {
-		return errors.Wrapf(errors.ErrTypeGit, "failed to push branch %s to %s", err, branch, remote)
+		return wrapGitCommandError(ctx, err, "failed to push branch %s to %s", branch, remote)
 	}
 	return nil
 }
@@ -141,7 +160,7 @@ func (m *tagManager) PushBranch(ctx context.Context, remote, branch string) erro
 func (m *tagManager) ListRemoteTags(ctx context.Context, remote string) ([]string, error) {
 	output, err := m.runner.Run(ctx, "git", "ls-remote", "--tags", "--refs", remote)
 	if err != nil {
-		return nil, errors.Wrapf(errors.ErrTypeGit, "failed to list remote tags from %q", err, remote)
+		return nil, wrapGitCommandError(ctx, err, "failed to list remote tags from %q", remote)
 	}
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
@@ -167,7 +186,7 @@ func (m *tagManager) LocalTagExists(ctx context.Context, tagName string) (bool, 
 func (m *tagManager) RemoteTagExists(ctx context.Context, remote, tagName string) (bool, error) {
 	output, err := m.runner.Run(ctx, "git", "ls-remote", "--tags", "--refs", remote, "refs/tags/"+tagName)
 	if err != nil {
-		return false, errors.Wrapf(errors.ErrTypeGit, "failed to check remote tag %q", err, tagName)
+		return false, wrapGitCommandError(ctx, err, "failed to check remote tag %q", tagName)
 	}
 	return strings.TrimSpace(output) != "", nil
 }
@@ -187,7 +206,7 @@ func (m *tagManager) CreateAnnotatedTag(ctx context.Context, tagName, message, t
 func (m *tagManager) PushTag(ctx context.Context, remote, tagName string) error {
 	_, err := m.runner.Run(ctx, "git", "push", remote, "refs/tags/"+tagName)
 	if err != nil {
-		return errors.Wrapf(errors.ErrTypeGit, "failed to push tag %q to %s", err, tagName, remote)
+		return wrapGitCommandError(ctx, err, "failed to push tag %q to %s", tagName, remote)
 	}
 	return nil
 }
@@ -229,7 +248,7 @@ func (m *tagManager) ResolveRevision(ctx context.Context, ref string) (string, e
 func (m *tagManager) revisionCount(ctx context.Context, rangeSpec string) (int, error) {
 	output, err := m.runner.Run(ctx, "git", "rev-list", "--count", rangeSpec)
 	if err != nil {
-		return 0, errors.Wrapf(errors.ErrTypeGit, "failed to count revisions in %q", err, rangeSpec)
+		return 0, wrapGitCommandError(ctx, err, "failed to count revisions in %q", rangeSpec)
 	}
 
 	count, err := strconv.Atoi(strings.TrimSpace(output))
@@ -237,6 +256,18 @@ func (m *tagManager) revisionCount(ctx context.Context, rangeSpec string) (int, 
 		return 0, errors.Wrapf(errors.ErrTypeGit, "invalid revision count for %q", err, rangeSpec)
 	}
 	return count, nil
+}
+
+func wrapGitCommandError(ctx context.Context, err error, format string, args ...interface{}) error {
+	message := fmt.Sprintf(format, args...)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr == context.DeadlineExceeded {
+			return errors.WrapRetryable(errors.ErrTypeTimeout, message, ctxErr).
+				WithSuggestion("Increase --timeout or check network/authentication for the remote")
+		}
+		return errors.Wrap(errors.ErrTypeGit, message, ctxErr)
+	}
+	return errors.Wrap(errors.ErrTypeGit, message, err)
 }
 
 func parseWorktreeStatus(output string) WorktreeStatus {

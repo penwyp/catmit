@@ -45,11 +45,6 @@ func (m *fakeTagManager) HeadSHA(context.Context, bool) (string, error) {
 	return m.head, nil
 }
 
-func (m *fakeTagManager) FetchRemote(_ context.Context, remote string) error {
-	m.calls = append(m.calls, "fetch:"+remote)
-	return nil
-}
-
 func (m *fakeTagManager) WorktreeStatus(context.Context) (git.WorktreeStatus, error) {
 	m.calls = append(m.calls, "status")
 	return m.worktreeStatus, nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/errors"
@@ -98,11 +99,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		return nil, err
 	}
 
-	if err := w.manager.FetchRemote(ctx, remote); err != nil {
-		return nil, err
-	}
-
-	branchStatus, err := w.manager.BranchStatus(ctx, remote, branch)
+	branchStatus, err := w.branchStatus(ctx, remote, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +134,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		}
 	}
 
-	remoteTags, err := w.manager.ListRemoteTags(ctx, remote)
+	remoteTags, err := w.listRemoteTags(ctx, remote)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +189,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
 	}
 
-	remoteTagExists, err := w.manager.RemoteTagExists(ctx, remote, nextTag)
+	remoteTagExists, err := w.remoteTagExists(ctx, remote, nextTag)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +243,7 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 
 	if plan.PushBranch {
 		fmt.Fprintln(w.output, output.RenderStatusBar("Pushing branch...", false))
-		if err := w.manager.PushBranch(ctx, plan.Remote, plan.Branch); err != nil {
+		if err := w.pushBranch(ctx, plan.Remote, plan.Branch); err != nil {
 			return err
 		}
 		fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
@@ -263,7 +260,7 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 	fmt.Fprintln(w.output, output.RenderStatusBar("Tag created successfully", true))
 
 	fmt.Fprintln(w.output, output.RenderStatusBar("Pushing tag...", false))
-	if err := w.manager.PushTag(ctx, plan.Remote, plan.NextTag); err != nil {
+	if err := w.pushTag(ctx, plan.Remote, plan.NextTag); err != nil {
 		return err
 	}
 	fmt.Fprintln(w.output, output.RenderStatusBar("Tag pushed successfully", true))
@@ -316,7 +313,7 @@ func (w *TagWorkflow) validateExecutionState(ctx context.Context, plan *ReleaseP
 }
 
 func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName string) error {
-	remoteTagExists, err := w.manager.RemoteTagExists(ctx, remote, tagName)
+	remoteTagExists, err := w.remoteTagExists(ctx, remote, tagName)
 	if err != nil {
 		return err
 	}
@@ -332,6 +329,40 @@ func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName st
 		return errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", tagName)
 	}
 	return nil
+}
+
+func (w *TagWorkflow) branchStatus(ctx context.Context, remote, branch string) (git.BranchStatus, error) {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.BranchStatus(remoteCtx, remote, branch)
+}
+
+func (w *TagWorkflow) listRemoteTags(ctx context.Context, remote string) ([]string, error) {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.ListRemoteTags(remoteCtx, remote)
+}
+
+func (w *TagWorkflow) remoteTagExists(ctx context.Context, remote, tagName string) (bool, error) {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.RemoteTagExists(remoteCtx, remote, tagName)
+}
+
+func (w *TagWorkflow) pushBranch(ctx context.Context, remote, branch string) error {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.PushBranch(remoteCtx, remote, branch)
+}
+
+func (w *TagWorkflow) pushTag(ctx context.Context, remote, tagName string) error {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.PushTag(remoteCtx, remote, tagName)
+}
+
+func (w *TagWorkflow) remoteOperationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, time.Duration(w.config.Timeout)*time.Second)
 }
 
 func (w *TagWorkflow) validateWorktreeStatus(status git.WorktreeStatus) error {
