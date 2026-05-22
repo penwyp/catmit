@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/penwyp/catmit/internal/app"
@@ -189,11 +190,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
 	}
 
-	remoteTagExists, err := w.remoteTagExists(ctx, remote, nextTag)
-	if err != nil {
-		return nil, err
-	}
-	if remoteTagExists {
+	if tagExists(remoteTags, nextTag) {
 		return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s already exists on %s", nextTag, remote)
 	}
 
@@ -219,10 +216,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 }
 
 func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
-	if err := w.validateExecutionState(ctx, plan); err != nil {
-		return err
-	}
-	if err := w.ensureTagAvailable(ctx, plan.Remote, plan.NextTag); err != nil {
+	if err := w.validateReadyToCreateTag(ctx, plan); err != nil {
 		return err
 	}
 
@@ -249,8 +243,10 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 		fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
 	}
 
-	if err := w.ensureTagAvailable(ctx, plan.Remote, plan.NextTag); err != nil {
-		return err
+	if plan.CommitNeeded || plan.PushBranch {
+		if err := w.ensureTagAvailable(ctx, plan.Remote, plan.NextTag); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintln(w.output, output.RenderStatusBar("Creating tag...", false))
@@ -266,6 +262,33 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 	fmt.Fprintln(w.output, output.RenderStatusBar("Tag pushed successfully", true))
 	fmt.Fprintf(w.output, "Released %s\n", plan.NextTag)
 
+	return nil
+}
+
+func (w *TagWorkflow) validateReadyToCreateTag(ctx context.Context, plan *ReleasePlan) error {
+	errCh := make(chan error, 2)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		errCh <- w.validateExecutionState(ctx, plan)
+	}()
+
+	go func() {
+		defer wg.Done()
+		errCh <- w.ensureTagAvailable(ctx, plan.Remote, plan.NextTag)
+	}()
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -313,22 +336,54 @@ func (w *TagWorkflow) validateExecutionState(ctx context.Context, plan *ReleaseP
 }
 
 func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName string) error {
-	remoteTagExists, err := w.remoteTagExists(ctx, remote, tagName)
-	if err != nil {
-		return err
-	}
-	if remoteTagExists {
-		return errors.Newf(errors.ErrTypeValidation, "remote tag %s already exists on %s", tagName, remote)
+	type tagCheckResult struct {
+		name   string
+		exists bool
+		err    error
 	}
 
-	localTagExists, err := w.manager.LocalTagExists(ctx, tagName)
-	if err != nil {
-		return err
-	}
-	if localTagExists {
+	resultCh := make(chan tagCheckResult, 2)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		exists, err := w.remoteTagExists(ctx, remote, tagName)
+		resultCh <- tagCheckResult{name: "remote", exists: exists, err: err}
+	}()
+
+	go func() {
+		defer wg.Done()
+		exists, err := w.manager.LocalTagExists(ctx, tagName)
+		resultCh <- tagCheckResult{name: "local", exists: exists, err: err}
+	}()
+
+	wg.Wait()
+	close(resultCh)
+
+	for result := range resultCh {
+		if result.err != nil {
+			return result.err
+		}
+		if !result.exists {
+			continue
+		}
+		if result.name == "remote" {
+			return errors.Newf(errors.ErrTypeValidation, "remote tag %s already exists on %s", tagName, remote)
+		}
 		return errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", tagName)
 	}
 	return nil
+}
+
+func tagExists(tags []string, tagName string) bool {
+	for _, tag := range tags {
+		if tag == tagName {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *TagWorkflow) branchStatus(ctx context.Context, remote, branch string) (git.BranchStatus, error) {

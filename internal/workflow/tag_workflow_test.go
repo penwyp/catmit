@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/penwyp/catmit/internal/app"
@@ -23,6 +24,7 @@ func (r tagWorkflowRunner) Run(_ context.Context, command string, args ...string
 }
 
 type fakeTagManager struct {
+	mu              sync.Mutex
 	branch          string
 	head            string
 	worktreeStatus  git.WorktreeStatus
@@ -35,78 +37,99 @@ type fakeTagManager struct {
 	calls           []string
 }
 
+func (m *fakeTagManager) appendCall(call string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, call)
+}
+
+func (m *fakeTagManager) popRemoteTagCheck() (bool, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.remoteTagChecks) == 0 {
+		return false, false
+	}
+	result := m.remoteTagChecks[0]
+	m.remoteTagChecks = m.remoteTagChecks[1:]
+	return result, true
+}
+
+func (m *fakeTagManager) Calls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.calls...)
+}
+
 func (m *fakeTagManager) CurrentBranch(context.Context) (string, error) {
-	m.calls = append(m.calls, "current-branch")
+	m.appendCall("current-branch")
 	return m.branch, nil
 }
 
 func (m *fakeTagManager) HeadSHA(context.Context, bool) (string, error) {
-	m.calls = append(m.calls, "head")
+	m.appendCall("head")
 	return m.head, nil
 }
 
 func (m *fakeTagManager) WorktreeStatus(context.Context) (git.WorktreeStatus, error) {
-	m.calls = append(m.calls, "status")
+	m.appendCall("status")
 	return m.worktreeStatus, nil
 }
 
 func (m *fakeTagManager) StageAll(context.Context) error {
-	m.calls = append(m.calls, "stage")
+	m.appendCall("stage")
 	return nil
 }
 
 func (m *fakeTagManager) Commit(_ context.Context, message string) error {
-	m.calls = append(m.calls, "commit:"+message)
+	m.appendCall("commit:" + message)
 	return nil
 }
 
 func (m *fakeTagManager) BranchStatus(context.Context, string, string) (git.BranchStatus, error) {
-	m.calls = append(m.calls, "branch-status")
+	m.appendCall("branch-status")
 	return m.branchStatus, nil
 }
 
 func (m *fakeTagManager) PushBranch(_ context.Context, remote, branch string) error {
-	m.calls = append(m.calls, "push-branch:"+remote+"/"+branch)
+	m.appendCall("push-branch:" + remote + "/" + branch)
 	return nil
 }
 
 func (m *fakeTagManager) ListRemoteTags(context.Context, string) ([]string, error) {
-	m.calls = append(m.calls, "list-tags")
+	m.appendCall("list-tags")
 	return m.remoteTags, nil
 }
 
 func (m *fakeTagManager) LocalTagExists(context.Context, string) (bool, error) {
-	m.calls = append(m.calls, "local-tag-exists")
+	m.appendCall("local-tag-exists")
 	return m.localTagExists, nil
 }
 
 func (m *fakeTagManager) RemoteTagExists(context.Context, string, string) (bool, error) {
-	m.calls = append(m.calls, "remote-tag-exists")
-	if len(m.remoteTagChecks) > 0 {
-		result := m.remoteTagChecks[0]
-		m.remoteTagChecks = m.remoteTagChecks[1:]
+	m.appendCall("remote-tag-exists")
+	if result, ok := m.popRemoteTagCheck(); ok {
 		return result, nil
 	}
 	return m.remoteTagExists, nil
 }
 
 func (m *fakeTagManager) CreateAnnotatedTag(_ context.Context, tagName, _, _ string) error {
-	m.calls = append(m.calls, "create-tag:"+tagName)
+	m.appendCall("create-tag:" + tagName)
 	return nil
 }
 
 func (m *fakeTagManager) PushTag(_ context.Context, remote, tagName string) error {
-	m.calls = append(m.calls, "push-tag:"+remote+"/"+tagName)
+	m.appendCall("push-tag:" + remote + "/" + tagName)
 	return nil
 }
 
 func (m *fakeTagManager) CommitMessagesSince(context.Context, string, string) ([]string, error) {
-	m.calls = append(m.calls, "commit-messages")
+	m.appendCall("commit-messages")
 	return m.commitMessages, nil
 }
 
 func (m *fakeTagManager) ResolveRevision(context.Context, string) (string, error) {
-	m.calls = append(m.calls, "resolve")
+	m.appendCall("resolve")
 	return m.head, nil
 }
 
@@ -225,20 +248,50 @@ func TestTagWorkflowExecuteRunsCommitPushTagPushTag(t *testing.T) {
 	err := workflow.Execute(context.Background(), plan)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{
+	calls := manager.Calls()
+	assert.Subset(t, calls, []string{
 		"current-branch",
 		"head",
 		"status",
-		"remote-tag-exists",
-		"local-tag-exists",
 		"stage",
 		"commit:feat: release command",
 		"push-branch:origin/main",
-		"remote-tag-exists",
-		"local-tag-exists",
 		"create-tag:v1.3.0",
 		"push-tag:origin/v1.3.0",
-	}, manager.calls)
+	})
+	assert.Equal(t, 2, countCalls(calls, "remote-tag-exists"))
+	assert.Equal(t, 2, countCalls(calls, "local-tag-exists"))
+	assertCallOrder(t, calls,
+		"stage",
+		"commit:feat: release command",
+		"push-branch:origin/main",
+		"create-tag:v1.3.0",
+		"push-tag:origin/v1.3.0",
+	)
+}
+
+func TestTagWorkflowExecuteSkipsSecondTagAvailabilityCheckWhenNothingMutates(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main",
+		head:   "abc123",
+	}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	plan := &ReleasePlan{
+		Remote:  "origin",
+		Branch:  "main",
+		Head:    "abc123",
+		NextTag: "v1.3.0",
+	}
+
+	err := workflow.Execute(context.Background(), plan)
+
+	require.NoError(t, err)
+	calls := manager.Calls()
+	assert.Equal(t, 1, countCalls(calls, "remote-tag-exists"))
+	assert.Equal(t, 1, countCalls(calls, "local-tag-exists"))
+	assert.NotContains(t, strings.Join(calls, ","), "push-branch")
+	assert.NotContains(t, strings.Join(calls, ","), "commit:")
+	assertCallOrder(t, calls, "create-tag:v1.3.0", "push-tag:origin/v1.3.0")
 }
 
 func TestTagWorkflowExecuteRechecksRemoteTagBeforeCreatingLocalTag(t *testing.T) {
@@ -260,7 +313,7 @@ func TestTagWorkflowExecuteRechecksRemoteTagBeforeCreatingLocalTag(t *testing.T)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "remote tag v1.3.0 already exists")
-	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
 }
 
 func TestTagWorkflowExecuteRejectsChangedHead(t *testing.T) {
@@ -280,7 +333,7 @@ func TestTagWorkflowExecuteRejectsChangedHead(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "current HEAD changed")
-	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
 }
 
 func TestTagWorkflowExecuteRejectsDirtyWorktreeWhenPlanSkippedCommit(t *testing.T) {
@@ -304,7 +357,7 @@ func TestTagWorkflowExecuteRejectsDirtyWorktreeWhenPlanSkippedCommit(t *testing.
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worktree changed after release plan")
-	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
 }
 
 func TestTagWorkflowRunCancelDoesNotExecute(t *testing.T) {
@@ -322,7 +375,7 @@ func TestTagWorkflowRunCancelDoesNotExecute(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "Canceled.")
-	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
 }
 
 func TestTagWorkflowRunTreatsEOFConfirmationAsCancel(t *testing.T) {
@@ -340,7 +393,34 @@ func TestTagWorkflowRunTreatsEOFConfirmationAsCancel(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "Canceled.")
-	assert.NotContains(t, strings.Join(manager.calls, ","), "create-tag")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
+}
+
+func countCalls(calls []string, want string) int {
+	count := 0
+	for _, call := range calls {
+		if call == want {
+			count++
+		}
+	}
+	return count
+}
+
+func assertCallOrder(t *testing.T, calls []string, ordered ...string) {
+	t.Helper()
+
+	lastIndex := -1
+	for _, want := range ordered {
+		index := -1
+		for i := lastIndex + 1; i < len(calls); i++ {
+			if calls[i] == want {
+				index = i
+				break
+			}
+		}
+		require.NotEqual(t, -1, index, "call %q not found after index %d in %v", want, lastIndex, calls)
+		lastIndex = index
+	}
 }
 
 func newTestTagWorkflow(manager *fakeTagManager, output *bytes.Buffer, input *strings.Reader) *TagWorkflow {
