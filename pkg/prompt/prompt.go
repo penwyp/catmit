@@ -54,7 +54,6 @@ func NewBuilder(lang string, diffLimit int) *Builder {
 	}
 }
 
-
 // estimateTokens estimates the number of tokens in the text
 // Simplified algorithm: 1 token ≈ 4 English chars, 2 Chinese chars
 func estimateTokens(text string) int {
@@ -116,12 +115,17 @@ func (b *Builder) BuildSystemPrompt() string {
 1. **Format**: MUST follow Conventional Commits: <type>(<scope>): <subject>
 2. **Type**: Choose from feat, fix, refactor, chore, docs, style, test
 3. **Subject**: Use imperative mood, max 50 chars, no period at the end
-4. **Body**: If needed, explain the 'why', not the 'how', after a blank line`
+4. **Body**: If needed, explain the 'why', not the 'how', after a blank line
+5. **Breaking change**: Add ` + "`!`" + ` before ` + "`:`" + ` (e.g. ` + "`feat!: drop legacy API`" + `) or add ` + "`BREAKING CHANGE:`" + ` footer to signal breaking changes`
 
 	// EXAMPLE - Example (Few-Shot Learning)
-	examples := `# EXAMPLE
+	examples := `# EXAMPLES
 - **Diff**: + return sessionStorage.getItem('token'); - return localStorage.getItem('token');
-- **Commit**: refactor(auth): use sessionStorage for token storage`
+- **Commit**: refactor(auth): use sessionStorage for token storage
+- **Diff**: - export function oldAPI() { ... } (entire function removed)
+- **Commit**: feat!: drop legacy API
+
+BREAKING CHANGE: oldAPI has been removed, use newAPI instead`
 
 	// YOUR RESPONSE - Output requirement
 	outputReq := `# YOUR RESPONSE

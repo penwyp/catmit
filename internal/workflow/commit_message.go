@@ -7,6 +7,7 @@ import (
 
 	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/errors"
+	tagging "github.com/penwyp/catmit/internal/tag"
 	"github.com/penwyp/catmit/pkg/gitinfo"
 	"go.uber.org/zap"
 )
@@ -62,7 +63,15 @@ func GenerateCommitMessage(ctx context.Context, deps *app.Dependencies, opts Com
 		select {
 		case content, ok := <-contentChan:
 			if !ok {
-				return strings.TrimSpace(fullMessage.String()), nil
+				raw := strings.TrimSpace(fullMessage.String())
+				if err := tagging.ValidateConventionalCommit(raw); err != nil {
+					repaired, repairErr := tagging.TryRepairCommitMessage(raw)
+					if repairErr != nil {
+						return "", errors.Wrap(errors.ErrTypeLLM, "LLM 输出的提交信息不符合 Conventional Commits 格式，请重试", err)
+					}
+					return repaired, nil
+				}
+				return raw, nil
 			}
 			fullMessage.WriteString(content)
 		case err := <-errChan:

@@ -18,9 +18,15 @@ const (
 )
 
 var (
-	versionPattern        = regexp.MustCompile(`^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
-	breakingHeaderPattern = regexp.MustCompile(`(?m)^[a-z]+(?:\([^)]+\))?!:`)
-	featureHeaderPattern  = regexp.MustCompile(`(?m)^feat(?:\([^)]+\))?:`)
+	versionPattern            = regexp.MustCompile(`^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
+	breakingHeaderPattern     = regexp.MustCompile(`(?m)^[a-z]+(?:\([^)]+\))?!:`)
+	featureHeaderPattern      = regexp.MustCompile(`(?m)^feat(?:\([^)]+\))?:`)
+	conventionalCommitPattern = regexp.MustCompile(`^[a-z]+(?:\([^)]*\))?!?: .+`)
+	validTypes                = map[string]bool{
+		"feat": true, "fix": true, "refactor": true, "chore": true,
+		"docs": true, "style": true, "test": true, "perf": true,
+		"ci": true, "build": true, "revert": true,
+	}
 )
 
 type Version struct {
@@ -113,18 +119,101 @@ func NormalizeBump(raw string) (Bump, error) {
 	}
 }
 
-func InferBump(messages []string) Bump {
+type BumpDetail struct {
+	Bump              Bump
+	TotalMessages     int
+	ConventionalCount int
+	HasFeature        bool
+	HasBreaking       bool
+}
+
+func (d BumpDetail) AllConventional() bool {
+	return d.TotalMessages > 0 && d.ConventionalCount == d.TotalMessages
+}
+
+func ValidateConventionalCommit(message string) error {
+	firstLine := strings.SplitN(strings.TrimSpace(message), "\n", 2)[0]
+	if firstLine == "" {
+		return fmt.Errorf("commit message is empty")
+	}
+	if !conventionalCommitPattern.MatchString(firstLine) {
+		return fmt.Errorf("first line does not match Conventional Commits format '<type>(<scope>): <subject>': %q", firstLine)
+	}
+	parts := strings.SplitN(firstLine, ":", 2)
+	typeWithScope := strings.TrimSpace(parts[0])
+	// Strip scope if present
+	typeOnly := typeWithScope
+	if idx := strings.Index(typeWithScope, "("); idx != -1 {
+		typeOnly = strings.TrimSpace(typeWithScope[:idx])
+	}
+	// Strip bang suffix
+	typeOnly = strings.TrimSuffix(typeOnly, "!")
+	if !validTypes[typeOnly] {
+		return fmt.Errorf("unsupported commit type %q in %q", typeOnly, firstLine)
+	}
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		return fmt.Errorf("missing subject after type prefix: %q", firstLine)
+	}
+	return nil
+}
+
+func TryRepairCommitMessage(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	lines := strings.Split(trimmed, "\n")
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if conventionalCommitPattern.MatchString(line) {
+			var result string
+			if i == 0 {
+				result = trimmed
+			} else {
+				rest := lines[i+1:]
+				// Skip leading empty lines
+				for len(rest) > 0 && strings.TrimSpace(rest[0]) == "" {
+					rest = rest[1:]
+				}
+				if len(rest) > 0 {
+					result = line + "\n\n" + strings.Join(rest, "\n")
+				} else {
+					result = line
+				}
+				result = strings.TrimSpace(result)
+			}
+			if err := ValidateConventionalCommit(result); err == nil {
+				return result, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no Conventional Commits header found in LLM output")
+}
+
+func InferBumpWithDetail(messages []string) BumpDetail {
+	detail := BumpDetail{
+		TotalMessages: len(messages),
+		Bump:          BumpPatch,
+	}
 	for _, message := range messages {
 		if hasBreakingChange(message) {
-			return BumpMajor
+			detail.HasBreaking = true
 		}
-	}
-	for _, message := range messages {
 		if featureHeaderPattern.MatchString(strings.TrimSpace(message)) {
-			return BumpMinor
+			detail.HasFeature = true
+		}
+		if ValidateConventionalCommit(message) == nil {
+			detail.ConventionalCount++
 		}
 	}
-	return BumpPatch
+	if detail.HasBreaking {
+		detail.Bump = BumpMajor
+	} else if detail.HasFeature {
+		detail.Bump = BumpMinor
+	}
+	return detail
+}
+
+func InferBump(messages []string) Bump {
+	return InferBumpWithDetail(messages).Bump
 }
 
 func hasBreakingChange(message string) bool {

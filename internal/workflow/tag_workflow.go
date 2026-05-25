@@ -30,6 +30,7 @@ type ReleasePlan struct {
 	NextTag            string
 	RequestedBump      tagging.Bump
 	ResolvedBump       tagging.Bump
+	BumpDetail         tagging.BumpDetail
 	ExplicitTag        bool
 	InitialTag         bool
 }
@@ -171,9 +172,11 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		)
 	}
 
+	bumpDetail := tagging.BumpDetail{}
 	resolvedBump := requestedBump
 	if requestedBump == tagging.BumpAuto {
-		resolvedBump = tagging.InferBump(messages)
+		bumpDetail = tagging.InferBumpWithDetail(messages)
+		resolvedBump = bumpDetail.Bump
 	}
 
 	nextVersion, initialTag, explicitTag, err := w.nextVersion(latestVersion, hasLatest, resolvedBump)
@@ -210,6 +213,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		NextTag:            nextTag,
 		RequestedBump:      requestedBump,
 		ResolvedBump:       resolvedBump,
+		BumpDetail:         bumpDetail,
 		ExplicitTag:        explicitTag,
 		InitialTag:         initialTag,
 	}, nil
@@ -518,6 +522,12 @@ func (w *TagWorkflow) printPlan(plan *ReleasePlan) {
 			fmt.Fprint(w.output, " (auto)")
 		}
 		fmt.Fprintln(w.output)
+		d := plan.BumpDetail
+		if d.TotalMessages > 0 && !d.AllConventional() {
+			nonConventional := d.TotalMessages - d.ConventionalCount
+			fmt.Fprintf(w.output, "  ⚠  %d/%d 条提交信息不符合 Conventional Commits 格式，bump 推断可能偏保守\n",
+				nonConventional, d.TotalMessages)
+		}
 	}
 	fmt.Fprintf(w.output, "  Next tag: %s\n", plan.NextTag)
 }
