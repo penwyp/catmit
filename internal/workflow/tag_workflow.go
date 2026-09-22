@@ -525,7 +525,7 @@ func (w *TagWorkflow) printPlan(plan *ReleasePlan) {
 		d := plan.BumpDetail
 		if d.TotalMessages > 0 && !d.AllConventional() {
 			nonConventional := d.TotalMessages - d.ConventionalCount
-			fmt.Fprintf(w.output, "  ⚠  %d/%d 条提交信息不符合 Conventional Commits 格式，bump 推断可能偏保守\n",
+			fmt.Fprintf(w.output, "  ⚠  %d/%d commit messages do not follow Conventional Commits; auto-bump may be too conservative\n",
 				nonConventional, d.TotalMessages)
 		}
 	}

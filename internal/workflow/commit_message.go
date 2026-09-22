@@ -67,7 +67,7 @@ func GenerateCommitMessage(ctx context.Context, deps *app.Dependencies, opts Com
 				if err := tagging.ValidateConventionalCommit(raw); err != nil {
 					repaired, repairErr := tagging.TryRepairCommitMessage(raw)
 					if repairErr != nil {
-						return "", errors.Wrap(errors.ErrTypeLLM, "LLM 输出的提交信息不符合 Conventional Commits 格式，请重试", err)
+						return "", errors.Wrap(errors.ErrTypeLLM, "LLM output does not match Conventional Commits format; retry or provide a seed message", err)
 					}
 					return repaired, nil
 				}
