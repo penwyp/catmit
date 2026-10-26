@@ -141,12 +141,10 @@ func run(cmd *cobra.Command, args []string) error {
 			errors.HandleFatal(err)
 		}
 		if errors.Is(err, gitinfo.ErrNoDiff) {
-			// Display the error message but exit with code 0 since it's not really an error
+			// Return the error so the CLI exits with code 1 and stops shell && chains.
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			handler := errors.NewHandler(false)
-			_ = handler.Handle(err)
-			return nil
+			return err
 		}
 
 		// Check error type to determine if help should be shown
