@@ -239,6 +239,37 @@ func TestDetector_CheckAuthStatus(t *testing.T) {
 			expectedError: false,
 		},
 		{
+			name:          "gf authenticated (zh)",
+			cliName:       "gf",
+			authCommand:   "auth",
+			authArgs:      []string{"whoami"},
+			mockOutput:    []byte("当前登录用户：penwu\n"),
+			expectedAuth:  true,
+			expectedUser:  "penwu",
+			expectedError: false,
+		},
+		{
+			name:          "gf authenticated (en)",
+			cliName:       "gf",
+			authCommand:   "auth",
+			authArgs:      []string{"whoami"},
+			mockOutput:    []byte("Logged in user: penwu\n"),
+			expectedAuth:  true,
+			expectedUser:  "penwu",
+			expectedError: false,
+		},
+		{
+			name:          "gf not logged in",
+			cliName:       "gf",
+			authCommand:   "auth",
+			authArgs:      []string{"whoami"},
+			mockOutput:    []byte("还未登录, 执行gf auth login进行登录\n"),
+			mockError:     fmt.Errorf("exit status 100"),
+			expectedAuth:  false,
+			expectedUser:  "",
+			expectedError: false,
+		},
+		{
 			name:          "Command execution error",
 			cliName:       "gh",
 			authCommand:   "auth",
@@ -338,6 +369,24 @@ func TestDetector_DetectCLI(t *testing.T) {
 				Installed:     true,
 				Version:       "0.9.2",
 				Authenticated: false,
+			},
+			expectedError: false,
+		},
+		{
+			name:     "Gongfeng CLI fully configured",
+			provider: "gongfeng",
+			setupMocks: func(m *MockCommandRunner) {
+				m.On("Run", mock.Anything, "gf", []string{"--version"}).
+					Return([]byte("@tencent/gongfeng-cli/0.25.3 darwin-arm64 node-v18.16.0"), nil)
+				m.On("Run", mock.Anything, "gf", []string{"auth", "whoami"}).
+					Return([]byte("当前登录用户：penwu"), nil)
+			},
+			expectedResult: CLIStatus{
+				Name:          "gf",
+				Installed:     true,
+				Version:       "0.25.3",
+				Authenticated: true,
+				Username:      "penwu",
 			},
 			expectedError: false,
 		},

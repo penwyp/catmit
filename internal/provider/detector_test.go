@@ -171,6 +171,11 @@ func TestDetectProviderFromHost(t *testing.T) {
 			expected: "bitbucket",
 		},
 		{
+			name:     "Tencent Gongfeng",
+			host:     "git.woa.com",
+			expected: "gongfeng",
+		},
+		{
 			name:     "Unknown host",
 			host:     "git.company.com",
 			expected: "unknown",

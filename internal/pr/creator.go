@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/penwyp/catmit/internal/cli"
@@ -64,6 +65,7 @@ type CommandBuilderInterface interface {
 	ParseGitHubPROutput(output string) (string, error)
 	ParseGiteaPROutput(output string) (string, error)
 	ParseGitLabMROutput(output string) (string, error)
+	ParseGongfengMROutput(output string) (string, error)
 	ParseGiteaErrorForPRInfo(errorOutput string, remoteHost string, owner string, repo string) (string, error)
 }
 
@@ -265,6 +267,15 @@ func (c *Creator) Create(ctx context.Context, options CreateOptions) (string, er
 		prURL, parseErr = c.commandBuilder.ParseGiteaPROutput(outputStr)
 	case "gitlab":
 		prURL, parseErr = c.commandBuilder.ParseGitLabMROutput(outputStr)
+	case "gongfeng":
+		prURL, parseErr = c.commandBuilder.ParseGongfengMROutput(outputStr)
+		// gf exits 0 even when it refuses to create the MR
+		if parseErr != nil && (strings.Contains(outputStr, "already exists") || strings.Contains(outputStr, "已存在")) {
+			return "", &ErrPRAlreadyExists{
+				URL: "",
+				err: errors.Wrapf(errors.ErrTypePR, "PR already exists", errors.New(errors.ErrTypePR, outputStr)),
+			}
+		}
 	}
 
 	// If command execution failed
@@ -521,6 +532,15 @@ func (c *Creator) CheckExists(ctx context.Context, options CreateOptions) (bool,
 				zap.String("base", baseBranch))
 		}
 		return exists, url, err
+	case "gongfeng":
+		exists, url, err := c.checkGongfengMRWithBase(ctx, currentBranch, baseBranch, remoteInfo)
+		if err != nil && c.logger != nil {
+			c.logger.Error("Gongfeng MR check failed",
+				zap.Error(err),
+				zap.String("branch", currentBranch),
+				zap.String("base", baseBranch))
+		}
+		return exists, url, err
 	case "gitea":
 		exists, url, err := c.checkGiteaPRWithBase(ctx, currentBranch, baseBranch, remoteInfo)
 		if err != nil && c.logger != nil {
@@ -687,7 +707,7 @@ func (c *Creator) filterCandidatePRs(candidates []CandidatePR, baseBranch string
 		case "github":
 			// GitHub uses uppercase "OPEN" for open PRs
 			isOpen = strings.ToUpper(candidate.State) == "OPEN"
-		case "gitlab":
+		case "gitlab", "gongfeng":
 			// GitLab uses lowercase "opened" for open MRs
 			isOpen = strings.ToLower(candidate.State) == "opened"
 		case "gitea":
@@ -882,6 +902,70 @@ func (c *Creator) checkGitLabMRWithBase(ctx context.Context, branch, baseBranch 
 	}
 
 	// Stage 2: Filter and validate candidates
+	return c.filterCandidatePRs(candidates, baseBranch)
+}
+
+// gongfengBranchLineRegex matches the "source -> target" line of `gf mr show`, which is prefixed
+// with "owner/repo : " for cross-project MRs
+var gongfengBranchLineRegex = regexp.MustCompile(`(?m)^(?:\S+ : )?(\S+) -> (\S+)\s*$`)
+
+// getGongfengCandidateMRs finds the open MR for the branch via `gf mr show`.
+// gf mr list --output json carries neither branches nor URLs, and show exits 0 when nothing is found,
+// so a missing MR URL in the output means there is no open MR.
+func (c *Creator) getGongfengCandidateMRs(ctx context.Context, branch string, remoteInfo provider.RemoteInfo) ([]CandidatePR, error) {
+	projectPath := fmt.Sprintf("%s/%s", remoteInfo.Owner, remoteInfo.Repo)
+	args := []string{"mr", "show", branch, "-R", projectPath}
+
+	if c.logger != nil {
+		c.logger.Debug("Getting Gongfeng candidate MRs",
+			zap.String("command", "gf "+strings.Join(args, " ")),
+			zap.String("branch", branch),
+			zap.String("repo", projectPath))
+	}
+
+	output, err := c.commandRunner.Run(ctx, "gf", args...)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Debug("Gongfeng MR show command failed", zap.Error(err))
+		}
+		return nil, err
+	}
+
+	outputStr := string(output)
+	mrURL := gongfengMRURLRegex.FindString(outputStr)
+	if mrURL == "" {
+		if c.logger != nil {
+			c.logger.Debug("No Gongfeng MR found for branch", zap.String("branch", branch))
+		}
+		return []CandidatePR{}, nil
+	}
+
+	candidate := CandidatePR{
+		URL:          mrURL,
+		State:        "opened",
+		SourceBranch: branch,
+		Provider:     "gongfeng",
+		RepoOwner:    remoteInfo.Owner,
+		RepoName:     remoteInfo.Repo,
+		Raw:          outputStr,
+	}
+	if idx := strings.LastIndex(mrURL, "/"); idx >= 0 {
+		candidate.ID = mrURL[idx+1:]
+	}
+	if m := gongfengBranchLineRegex.FindStringSubmatch(outputStr); len(m) == 3 {
+		candidate.SourceBranch = m[1]
+		candidate.TargetBranch = m[2]
+	}
+
+	return []CandidatePR{candidate}, nil
+}
+
+// checkGongfengMRWithBase checks if an open Gongfeng MR exists for the branch targeting a specific base branch
+func (c *Creator) checkGongfengMRWithBase(ctx context.Context, branch, baseBranch string, remoteInfo provider.RemoteInfo) (bool, string, error) {
+	candidates, err := c.getGongfengCandidateMRs(ctx, branch, remoteInfo)
+	if err != nil {
+		return false, "", err
+	}
 	return c.filterCandidatePRs(candidates, baseBranch)
 }
 

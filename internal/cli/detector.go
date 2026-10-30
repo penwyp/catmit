@@ -161,6 +161,20 @@ func (d *Detector) CheckAuthStatus(ctx context.Context, cliName, authCommand str
 		}
 	}
 
+	// gf (Gongfeng) CLI authentication check
+	if cliName == "gf" {
+		if err != nil {
+			// gf exits non-zero when not logged in; the message is localized
+			return false, "", nil
+		}
+		// "当前登录用户：name" / "Logged in user: name"
+		userPattern := regexp.MustCompile(`(?:当前登录用户|Logged in user)\s*[:：]\s*(\S+)`)
+		if matches := userPattern.FindStringSubmatch(outputStr); len(matches) > 1 {
+			return true, matches[1], nil
+		}
+		return false, "", nil
+	}
+
 	// glab CLI authentication check
 	if cliName == "glab" {
 		if err != nil && strings.Contains(outputStr, "No accounts configured") {
@@ -220,6 +234,12 @@ func (d *Detector) DetectCLI(ctx context.Context, provider string) (CLIStatus, e
 			authCmd:    "auth",
 			authArgs:   []string{"status"},
 		},
+		"gongfeng": {
+			name:       "gf",
+			versionCmd: "--version",
+			authCmd:    "auth",
+			authArgs:   []string{"whoami"},
+		},
 	}
 
 	config, exists := cliConfig[provider]
@@ -268,6 +288,9 @@ func (d *Detector) SuggestInstallCommand(cliName string) []string {
 		"tea": {
 			"go install gitea.com/gitea/tea@latest",
 			"https://gitea.com/gitea/tea",
+		},
+		"gf": {
+			"https://git.woa.com/help/menu/solutions/CLI/introduction.html",
 		},
 	}
 

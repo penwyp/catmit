@@ -47,6 +47,11 @@ var templatePaths = map[string][]string{
 		"PULL_REQUEST_TEMPLATE.md",
 		"pull_request_template.md",
 	},
+	"gongfeng": {
+		".gitlab/merge_request_templates/*.md",
+		".gitlab/merge_request_templates/Default.md",
+		".gitlab/merge_request_templates/default.md",
+	},
 	"bitbucket": {
 		".bitbucket/PULLREQUEST_TEMPLATE.md",
 		".bitbucket/pullrequest_template.md",

@@ -8,6 +8,9 @@ import (
 	"github.com/penwyp/catmit/internal/errors"
 )
 
+// gongfengMRURLRegex matches a Gongfeng MR URL, stopping before the ?ADTAG query gf appends
+var gongfengMRURLRegex = regexp.MustCompile(`https?://[^\s?\x1b]+/merge_requests/\d+`)
+
 // CommandBuilder is a builder for PR commands
 type CommandBuilder struct{}
 
@@ -25,6 +28,8 @@ func (b *CommandBuilder) BuildCommand(provider string, options PROptions) (strin
 		return b.BuildGiteaPRCommand(options)
 	case "gitlab":
 		return b.BuildGitLabMRCommand(options)
+	case "gongfeng":
+		return b.BuildGongfengMRCommand(options)
 	default:
 		return "", nil, errors.New(errors.ErrTypeProvider, fmt.Sprintf("unsupported provider: %s", provider)).WithSuggestion("Supported providers: GitHub, GitLab, Gitea, and Bitbucket")
 	}
@@ -237,6 +242,52 @@ func (b *CommandBuilder) BuildGitLabMRCommand(options PROptions) (string, []stri
 	args = append(args, "--remove-source-branch=false")
 
 	return "glab", args, nil
+}
+
+// BuildGongfengMRCommand builds the MR creation command for the Gongfeng CLI (gf)
+func (b *CommandBuilder) BuildGongfengMRCommand(options PROptions) (string, []string, error) {
+	if options.BaseBranch == "" {
+		return "", nil, errors.New(errors.ErrTypeValidation, "base branch is required").WithSuggestion("Use --pr-base parameter to specify the base branch")
+	}
+	if options.Draft {
+		return "", nil, errors.New(errors.ErrTypeValidation, "gf does not support draft merge requests").WithSuggestion("Re-run without --draft")
+	}
+
+	args := []string{"mr", "create"}
+
+	if options.TargetOwner != "" && options.TargetRepo != "" {
+		args = append(args, "-R", options.TargetOwner+"/"+options.TargetRepo)
+	}
+
+	args = append(args, "-T", options.BaseBranch)
+
+	if options.Title != "" {
+		args = append(args, "-t", options.Title)
+	}
+	if options.Body != "" {
+		args = append(args, "-d", options.Body)
+	}
+
+	if len(options.Reviewers) > 0 {
+		args = append(args, "-r", strings.Join(options.Reviewers, ","))
+	}
+
+	// gf only skips its interactive prompts when both title and description are given
+	// (otherwise it aborts without a TTY), so fall back to quick mode.
+	if options.Fill || options.Title == "" || options.Body == "" {
+		args = append(args, "-q")
+	}
+
+	return "gf", args, nil
+}
+
+// ParseGongfengMROutput parses the output of gf CLI to get the MR URL
+func (b *CommandBuilder) ParseGongfengMROutput(output string) (string, error) {
+	matches := gongfengMRURLRegex.FindString(output)
+	if matches != "" {
+		return matches, nil
+	}
+	return "", errors.New(errors.ErrTypePR, "no MR URL found in output")
 }
 
 // ParseGitLabMROutput parses the output of glab CLI to get the MR URL

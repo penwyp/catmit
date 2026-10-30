@@ -81,6 +81,9 @@ func (d *ConfigDetector) detectProviderFromHost(info *RemoteInfo) {
 	case "bitbucket.org", "www.bitbucket.org":
 		info.Provider = "bitbucket"
 		return
+	case "git.woa.com":
+		info.Provider = "gongfeng"
+		return
 	}
 
 	// Then check for common patterns
@@ -129,6 +132,8 @@ func getDefaultCLITool(provider string) string {
 		return "tea"
 	case "bitbucket":
 		return "bb" // Bitbucket CLI tool (if available)
+	case "gongfeng":
+		return "gf"
 	case "gogs":
 		return "" // No official CLI tool for Gogs
 	default:

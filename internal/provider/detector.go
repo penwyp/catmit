@@ -104,6 +104,8 @@ func detectProviderFromHost(host string) string {
 		return "gitlab"
 	case strings.Contains(host, "bitbucket.org"):
 		return "bitbucket"
+	case strings.EqualFold(host, "git.woa.com"):
+		return "gongfeng"
 	default:
 		return "unknown"
 	}

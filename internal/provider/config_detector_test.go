@@ -186,6 +186,23 @@ func TestConfigDetector_DetectFromRemote(t *testing.T) {
 			},
 		},
 		{
+			name:      "Pattern matching for Tencent Gongfeng",
+			remoteURL: "git@git.woa.com:storage-hub/storage-aiops.git",
+			configSetup: func(m *MockConfigManager) {
+				m.On("Load").Return(&config.Config{}, nil)
+			},
+			probeSetup: func(m *MockHTTPProber) {
+				// Should not be called when pattern matches
+			},
+			expectedInfo: RemoteInfo{
+				Provider: "gongfeng",
+				Host:     "git.woa.com",
+				Owner:    "storage-hub",
+				Repo:     "storage-aiops",
+				Protocol: "ssh",
+			},
+		},
+		{
 			name:      "HTTP probe detects Gitea for unknown host",
 			remoteURL: "https://git.unknown.com/org/project.git",
 			configSetup: func(m *MockConfigManager) {

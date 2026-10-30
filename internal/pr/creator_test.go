@@ -62,6 +62,11 @@ func (m *MockCommandBuilder) ParseGitLabMROutput(output string) (string, error) 
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockCommandBuilder) ParseGongfengMROutput(output string) (string, error) {
+	args := m.Called(output)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockCommandBuilder) ParseGiteaErrorForPRInfo(errorOutput string, remoteHost string, owner string, repo string) (string, error) {
 	args := m.Called(errorOutput, remoteHost, owner, repo)
 	return args.String(0), args.Error(1)
