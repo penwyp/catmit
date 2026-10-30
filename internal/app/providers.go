@@ -193,12 +193,14 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 		return errors.Wrapf(errors.ErrTypeGit, "failed to get current branch name\nOutput: %s", err, string(branchOutput))
 	}
 	branchName := strings.TrimSpace(string(branchOutput))
-	
-	// 执行 git push origin <branch_name>
+
+	// 执行 git push origin <branch_name>；继承标准输出/错误，使 git（及 pre-push/post-receive 等 hook）的
+	// 实时输出（如远端提示、CI 链接）直接显示给用户，而不是被 CombinedOutput 吞掉直到失败才打印。
 	cmd := exec.CommandContext(ctx, "git", "push", "origin", branchName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(errors.ErrTypeGit, "git push failed", err)
 	}
 	return nil
 }
