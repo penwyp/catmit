@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+
+	"github.com/penwyp/catmit/internal/git"
 )
 
 // CommitStage represents the stage of commit/push operation
@@ -45,6 +47,25 @@ type commitDoneMsg struct {
 
 type pushDoneMsg struct {
 	err error
+	// mrLinks holds the merge request links announced by the remote, which is
+	// only populated for Tencent Gongfeng (git.woa.com) remotes.
+	mrLinks []git.MRLink
+}
+
+// mrLinkProvider is implemented by committers that can report the merge
+// request links announced by the remote during the last push.
+type mrLinkProvider interface {
+	LastPushMRLinks() []git.MRLink
+}
+
+// collectMRLinks returns the merge request links reported by the committer,
+// if it supports them.
+func collectMRLinks(committer commitInterface) []git.MRLink {
+	provider, ok := committer.(mrLinkProvider)
+	if !ok {
+		return nil
+	}
+	return provider.LastPushMRLinks()
 }
 
 type finalTimeoutMsg struct{}

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/pr"
 	"github.com/penwyp/catmit/pkg/gitinfo"
 )
@@ -34,6 +35,10 @@ type CommitWorkflowModel struct {
 	prPreview     tea.Model // Changed to interface to support enhanced model
 	prPreviewData PRPreviewData
 	prURL         string
+
+	// mrLinks holds the merge request links announced by the remote during the
+	// last push (only reported by Tencent Gongfeng remotes, on push only).
+	mrLinks []git.MRLink
 
 	// Template related
 	useTemplate    bool
@@ -183,6 +188,7 @@ func (m *CommitWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 		// Push succeeded
+		m.mrLinks = msg.mrLinks
 		m.commitStage = CommitStagePushed
 		if m.createPR {
 			return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
@@ -408,6 +414,7 @@ func (m *CommitWorkflowModel) renderCommitContent() string {
 		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
 		if m.enablePush {
 			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			m.renderPushedMRLinks(&content, descStyle)
 		}
 		if m.createPR {
 			content.WriteString("\n" + m.spinner.View() + " " + progressStyle.Render("Preparing to create PR..."))
@@ -416,12 +423,14 @@ func (m *CommitWorkflowModel) renderCommitContent() string {
 		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
 		if m.enablePush {
 			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			m.renderPushedMRLinks(&content, descStyle)
 		}
 		content.WriteString("\n" + m.spinner.View() + " " + progressStyle.Render("Creating pull request..."))
 	case CommitStagePRFailed:
 		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
 		if m.enablePush {
 			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			m.renderPushedMRLinks(&content, descStyle)
 		}
 		if m.createPR {
 			errorText := "Pull request creation failed"
@@ -437,6 +446,7 @@ func (m *CommitWorkflowModel) renderCommitContent() string {
 		content.WriteString("✓ " + successStyle.Render("Committed successfully"))
 		if m.enablePush {
 			content.WriteString("\n✓ " + successStyle.Render("Pushed successfully"))
+			m.renderPushedMRLinks(&content, descStyle)
 		}
 		if m.createPR {
 			content.WriteString("\n✓ " + successStyle.Render("Pull request created successfully"))
@@ -448,6 +458,20 @@ func (m *CommitWorkflowModel) renderCommitContent() string {
 	}
 
 	return content.String()
+}
+
+// renderPushedMRLinks renders the merge request links announced by the remote
+// right after a successful push. Only Tencent Gongfeng (git.woa.com) reports
+// them, so for every other remote this renders nothing.
+func (m *CommitWorkflowModel) renderPushedMRLinks(content *strings.Builder, style lipgloss.Style) {
+	if len(m.mrLinks) == 0 {
+		return
+	}
+
+	content.WriteString("\n\n" + style.Render("Merge request links:"))
+	for _, link := range m.mrLinks {
+		content.WriteString("\n  " + style.Render(link.Label+": "+link.URL))
+	}
 }
 
 // Override phase title for commit workflow
@@ -576,7 +600,7 @@ func (m *CommitWorkflowModel) startCommit() tea.Cmd {
 func (m *CommitWorkflowModel) startPush() tea.Cmd {
 	return func() tea.Msg {
 		err := m.committer.Push(m.ctx)
-		return pushDoneMsg{err: err}
+		return pushDoneMsg{err: err, mrLinks: collectMRLinks(m.committer)}
 	}
 }
 

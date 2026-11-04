@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/ui"
 	"github.com/penwyp/catmit/pkg/gitinfo"
 	"github.com/penwyp/catmit/pkg/output"
@@ -114,6 +115,9 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 			return errors.Wrap(errors.ErrTypeGit, "push failed", err)
 		}
 		fmt.Fprintln(w.output, output.RenderStatusBar("Pushed successfully", true))
+		// For Tencent Gongfeng (git.woa.com) remotes, echo the merge request
+		// links the remote announced, so they are easy to grab from the terminal.
+		printMRLinks(w.output, committer)
 	}
 
 	return nil
@@ -179,7 +183,10 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 	if done {
 		switch decision {
 		case ui.DecisionAccept:
-			// MainModel has already handled the staging, commit, and push operations
+			// MainModel has already handled the staging, commit, and push operations.
+			// For git.woa.com remotes, also echo the merge request links outside the
+			// TUI so they stay visible (and copyable) in the terminal.
+			printMRLinks(w.output, committer)
 			return nil
 		case ui.DecisionCancel:
 			fmt.Fprintln(w.output, "Canceled.")
@@ -187,6 +194,25 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// mrLinkProvider is implemented by committers that can report the merge
+// request links announced by the remote during the last push.
+type mrLinkProvider interface {
+	LastPushMRLinks() []git.MRLink
+}
+
+// printMRLinks prints the merge request links reported by the committer after a
+// successful push. Only Tencent Gongfeng (git.woa.com) remotes report them.
+func printMRLinks(out io.Writer, committer interface{}) {
+	provider, ok := committer.(mrLinkProvider)
+	if !ok {
+		return
+	}
+
+	if block := git.FormatMRLinks(provider.LastPushMRLinks()); block != "" {
+		_, _ = fmt.Fprint(out, block)
+	}
 }
 
 // generateCommitMessage generates a commit message using the LLM

@@ -211,6 +211,9 @@ func (w *PRWorkflow) runAutomatic(ctx context.Context) error {
 			return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 		}
 		fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
+		// For Tencent Gongfeng (git.woa.com) remotes, echo the merge request
+		// links the remote announced, so they are easy to grab from the terminal.
+		printMRLinks(w.output, committer)
 	}
 
 	// Show PR preview
@@ -285,6 +288,10 @@ func (w *PRWorkflow) runInteractive(ctx context.Context) error {
 	if _, ok := finalModel.(*ui.PRWorkflowModel); !ok {
 		return errors.Newf(errors.ErrTypeUnknown, "internal error: unexpected model type, got %T", finalModel)
 	}
+
+	// For git.woa.com remotes, echo the merge request links the remote printed
+	// during the push, so they stay visible outside the TUI.
+	printMRLinks(w.output, committer)
 
 	return nil
 }

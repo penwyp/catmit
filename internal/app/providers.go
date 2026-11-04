@@ -116,6 +116,9 @@ type defaultCommitter struct {
 	prBase     string
 	prDraft    bool
 	prTemplate bool
+
+	// MR links announced by the remote during the last push (git.woa.com only).
+	mrLinks []git.MRLink
 }
 
 // newDefaultCommitter creates a new defaultCommitter with PR support
@@ -196,13 +199,31 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 
 	// 执行 git push origin <branch_name>；继承标准输出/错误，使 git（及 pre-push/post-receive 等 hook）的
 	// 实时输出（如远端提示、CI 链接）直接显示给用户，而不是被 CombinedOutput 吞掉直到失败才打印。
-	cmd := exec.CommandContext(ctx, "git", "push", "origin", branchName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// 输出同时被捕获，用于在推送成功后提取远端给出的建 MR 链接。
+	output, err := git.RunStreaming(ctx, "git", "push", "origin", branchName)
+	if err != nil {
 		return errors.Wrap(errors.ErrTypeGit, "git push failed", err)
 	}
+
+	// 工蜂（git.woa.com）的 pre-receive 会在推送成功后打印 TAPD / TGIT 建 MR 链接，
+	// 这里把它们提取出来，便于调用方做额外输出。
+	d.mrLinks = git.MRLinksFromPush(d.pushRemoteURL(ctx), output)
 	return nil
+}
+
+// pushRemoteURL returns the URL of the remote used for pushing.
+func (d *defaultCommitter) pushRemoteURL(ctx context.Context) string {
+	output, err := exec.CommandContext(ctx, "git", "remote", "get-url", "origin").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// LastPushMRLinks returns the merge request links announced by the remote
+// during the last successful push (only populated for git.woa.com remotes).
+func (d *defaultCommitter) LastPushMRLinks() []git.MRLink {
+	return d.mrLinks
 }
 
 func (d *defaultCommitter) StageAll(ctx context.Context) error {

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/pr"
 )
 
@@ -30,6 +31,10 @@ type PRWorkflowModel struct {
 	prPreview     tea.Model // Changed to interface to support enhanced model
 	prPreviewData PRPreviewData
 	prURL         string
+
+	// mrLinks holds the merge request links announced by the remote during the
+	// last push (only reported by Tencent Gongfeng remotes).
+	mrLinks []git.MRLink
 
 	// Template related
 	useTemplate    bool
@@ -152,6 +157,7 @@ func (m *PRWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 		// Push succeeded, create PR
+		m.mrLinks = msg.mrLinks
 		m.commitStage = CommitStagePushed
 		return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
 			return delayedCreatePRMsg{}
@@ -371,6 +377,7 @@ func (m *PRWorkflowModel) renderCommitContent() string {
 		content.WriteString("✗ " + errorStyle.Render(errorText))
 	case CommitStagePushed:
 		content.WriteString("✓ " + successStyle.Render("Pushed successfully"))
+		m.renderPushedMRLinks(&content, descStyle)
 		content.WriteString("\n" + m.spinner.View() + " " + progressStyle.Render("Preparing to create PR..."))
 	case CommitStageCreatingPR:
 		content.WriteString(m.spinner.View() + " " + progressStyle.Render("Creating pull request..."))
@@ -392,6 +399,19 @@ func (m *PRWorkflowModel) renderCommitContent() string {
 	}
 
 	return content.String()
+}
+
+// renderPushedMRLinks renders the merge request links announced by the remote
+// during the push. Only Tencent Gongfeng (git.woa.com) reports them.
+func (m *PRWorkflowModel) renderPushedMRLinks(content *strings.Builder, style lipgloss.Style) {
+	if len(m.mrLinks) == 0 {
+		return
+	}
+
+	content.WriteString("\n\n" + style.Render("Merge request links:"))
+	for _, link := range m.mrLinks {
+		content.WriteString("\n  " + style.Render(link.Label+": "+link.URL))
+	}
 }
 
 // Override phase title for PR workflow
@@ -559,7 +579,7 @@ func (m *PRWorkflowModel) buildPRPromptCmd() tea.Cmd {
 func (m *PRWorkflowModel) startPush() tea.Cmd {
 	return func() tea.Msg {
 		err := m.committer.Push(m.ctx)
-		return pushDoneMsg{err: err}
+		return pushDoneMsg{err: err, mrLinks: collectMRLinks(m.committer)}
 	}
 }
 
