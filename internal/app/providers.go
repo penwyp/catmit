@@ -189,6 +189,8 @@ func (d *defaultCommitter) Commit(ctx context.Context, message string) error {
 }
 
 func (d *defaultCommitter) Push(ctx context.Context) error {
+	d.mrLinks = nil
+
 	// 获取当前分支名
 	branchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	branchOutput, err := branchCmd.CombinedOutput()
@@ -197,23 +199,21 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 	}
 	branchName := strings.TrimSpace(string(branchOutput))
 
-	// 执行 git push origin <branch_name>；继承标准输出/错误，使 git（及 pre-push/post-receive 等 hook）的
-	// 实时输出（如远端提示、CI 链接）直接显示给用户，而不是被 CombinedOutput 吞掉直到失败才打印。
-	// 输出同时被捕获，用于在推送成功后提取远端给出的建 MR 链接。
-	output, err := git.RunStreaming(ctx, "git", "push", "origin", branchName)
+	// Capture push output without printing raw progress or remote hook messages.
+	output, err := exec.CommandContext(ctx, "git", "push", "origin", branchName).CombinedOutput()
 	if err != nil {
-		return errors.Wrap(errors.ErrTypeGit, "git push failed", err)
+		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
 	}
 
 	// 工蜂（git.woa.com）的 pre-receive 会在推送成功后打印 TAPD / TGIT 建 MR 链接，
 	// 这里把它们提取出来，便于调用方做额外输出。
-	d.mrLinks = git.MRLinksFromPush(d.pushRemoteURL(ctx), output)
+	d.mrLinks = git.MRLinksFromPush(d.pushRemoteURL(ctx), string(output))
 	return nil
 }
 
 // pushRemoteURL returns the URL of the remote used for pushing.
 func (d *defaultCommitter) pushRemoteURL(ctx context.Context) string {
-	output, err := exec.CommandContext(ctx, "git", "remote", "get-url", "origin").CombinedOutput()
+	output, err := exec.CommandContext(ctx, "git", "remote", "get-url", "--push", "origin").CombinedOutput()
 	if err != nil {
 		return ""
 	}

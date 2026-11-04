@@ -1,11 +1,8 @@
 package git
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"os/exec"
 
 	"go.uber.org/zap"
@@ -16,7 +13,6 @@ type realRunner struct {
 	debug  bool
 	logger *zap.Logger
 }
-
 
 // NewRunnerWithLogger creates a new git command runner with logger
 func NewRunnerWithLogger(debug bool, logger *zap.Logger) Runner {
@@ -46,19 +42,4 @@ func (r *realRunner) Run(ctx context.Context, name string, args ...string) (stri
 			}()))
 	}
 	return string(output), err
-}
-
-// RunStreaming executes a command, streams its combined output to the terminal
-// in real time and returns everything that was printed. Streaming keeps the
-// live feedback of long running commands (progress, remote hooks, CI links)
-// while still letting callers inspect the output afterwards.
-func RunStreaming(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	var buf bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &buf)
-
-	err := cmd.Run()
-	return buf.String(), err
 }

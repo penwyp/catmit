@@ -58,11 +58,9 @@ func HostFromRemoteURL(remoteURL string) string {
 	return host
 }
 
-// IsGongfengHost reports whether the host belongs to Tencent Gongfeng.
+// IsGongfengHost reports whether the host is exactly git.woa.com.
 func IsGongfengHost(host string) bool {
-	h := strings.ToLower(strings.TrimSpace(host))
-	h = strings.TrimPrefix(h, "www.")
-	return h == GongfengHost || strings.HasSuffix(h, "."+GongfengHost)
+	return strings.EqualFold(strings.TrimSpace(host), GongfengHost)
 }
 
 // IsGongfengRemote reports whether the remote URL points at Tencent Gongfeng.

@@ -53,7 +53,9 @@ func TestHostFromRemoteURL(t *testing.T) {
 
 func TestIsGongfengRemote(t *testing.T) {
 	assert.True(t, IsGongfengRemote("git@git.woa.com:nosql/oss_backend.git"))
-	assert.True(t, IsGongfengRemote("https://www.git.woa.com/nosql/oss_backend.git"))
+	assert.True(t, IsGongfengRemote("https://Git.WOA.com/nosql/oss_backend.git"))
+	assert.False(t, IsGongfengRemote("https://www.git.woa.com/nosql/oss_backend.git"))
+	assert.False(t, IsGongfengRemote("https://other.git.woa.com/nosql/oss_backend.git"))
 	assert.False(t, IsGongfengRemote("git@github.com:penwyp/catmit.git"))
 	assert.False(t, IsGongfengRemote("git@notgit.woa.com:x/y.git"))
 	assert.False(t, IsGongfengRemote(""))
@@ -113,9 +115,11 @@ func TestMRLinksFromPush(t *testing.T) {
 
 	// Any other remote: no links, even if the output contains URLs.
 	assert.Empty(t, MRLinksFromPush("git@github.com:penwyp/catmit.git", gongfengPushOutput))
+	assert.Empty(t, MRLinksFromPush("git@other.git.woa.com:nosql/oss_backend.git", gongfengPushOutput))
 
 	// Unknown remote URL: fall back to the destination reported by git.
 	assert.Len(t, MRLinksFromPush("", gongfengPushOutput), 2)
+	assert.Empty(t, MRLinksFromPush("", strings.ReplaceAll(gongfengPushOutput, "git.woa.com", "other.git.woa.com")))
 }
 
 func TestFormatMRLinks(t *testing.T) {
