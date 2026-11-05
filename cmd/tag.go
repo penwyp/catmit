@@ -18,13 +18,22 @@ func newTagCommand() *cobra.Command {
 	var options workflow.TagOptions
 	var debug bool
 	cmd := &cobra.Command{
-		Use:   "tag",
-		Short: "Create and push a semantic version tag without an LLM",
+		Use:          "tag",
+		Short:        "Calculate or publish a semantic version tag without an LLM",
+		SilenceUsage: true,
 		Long: `Create and push an annotated semantic version tag for committed code.
 
 All behavior is controlled by command-line flags. No project configuration,
 LLM configuration, API key, staging or automatic commit is used. The worktree
-must be clean. The current branch is pushed first only when needed.
+must be clean when publishing. The current branch is pushed first only when needed.
+
+--print calculates the next version and writes ONLY that version plus a newline
+to stdout. No confirmation, commit, tag creation or push occurs. Diagnostics
+(including --debug) go to stderr. Detached HEAD and dirty worktrees are allowed;
+only committed history is considered. Remote history is still fetched, so Git
+read access and full history are required. --print conflicts with --dry-run.
+Printing does not reserve a version or advance the counter: repeated calls can
+produce the same version (especially with --notimestamp or within one second).
 
 Default: a dev prerelease with a counter and an Asia/Shanghai (UTC+8) timestamp,
 for example v1.2.4-dev.1+20261105T153000UTC8. --notimestamp removes only the
@@ -65,6 +74,9 @@ are mutually exclusive. --tag cannot be combined with naming flags.`,
   # Preview the next tag (fetches Git refs, but does not commit, tag or push)
   catmit tag --dry-run
 
+  # Capture the next version for a pipeline without publishing it
+  VERSION=$(catmit tag --print)
+
   # Counter-only prerelease
   catmit tag --notimestamp
 
@@ -94,6 +106,7 @@ are mutually exclusive. --tag cannot be combined with naming flags.`,
 	flags := cmd.Flags()
 	flags.BoolVar(&debug, "debug", false, "enable Git debug output")
 	flags.BoolVar(&options.DryRun, "dry-run", false, "preview without creating a tag or pushing")
+	flags.BoolVar(&options.Print, "print", false, "print only the next version; never create or push a tag")
 	flags.BoolVarP(&options.Yes, "yes", "y", false, "skip confirmation")
 	flags.IntVarP(&options.Timeout, "timeout", "t", 30, "timeout per remote Git operation in seconds")
 	flags.StringVarP(&options.Remote, "remote", "r", "origin", "remote to inspect and push to")
@@ -107,6 +120,7 @@ are mutually exclusive. --tag cannot be combined with naming flags.`,
 	flags.StringVar(&options.Timezone, "timezone", "Asia/Shanghai", "timestamp timezone: UTC or an IANA name")
 	cmd.MarkFlagsMutuallyExclusive("pre", "release", "tag")
 	cmd.MarkFlagsMutuallyExclusive("timezone", "notimestamp")
+	cmd.MarkFlagsMutuallyExclusive("print", "dry-run")
 	for _, flag := range []string{"bump", "initial", "notimestamp", "timezone"} {
 		cmd.MarkFlagsMutuallyExclusive("tag", flag)
 	}
@@ -118,7 +132,11 @@ func runTag(cmd *cobra.Command, options workflow.TagOptions, debug bool) error {
 	if err := options.Validate(); err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "invalid tag options", err)
 	}
-	appLogger, err := logger.New(debug)
+	newLogger := logger.New
+	if options.Print {
+		newLogger = logger.NewStderr
+	}
+	appLogger, err := newLogger(debug)
 	if err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to initialize logger", err)
 	}

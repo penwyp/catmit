@@ -55,6 +55,15 @@ func (l *zapLogger) Errorf(template string, args ...interface{}) {
 // New creates a new zap logger configured for console output
 // with line numbers and no timestamps.
 func New(debug bool) (*zap.Logger, error) {
+	return newLogger(debug, "stdout")
+}
+
+// NewStderr keeps diagnostics out of machine-readable stdout.
+func NewStderr(debug bool) (*zap.Logger, error) {
+	return newLogger(debug, "stderr")
+}
+
+func newLogger(debug bool, outputPath string) (*zap.Logger, error) {
 	level := zapcore.InfoLevel
 	if debug {
 		level = zapcore.DebugLevel
@@ -76,7 +85,7 @@ func New(debug bool) (*zap.Logger, error) {
 		Development:       debug,
 		Encoding:          "console", // Console format instead of JSON
 		EncoderConfig:     encoderConfig,
-		OutputPaths:       []string{"stdout"},
+		OutputPaths:       []string{outputPath},
 		ErrorOutputPaths:  []string{"stderr"},
 		DisableCaller:     false,  // Enable caller info for line numbers
 		DisableStacktrace: !debug, // Only show stack traces in debug mode

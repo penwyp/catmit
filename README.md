@@ -148,7 +148,7 @@ $ catmit squash-history
 
 ### Semantic Version Tags
 
-`catmit tag` creates and pushes annotated tags for committed code using only Git. It never calls an LLM, reads project/LLM configuration, stages files, or creates commits. No API key is required; the worktree must be clean.
+`catmit tag` creates and pushes annotated tags for committed code using only Git. It never calls an LLM, reads project/LLM configuration, stages files, or creates commits. No API key is required; the worktree must be clean when publishing.
 
 ```bash
 # Default dev prerelease, UTC+8: v1.2.4-dev.1+20261105T153000UTC8
@@ -159,6 +159,9 @@ catmit tag --help
 
 # Preview (fetches refs, but does not commit, tag or push)
 catmit tag --dry-run
+
+# Capture only the next version, without creating or pushing a tag
+version="$(catmit tag --print)"
 
 # Counter-only prerelease: v1.2.4-dev.2
 catmit tag --notimestamp
@@ -198,6 +201,24 @@ catmit tag --remote upstream --yes
 - `--pre`, `--release` and `--tag` are mutually exclusive. `--tag` also conflicts with `--bump`, `--initial`, `--notimestamp` and `--timezone`.
 - Behavior is controlled exclusively by CLI flags. The previous `tag [SEED_TEXT]`, `--seed`, `--lang` and `--stage-all` have been removed; commit your changes first.
 
+
+**Pipeline output:** `--print` writes exactly one version and a newline to stdout. Errors and `--debug` diagnostics go to stderr; failures exit nonzero. It never prompts, commits, creates tags or pushes. Detached HEAD and dirty worktrees are allowed; only committed history is considered. Remote read access is still required to fetch tag objects (without creating local tags). Shallow clones must first fetch full history, e.g. `git fetch --unshallow --no-tags origin`. `--print` conflicts with `--dry-run` and otherwise accepts the same version/timezone flags.
+
+Printing neither reserves a version nor advances its counter, so repeated calls can produce the same version, especially within one second or with `--notimestamp`. The usual bump rules still apply, including errors for non-Conventional Commits in auto mode or no new commits since the latest stable release.
+
+Build catmit on the CI worker with `go build -o /absolute/path/to/catmit .` in its source directory, then run the binary from the business repository. For example:
+
+```bash
+set -e
+# Run from the business repository, using the already compiled binary.
+if [ -z "${ZHIYAN_PKG_VERSION:-}" ]; then
+    ZHIYAN_PKG_VERSION="$(/absolute/path/to/catmit tag --print)"
+fi
+export ZHIYAN_PKG_VERSION
+# BK-CI Shell steps: propagate the value to subsequent pipeline steps.
+setEnv "ZHIYAN_PKG_VERSION" "$ZHIYAN_PKG_VERSION"
+sh build.sh
+```
 
 For catmit itself, GoReleaser marks prereleases automatically and skips Homebrew updates for them.
 

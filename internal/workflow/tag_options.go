@@ -12,6 +12,7 @@ import (
 // TagOptions are supplied exclusively by CLI flags, never a config file or env.
 type TagOptions struct {
 	DryRun         bool
+	Print          bool
 	Yes            bool
 	Timeout        int
 	Remote         string
@@ -25,6 +26,9 @@ type TagOptions struct {
 }
 
 func (o TagOptions) Validate() error {
+	if o.Print && o.DryRun {
+		return fmt.Errorf("--print and --dry-run are mutually exclusive")
+	}
 	if o.Timeout <= 0 {
 		return fmt.Errorf("timeout must be greater than 0")
 	}

@@ -21,7 +21,7 @@ func TestTagCommandHelp(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--help"})
 	require.NoError(t, cmd.Execute())
-	for _, text := range []string{"--notimestamp", "--timezone", "--release", "--pre", "--help", "Increment rules:", "Asia/Shanghai", "UTC8", "No LLM", "same tested commit", "counter", "No project configuration"} {
+	for _, text := range []string{"--print", "--notimestamp", "--timezone", "--release", "--pre", "--help", "Increment rules:", "Asia/Shanghai", "UTC8", "No LLM", "same tested commit", "counter", "No project configuration"} {
 		assert.Contains(t, out.String(), text)
 	}
 	for _, removed := range []string{"seed", "lang", "stage-all", "timestamp", "config"} {
@@ -122,4 +122,88 @@ func TestTagCommandUsesOnlyCLIWithoutLLM(t *testing.T) {
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"--yes"})
 	require.ErrorContains(t, cmd.Execute(), "uncommitted changes")
+}
+
+// Reject every operation except those needed for version calculation.
+type printVersionRunner struct {
+	shallow bool
+	fail    bool
+}
+
+func (r printVersionRunner) Run(_ context.Context, name string, args ...string) (string, error) {
+	if r.fail {
+		return "", fmt.Errorf("remote read failed")
+	}
+	if name != "git" {
+		return "", fmt.Errorf("unexpected executable: %s", name)
+	}
+	switch strings.Join(args, " ") {
+	case "rev-parse --git-dir":
+		return ".git", nil
+	case "rev-parse --is-shallow-repository":
+		if r.shallow {
+			return "true", nil
+		}
+		return "false", nil
+	case "rev-parse HEAD":
+		return "abc123", nil
+	case "ls-remote --tags --refs origin":
+		return "", nil
+	case "log --format=%B%x00 abc123":
+		return "initial commit", nil
+	default:
+		return "", fmt.Errorf("unexpected publishing operation: %v", args)
+	}
+}
+
+func TestTagPrintOutputContract(t *testing.T) {
+	previous := testDeps
+	t.Cleanup(func() { testDeps = previous })
+	testDeps = &app.Dependencies{GitRunnerFunc: func() git.Runner { return printVersionRunner{} }}
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--print"}, `^v0\.1\.0-dev\.1\+[0-9]{8}T[0-9]{6}UTC8\n$`},
+		{[]string{"--print", "--notimestamp", "--yes"}, `^v0\.1\.0-dev\.1\n$`},
+		{[]string{"--print", "--pre", "rc", "--notimestamp"}, `^v0\.1\.0-rc\.1\n$`},
+		{[]string{"--print", "--release"}, `^v0\.1\.0\n$`},
+		{[]string{"--print", "--timezone", "UTC", "--debug"}, `^v0\.1\.0-dev\.1\+[0-9]{8}T[0-9]{6}Z\n$`},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			cmd := newTagCommand()
+			var stdout, stderr bytes.Buffer
+			cmd.SetOut(&stdout)
+			cmd.SetErr(&stderr)
+			cmd.SetArgs(tt.args)
+			require.NoError(t, cmd.Execute())
+			assert.Regexp(t, tt.want, stdout.String())
+			assert.Empty(t, stderr.String())
+		})
+	}
+}
+
+func TestTagPrintErrorsLeaveStdoutEmpty(t *testing.T) {
+	previous := testDeps
+	t.Cleanup(func() { testDeps = previous })
+	for _, tt := range []struct {
+		args   []string
+		runner printVersionRunner
+	}{
+		{args: []string{"--print", "--dry-run"}},
+		{args: []string{"--print", "--timezone", "Unknown/Zone"}},
+		{args: []string{"--print", "--unknown"}},
+		{args: []string{"--print"}, runner: printVersionRunner{shallow: true}},
+		{args: []string{"--print"}, runner: printVersionRunner{fail: true}},
+	} {
+		testDeps = &app.Dependencies{GitRunnerFunc: func() git.Runner { return tt.runner }}
+		cmd := newTagCommand()
+		var stdout, stderr bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetErr(&stderr)
+		cmd.SetArgs(tt.args)
+		require.Error(t, cmd.Execute())
+		assert.Empty(t, stdout.String(), "%v", tt.args)
+		assert.NotEmpty(t, stderr.String())
+	}
 }

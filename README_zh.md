@@ -370,7 +370,7 @@ $ catmit squash-history
 
 ### 语义化版本标签
 
-`catmit tag` 只给已提交代码创建并推送 annotated tag，全程不调用 LLM，也不读取项目配置文件或 LLM 配置。不需要 API Key；工作区必须干净，不会自动暂存或提交。
+`catmit tag` 只给已提交代码创建并推送 annotated tag，全程不调用 LLM，也不读取项目配置文件或 LLM 配置。不需要 API Key；实际打 tag 时工作区必须干净，不会自动暂存或提交。
 
 ```bash
 # 默认 dev 预发布，带东八区时间：v1.2.4-dev.1+20261105T153000UTC8
@@ -381,6 +381,9 @@ catmit tag --help
 
 # 预览（会读取/获取 Git 引用，不创建提交、tag 或推送）
 catmit tag --dry-run
+
+# 只输出一行版本号，便于注入流水线变量，不创建或推送 tag
+version="$(catmit tag --print)"
 
 # 不带时间戳，仍递增预发布序号：v1.2.4-dev.2
 catmit tag --notimestamp
@@ -422,6 +425,40 @@ catmit tag --remote upstream --yes
 - `--pre`、`--release`、`--tag` 互斥。`--tag` 也不能与 `--bump`、`--initial`、`--notimestamp`、`--timezone` 混用。
 - 所有行为只通过命令行参数控制。原 `tag [SEED_TEXT]`、`--seed`、`--lang`、`--stage-all` 已移除；请先自行完成提交。
 
+
+**流水线仅计算版本：** `--print` 成功时 stdout 只有版本号及换行，错误和 `--debug` 日志进入 stderr，失败返回非零退出码。它不会确认、提交、创建或推送 tag，允许 detached HEAD 和脏工作区，只根据已提交的历史计算。仍需 Git 远程读取权限，会获取远程 tag 对象，但不创建本地 tag；浅克隆需先执行 `git fetch --unshallow --no-tags origin`。它与 `--dry-run` 互斥，其他版本／时区参数照常使用。
+
+只输出不会保留版本或推进序号，因此重复运行可能产生同一版本（尤其是同秒运行或使用 `--notimestamp`）。自动递增、非规范提交需指定 `--bump`、正式版本后无新提交则拒绝等规则保持不变。
+
+例如 catmit 源码位于蓝盾 `${{ci.workspace}}/catmit`，业务仓库位于 `${{ci.workspace}}/${{REPO_DIR}}`，可使用以下 Shell 步骤。先确定并导出版本，再执行构建，让 `build.sh` 也能读取版本。已有 `ZHIYAN_PKG_VERSION` 会保留：
+
+```bash
+set -e
+
+workspace="${{ci.workspace}}"
+catmit_bin="$workspace/catmit/bin/catmit"
+
+# 在构建节点编译 catmit（需要 Go 和 Git）
+(
+    cd "$workspace/catmit"
+    mkdir -p bin
+    go build -o "$catmit_bin" .
+)
+
+# 必须在业务仓库计算版本
+cd "$workspace/${{REPO_DIR}}"
+zhiyan_pkg_version="${{ZHIYAN_PKG_VERSION}}"
+if [ -z "$zhiyan_pkg_version" ]; then
+    if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+        git fetch --unshallow --no-tags origin
+    fi
+    zhiyan_pkg_version="$("$catmit_bin" tag --print)"
+fi
+
+export ZHIYAN_PKG_VERSION="$zhiyan_pkg_version"
+setEnv "ZHIYAN_PKG_VERSION" "$ZHIYAN_PKG_VERSION"
+sh build.sh
+```
 
 catmit 自身的 GoReleaser 发布配置会自动标记预发布，并跳过预发布的 Homebrew 更新。
 

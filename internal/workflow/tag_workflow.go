@@ -57,10 +57,16 @@ func NewTagWorkflow(runner git.Runner, options TagOptions, outputWriter io.Write
 }
 
 func (w *TagWorkflow) Run(ctx context.Context) error {
-	fmt.Fprintln(w.output, output.RenderStatusBar("Inspecting release state...", false))
+	if !w.options.Print {
+		fmt.Fprintln(w.output, output.RenderStatusBar("Inspecting release state...", false))
+	}
 
 	plan, err := w.Plan(ctx)
 	if err != nil {
+		return err
+	}
+	if w.options.Print {
+		_, err := fmt.Fprintln(w.output, plan.NextTag)
 		return err
 	}
 
@@ -92,30 +98,47 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	if err := w.checkGitRepository(ctx); err != nil {
 		return nil, err
 	}
-	worktreeStatus, err := w.manager.WorktreeStatus(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := w.validateWorktreeStatus(worktreeStatus); err != nil {
-		return nil, err
+	if w.options.Print {
+		shallow, err := w.runner.Run(ctx, "git", "rev-parse", "--is-shallow-repository")
+		if err != nil {
+			return nil, errors.Wrap(errors.ErrTypeGit, "failed to inspect history depth", err)
+		}
+		if strings.TrimSpace(shallow) == "true" {
+			return nil, errors.New(errors.ErrTypeValidation,
+				"--print requires full commit history; disable shallow checkout or run git fetch --unshallow before calculating a version")
+		}
 	}
 	remote := w.options.Remote
-	branch, err := w.manager.CurrentBranch(ctx)
-	if err != nil {
-		return nil, err
+	var branch string
+	var branchStatus git.BranchStatus
+	// Calculation only uses committed HEAD/history. CI may check out detached
+	// HEAD and leave generated files; neither affects the version calculation.
+	if !w.options.Print {
+		worktreeStatus, err := w.manager.WorktreeStatus(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := w.validateWorktreeStatus(worktreeStatus); err != nil {
+			return nil, err
+		}
+		var err error
+		branch, err = w.manager.CurrentBranch(ctx)
+		if err != nil {
+			return nil, err
+		}
+		branchStatus, err = w.branchStatus(ctx, remote, branch)
+		if err != nil {
+			return nil, err
+		}
+		if branchStatus.Behind > 0 {
+			return nil, errors.Newf(errors.ErrTypeValidation,
+				"current branch is behind %s/%s by %d commit(s); pull or rebase before tagging",
+				remote, branch, branchStatus.Behind)
+		}
 	}
 	head, err := w.manager.HeadSHA(ctx, false)
 	if err != nil {
 		return nil, err
-	}
-	branchStatus, err := w.branchStatus(ctx, remote, branch)
-	if err != nil {
-		return nil, err
-	}
-	if branchStatus.Behind > 0 {
-		return nil, errors.Newf(errors.ErrTypeValidation,
-			"current branch is behind %s/%s by %d commit(s); pull or rebase before tagging",
-			remote, branch, branchStatus.Behind)
 	}
 	remoteTags, err := w.listRemoteTags(ctx, remote)
 	if err != nil {
@@ -148,12 +171,14 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		return nil, err
 	}
 	nextTag := nextVersion.String()
-	localTagExists, err := w.manager.LocalTagExists(ctx, nextTag)
-	if err != nil {
-		return nil, err
-	}
-	if localTagExists {
-		return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
+	if !w.options.Print {
+		localTagExists, err := w.manager.LocalTagExists(ctx, nextTag)
+		if err != nil {
+			return nil, err
+		}
+		if localTagExists {
+			return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
+		}
 	}
 	if conflict := conflictingTag(remoteTags, nextTag); conflict != "" {
 		return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s conflicts with planned tag %s on %s", conflict, nextTag, remote)
@@ -162,7 +187,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		Remote: remote, Branch: branch, Head: head,
 		BranchRemoteExists: branchStatus.RemoteExists,
 		BranchAhead:        branchStatus.Ahead, BranchBehind: branchStatus.Behind,
-		PushBranch: !branchStatus.RemoteExists || branchStatus.Ahead > 0,
+		PushBranch: !w.options.Print && (!branchStatus.RemoteExists || branchStatus.Ahead > 0),
 		NextTag:    nextTag, RequestedBump: requestedBump, ResolvedBump: resolvedBump,
 		BumpDetail: bumpDetail, ExplicitTag: w.options.ExplicitTag != "",
 		InitialTag: !history.hasStable && !history.hasLatest,

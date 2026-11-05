@@ -63,6 +63,30 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 				Remote: "origin", Timeout: 10, Bump: "auto", InitialVersion: "v0.1.0", Timezone: "Asia/Shanghai",
 			}, &out, strings.NewReader("y\n"))
 			wf.now = func() time.Time { return time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC) }
+			// CI calculation must work without a branch, clean worktree or local
+			// baseline tag. It must leave local and remote refs unchanged.
+			git(clone, "checkout", "--detach", head)
+			require.NoError(t, os.WriteFile(filepath.Join(clone, "generated.txt"), []byte("artifact"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(clone, "file.txt"), []byte("build modified this file"), 0600))
+			refsBefore := git(clone, "show-ref")
+			remoteBefore := git(clone, "ls-remote", "origin")
+			statusBefore := git(clone, "status", "--porcelain")
+			wf.options.Print = true
+			for i := 0; i < 2; i++ {
+				out.Reset()
+				require.NoError(t, wf.Run(context.Background()))
+				assert.Equal(t, prefix+"1.2.4-dev.1+20261105T153000UTC8\n", out.String())
+			}
+			assert.Equal(t, refsBefore, git(clone, "show-ref"))
+			assert.Equal(t, remoteBefore, git(clone, "ls-remote", "origin"))
+			assert.Equal(t, statusBefore, git(clone, "status", "--porcelain"))
+			assert.Equal(t, head, git(clone, "rev-parse", "HEAD"))
+			assert.Empty(t, git(clone, "tag", "--list"))
+			wf.options.Print = false
+			out.Reset()
+			require.NoError(t, os.Remove(filepath.Join(clone, "generated.txt")))
+			require.NoError(t, os.WriteFile(filepath.Join(clone, "file.txt"), []byte("fixed\n"), 0600))
+			git(clone, "checkout", "main")
 			publish := func(want string) {
 				t.Helper()
 				plan, err := wf.Plan(context.Background())
