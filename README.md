@@ -151,7 +151,7 @@ $ catmit squash-history
 `catmit tag` creates and pushes annotated tags for committed code using only Git. It never calls an LLM, reads project/LLM configuration, stages files, or creates commits. No API key is required; the worktree must be clean when publishing.
 
 ```bash
-# Default dev prerelease, UTC+8: v1.2.4-dev.1+20261105T153000UTC8
+# Default dev prerelease, UTC+8: v1.2.4-dev.1.20261105T153000UTC8
 catmit tag
 
 # Full usage, timezone and increment rules
@@ -189,9 +189,9 @@ catmit tag --remote upstream --yes
 - Use the latest remote stable tag reachable from HEAD as the baseline, preserving its `v` or empty prefix. Without version history, use `--initial` (default `v0.1.0`).
 - `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Publishing with non-Conventional Commits requires an explicit `--bump patch|minor|major`. With `--print`, recognized features/breaking changes still determine the bump, otherwise it silently falls back to patch. The initial version is determined by `--initial`.
 - Prereleases retain their core target and increment a counter per version/channel. New features/breaking changes may raise the target; explicit `--bump` can select a different release line.
-- Example: `v1.2.3 → v1.2.4-dev.1+time → v1.2.4-dev.2+time → v1.2.4-rc.1+time → v1.2.4`. Stable promotion can tag the same tested commit. New fixes after the stable release start `v1.2.5-dev.1`.
+- Example: `v1.2.3 → v1.2.4-dev.1.time → v1.2.4-dev.2.time → v1.2.4-rc.1.time → v1.2.4`. Stable promotion can tag the same tested commit. New fixes after the stable release start `v1.2.5-dev.1`.
 - Repeated prereleases of an unreleased commit get new counters. Publishing requires new commits since the stable baseline; `--print` can still calculate the next version, defaulting to a patch bump. Existing tags are never overwritten.
-- Timestamps are build metadata after `+` and do not affect precedence. Toggling `--notimestamp` preserves counter ordering; changing metadata alone is not a version upgrade.
+- Timestamps are dot-separated prerelease identifiers after the counter, so generated versions contain no `+`. They participate in SemVer precedence, but the numeric counter is compared first (`dev.10` follows `dev.9` even if the clock moves backwards). Toggling `--notimestamp` preserves counter ordering. Publishing the same core/channel/counter with a different timestamp is rejected.
 
 **Timezones and flags:**
 
@@ -214,11 +214,17 @@ set -e
 if [ -z "${ZHIYAN_PKG_VERSION:-}" ]; then
     ZHIYAN_PKG_VERSION="$(/absolute/path/to/catmit tag --print)"
 fi
+if [[ ! "$ZHIYAN_PKG_VERSION" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+    printf 'Invalid Docker tag: %s\n' "$ZHIYAN_PKG_VERSION" >&2
+    exit 1
+fi
 export ZHIYAN_PKG_VERSION
 # BK-CI Shell steps: propagate the value to subsequent pipeline steps.
 setEnv "ZHIYAN_PKG_VERSION" "$ZHIYAN_PKG_VERSION"
 sh build.sh
 ```
+
+The Bash example validates both calculated and supplied versions before exporting them. Docker tags are limited to 128 characters and cannot contain `+`; explicit `--tag` values still follow SemVer and must be checked before use as image tags. Calculate the version once per pipeline and reuse it in subsequent steps.
 
 For catmit itself, GoReleaser marks prereleases automatically and skips Homebrew updates for them.
 

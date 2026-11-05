@@ -18,7 +18,7 @@ func ValidateChannel(channel string) error {
 }
 
 // NextPrerelease always increments the channel counter. The optional timestamp
-// is metadata, so toggling it never reverses version precedence.
+// follows the counter as a prerelease identifier without Docker's invalid '+' separator.
 func NextPrerelease(base Version, channel string, noTimestamp bool, tags []string, now time.Time) (Version, error) {
 	if err := ValidateChannel(channel); err != nil {
 		return Version{}, err
@@ -44,7 +44,7 @@ func NextPrerelease(base Version, channel string, noTimestamp bool, tags []strin
 	next := base.Core()
 	next.Prerelease = fmt.Sprintf("%s.%d", channel, counter+1)
 	if !noTimestamp {
-		next.Build = FormatTimestamp(now)
+		next.Prerelease += "." + FormatTimestamp(now)
 	}
 	return next, nil
 }

@@ -37,8 +37,8 @@ produce the same version (especially with --notimestamp or within one second).
 Publishing-only checks (new commits, local/remote tag availability) are skipped.
 
 Default: a dev prerelease with a counter and an Asia/Shanghai (UTC+8) timestamp,
-for example v1.2.4-dev.1+20261105T153000UTC8. --notimestamp removes only the
-build timestamp; the prerelease counter still increments. --release creates a
+for example v1.2.4-dev.1.20261105T153000UTC8. --notimestamp removes only the
+timestamp; the prerelease counter still increments. --release creates a
 plain stable version (v1.2.4), with no prerelease suffix or timestamp.
 
 Increment rules:
@@ -59,8 +59,10 @@ Increment rules:
      release means no new tag when publishing. --print still calculates the
      next version (patch by default). Repeated prereleases of an unreleased commit
      are allowed and receive new counters.
-  5. Build timestamps do not affect SemVer precedence. Switching --notimestamp
-     on/off preserves counter ordering. Existing tags are never overwritten.
+  5. Timestamps are dot-separated prerelease identifiers, so generated versions
+     contain no + character. Counters take precedence over timestamps; switching
+     --notimestamp on/off preserves counter ordering. Existing tags are never
+     overwritten, including the same counter with a different timestamp.
      --tag uses an exact name, bypassing automatic naming and timestamps.
 
 Timezones:

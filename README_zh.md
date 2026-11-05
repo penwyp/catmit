@@ -373,7 +373,7 @@ $ catmit squash-history
 `catmit tag` 只给已提交代码创建并推送 annotated tag，全程不调用 LLM，也不读取项目配置文件或 LLM 配置。不需要 API Key；实际打 tag 时工作区必须干净，不会自动暂存或提交。
 
 ```bash
-# 默认 dev 预发布，带东八区时间：v1.2.4-dev.1+20261105T153000UTC8
+# 默认 dev 预发布，带东八区时间：v1.2.4-dev.1.20261105T153000UTC8
 catmit tag
 
 # 帮助包含完整说明、时区和递增规则
@@ -413,9 +413,9 @@ catmit tag --remote upstream --yes
 - 以当前 HEAD 可达的最新远程正式 tag 为基准，保留历史 `v`／无 `v` 前缀。无版本历史时使用 `--initial`，默认 `v0.1.0`。
 - `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。实际发布时，遇到不符合 Conventional Commits 的提交，要求显式指定 `--bump patch|minor|major`；`--print` 则保留能识别出的 feat／破坏性变更判断，否则静默回退为 patch。首次版本由 `--initial` 决定。
 - 同一轮预发布保持核心版本，每个版本和通道分别计数；新功能或破坏性变更可以提高目标版本，显式 `--bump` 可以选择另一条版本线。
-- 例如 `v1.2.3 → v1.2.4-dev.1+时间 → v1.2.4-dev.2+时间 → v1.2.4-rc.1+时间 → v1.2.4`。正式发布允许与已测试的预发布指向同一 commit，无需额外提交；正式版后有新修复才进入 `v1.2.5-dev.1`。
+- 例如 `v1.2.3 → v1.2.4-dev.1.时间 → v1.2.4-dev.2.时间 → v1.2.4-rc.1.时间 → v1.2.4`。正式发布允许与已测试的预发布指向同一 commit，无需额外提交；正式版后有新修复才进入 `v1.2.5-dev.1`。
 - 同一未正式发布的 commit 可以多次预发布，序号继续递增；实际发布时，正式基线之后没有新提交会拒绝打新 tag；`--print` 仍可计算下一版本，默认递增 patch。已有 tag 不覆盖。
-- 时间戳放在 `+` 后作为构建元数据，不参与版本排序，`--notimestamp` 开关不会打乱序号。仅修改构建元数据不算版本升级。
+- 时间戳放在序号后的独立预发布字段中，以 `.` 分隔，自动生成的版本不含 `+`。时间戳参与 SemVer 排序，但先比较数字序号（即使时钟回退，`dev.10` 仍高于 `dev.9`）；`--notimestamp` 开关不会打乱序号。同一核心版本、通道和序号仅时间戳不同时，不允许重复发布。
 
 **时间与参数：**
 
@@ -455,10 +455,17 @@ if [ -z "$zhiyan_pkg_version" ]; then
     zhiyan_pkg_version="$("$catmit_bin" tag --print)"
 fi
 
+if [[ ! "$zhiyan_pkg_version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+    printf '非法 Docker tag：%s\n' "$zhiyan_pkg_version" >&2
+    exit 1
+fi
+
 export ZHIYAN_PKG_VERSION="$zhiyan_pkg_version"
 setEnv "ZHIYAN_PKG_VERSION" "$ZHIYAN_PKG_VERSION"
 sh build.sh
 ```
+
+上述 Bash 示例会在导出变量前校验计算值和已有输入值。Docker tag 最长 128 个字符，不能含 `+`；显式 `--tag` 仍按 SemVer 接受输入，用作镜像 tag 前也必须校验。每次流水线只计算一次版本，并在后续步骤复用。
 
 catmit 自身的 GoReleaser 发布配置会自动标记预发布，并跳过预发布的 Homebrew 更新。
 

@@ -391,14 +391,14 @@ func (w *TagWorkflow) ensureTagAvailable(ctx context.Context, remote, tagName st
 	return nil
 }
 
-// Recheck semantic identity as well as exact spelling. A concurrent publisher
-// may use a different prefix/timestamp or promote this core while we confirm.
+// Recheck semantic identity and channel counters as well as exact spelling. A
+// concurrent publisher may use a different timestamp or promote this core.
 func conflictingTag(tags []string, tagName string) string {
 	candidate, err := tagging.ParseVersion(tagName)
 	if err != nil {
 		return ""
 	}
-	channel := strings.Split(candidate.Prerelease, ".")[0]
+	candidateParts := strings.Split(candidate.Prerelease, ".")
 	for _, tag := range tags {
 		version, err := tagging.ParseVersion(tag)
 		if err != nil {
@@ -408,7 +408,9 @@ func conflictingTag(tags []string, tagName string) string {
 			return tag
 		}
 		if candidate.Prerelease != "" && version.Core().Compare(candidate.Core()) == 0 {
-			if version.Prerelease == "" || (strings.Split(version.Prerelease, ".")[0] == channel && version.Compare(candidate) > 0) {
+			parts := strings.Split(version.Prerelease, ".")
+			sameCounter := len(candidateParts) >= 2 && len(parts) >= 2 && parts[1] == candidateParts[1]
+			if version.Prerelease == "" || (parts[0] == candidateParts[0] && (sameCounter || version.Compare(candidate) > 0)) {
 				return tag
 			}
 		}
