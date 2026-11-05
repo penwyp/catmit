@@ -70,7 +70,7 @@ func (r tagCommandRunner) Run(_ context.Context, name string, args ...string) (s
 		return "main", nil
 	case "rev-parse HEAD":
 		return "abc123", nil
-	case "ls-remote --heads origin refs/heads/main", "ls-remote --tags --refs origin":
+	case "ls-remote --heads origin refs/heads/main", "ls-remote --tags origin":
 		return "", nil
 	case "log --format=%B%x00 abc123":
 		return "initial commit", nil
@@ -147,7 +147,7 @@ func (r printVersionRunner) Run(_ context.Context, name string, args ...string) 
 		return "false", nil
 	case "rev-parse HEAD":
 		return "abc123", nil
-	case "ls-remote --tags --refs origin":
+	case "ls-remote --tags origin":
 		return "", nil
 	case "log --format=%B%x00 abc123":
 		return "initial commit", nil

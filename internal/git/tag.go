@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/penwyp/catmit/internal/errors"
 )
@@ -39,11 +40,13 @@ type TagManager interface {
 }
 
 type tagManager struct {
-	runner Runner
+	runner           Runner
+	tagMu            sync.RWMutex
+	remoteTagObjects map[string]map[string]string
 }
 
 func NewTagManager(runner Runner) TagManager {
-	return &tagManager{runner: runner}
+	return &tagManager{runner: runner, remoteTagObjects: make(map[string]map[string]string)}
 }
 
 func (m *tagManager) CurrentBranch(ctx context.Context) (string, error) {
@@ -141,13 +144,17 @@ func (m *tagManager) PushBranch(ctx context.Context, remote, branch string) erro
 }
 
 func (m *tagManager) ListRemoteTags(ctx context.Context, remote string) ([]string, error) {
-	output, err := m.runner.Run(ctx, "git", "ls-remote", "--tags", "--refs", remote)
+	// Include peeled annotated tags (^{}) so one remote query supplies both
+	// names and commit IDs. Most commits are already in a full checkout.
+	output, err := m.runner.Run(ctx, "git", "ls-remote", "--tags", remote)
 	if err != nil {
 		return nil, wrapGitCommandError(ctx, err, "failed to list remote tags from %q", remote)
 	}
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	tags := make([]string, 0, len(lines))
+	objects := make(map[string]string)
+	peeled := make(map[string]string)
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
@@ -155,9 +162,24 @@ func (m *tagManager) ListRemoteTags(ctx context.Context, remote string) ([]strin
 		}
 		name := strings.TrimPrefix(fields[1], "refs/tags/")
 		if name != "" && name != fields[1] {
-			tags = append(tags, name)
+			if strings.HasSuffix(name, "^{}") {
+				peeled[strings.TrimSuffix(name, "^{}")] = fields[0]
+				continue
+			}
+			if _, exists := objects[name]; !exists {
+				tags = append(tags, name)
+			}
+			objects[name] = fields[0]
 		}
 	}
+	for name, sha := range peeled {
+		if _, exists := objects[name]; exists {
+			objects[name] = sha
+		}
+	}
+	m.tagMu.Lock()
+	m.remoteTagObjects[remote] = objects
+	m.tagMu.Unlock()
 	return tags, nil
 }
 
@@ -223,6 +245,20 @@ func (m *tagManager) CommitMessagesSince(ctx context.Context, fromRef, toRef str
 // FetchRemoteTag resolves a remote tag to a commit without creating or replacing
 // any local tag. History calculations use the fetched SHA, not a local tag name.
 func (m *tagManager) FetchRemoteTag(ctx context.Context, remote, tagName string) (string, error) {
+	m.tagMu.RLock()
+	objectID := m.remoteTagObjects[remote][tagName]
+	m.tagMu.RUnlock()
+	if validObjectID(objectID) {
+		// Resolve the exact object advertised by the remote, never a possibly
+		// stale same-named local tag. Missing objects still use the fetch path.
+		output, err := m.runner.Run(ctx, "git", "rev-parse", "--verify", objectID+"^{commit}")
+		if err == nil && validObjectID(strings.TrimSpace(output)) {
+			return strings.TrimSpace(output), nil
+		}
+		if ctx.Err() != nil {
+			return "", wrapGitCommandError(ctx, ctx.Err(), "failed to resolve tag %q", tagName)
+		}
+	}
 	_, err := m.runner.Run(ctx, "git", "fetch", "--quiet", "--no-tags", remote, "refs/tags/"+tagName)
 	if err != nil {
 		return "", wrapGitCommandError(ctx, err, "failed to fetch tag %q from %q", tagName, remote)
@@ -232,6 +268,18 @@ func (m *tagManager) FetchRemoteTag(ctx context.Context, remote, tagName string)
 		return "", errors.Wrapf(errors.ErrTypeGit, "failed to resolve tag %q to a commit", err, tagName)
 	}
 	return strings.TrimSpace(output), nil
+}
+
+func validObjectID(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *tagManager) IsAncestor(ctx context.Context, ancestor, target string) (bool, error) {

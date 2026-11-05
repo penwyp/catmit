@@ -40,7 +40,7 @@ func (r *tagRunner) Run(_ context.Context, command string, args ...string) (stri
 
 func TestTagManagerListRemoteTags(t *testing.T) {
 	runner := newTagRunner()
-	runner.outputs["git ls-remote --tags --refs origin"] = strings.Join([]string{
+	runner.outputs["git ls-remote --tags origin"] = strings.Join([]string{
 		"aaaaaaaa\trefs/tags/v1.0.0",
 		"bbbbbbbb\trefs/tags/v1.2.0",
 		"cccccccc\trefs/heads/main",
@@ -202,4 +202,67 @@ func TestTagManagerIsAncestor(t *testing.T) {
 	reachable, err = manager.IsAncestor(context.Background(), "base", "head")
 	require.NoError(t, err)
 	assert.False(t, reachable)
+}
+
+func TestRemoteTagResolutionReusesExactAdvertisedObjects(t *testing.T) {
+	for _, annotated := range []bool{false, true} {
+		runner := newTagRunner()
+		commit := strings.Repeat("a", 40)
+		tagObject := strings.Repeat("b", 40)
+		advertised := commit
+		if annotated {
+			advertised = tagObject
+		}
+		runner.outputs["git ls-remote --tags origin"] = advertised + "\trefs/tags/v1.2.3\n"
+		if annotated {
+			runner.outputs["git ls-remote --tags origin"] += commit + "\trefs/tags/v1.2.3^{}\n"
+		}
+		runner.outputs["git rev-parse --verify "+commit+"^{commit}"] = commit + "\n"
+		manager := NewTagManager(runner)
+		tags, err := manager.ListRemoteTags(context.Background(), "origin")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"v1.2.3"}, tags)
+		sha, err := manager.FetchRemoteTag(context.Background(), "origin", "v1.2.3")
+		require.NoError(t, err)
+		assert.Equal(t, commit, sha)
+		require.Len(t, runner.calls, 2, "one remote query and one local resolution; no fetch")
+		assert.Equal(t, []string{"rev-parse", "--verify", commit + "^{commit}"}, runner.calls[1].args)
+	}
+}
+
+func TestRemoteTagMissingObjectStillFetches(t *testing.T) {
+	runner := newTagRunner()
+	commit := strings.Repeat("a", 40)
+	runner.outputs["git ls-remote --tags origin"] = commit + "\trefs/tags/v1.2.3\n"
+	runner.outputs["git rev-parse --verify FETCH_HEAD^{commit}"] = commit + "\n"
+	manager := NewTagManager(runner)
+	_, err := manager.ListRemoteTags(context.Background(), "origin")
+	require.NoError(t, err)
+	sha, err := manager.FetchRemoteTag(context.Background(), "origin", "v1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, commit, sha)
+	require.Len(t, runner.calls, 4)
+	assert.Equal(t, []string{"fetch", "--quiet", "--no-tags", "origin", "refs/tags/v1.2.3"}, runner.calls[2].args)
+}
+
+func TestRemoteTagSnapshotDoesNotReuseAnotherRemoteOrStaleListing(t *testing.T) {
+	runner := newTagRunner()
+	oldCommit, newCommit := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	runner.outputs["git ls-remote --tags origin"] = oldCommit + "\trefs/tags/v1.2.3\n"
+	runner.outputs["git rev-parse --verify "+oldCommit+"^{commit}"] = oldCommit
+	runner.outputs["git rev-parse --verify "+newCommit+"^{commit}"] = newCommit
+	manager := NewTagManager(runner)
+	_, err := manager.ListRemoteTags(context.Background(), "origin")
+	require.NoError(t, err)
+	runner.outputs["git ls-remote --tags origin"] = newCommit + "\trefs/tags/v1.2.3\n"
+	_, err = manager.ListRemoteTags(context.Background(), "origin")
+	require.NoError(t, err)
+	sha, err := manager.FetchRemoteTag(context.Background(), "origin", "v1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, newCommit, sha)
+	runner.outputs["git rev-parse --verify FETCH_HEAD^{commit}"] = oldCommit
+	sha, err = manager.FetchRemoteTag(context.Background(), "upstream", "v1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, oldCommit, sha)
+	assert.Equal(t, []string{"fetch", "--quiet", "--no-tags", "upstream", "refs/tags/v1.2.3"}, runner.calls[3].args)
 }

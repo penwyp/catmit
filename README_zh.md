@@ -411,7 +411,7 @@ catmit tag --remote upstream --yes
 **递增规则：**
 
 - 以当前 HEAD 可达的最新远程正式 tag 为基准，保留历史 `v`／无 `v` 前缀。无版本历史时使用 `--initial`，默认 `v0.1.0`。
-- `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。实际发布时，遇到不符合 Conventional Commits 的提交，要求显式指定 `--bump patch|minor|major`；`--print` 则保留能识别出的 feat／破坏性变更判断，否则回退为 patch，并在 stderr 提醒。首次版本由 `--initial` 决定。
+- `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。实际发布时，遇到不符合 Conventional Commits 的提交，要求显式指定 `--bump patch|minor|major`；`--print` 则保留能识别出的 feat／破坏性变更判断，否则静默回退为 patch。首次版本由 `--initial` 决定。
 - 同一轮预发布保持核心版本，每个版本和通道分别计数；新功能或破坏性变更可以提高目标版本，显式 `--bump` 可以选择另一条版本线。
 - 例如 `v1.2.3 → v1.2.4-dev.1+时间 → v1.2.4-dev.2+时间 → v1.2.4-rc.1+时间 → v1.2.4`。正式发布允许与已测试的预发布指向同一 commit，无需额外提交；正式版后有新修复才进入 `v1.2.5-dev.1`。
 - 同一未正式发布的 commit 可以多次预发布，序号继续递增；正式基线之后没有新提交时拒绝打新 tag。已有 tag 不覆盖。
@@ -426,9 +426,9 @@ catmit tag --remote upstream --yes
 - 所有行为只通过命令行参数控制。原 `tag [SEED_TEXT]`、`--seed`、`--lang`、`--stage-all` 已移除；请先自行完成提交。
 
 
-**流水线仅计算版本：** `--print` 成功时 stdout 只有版本号及换行，错误和 `--debug` 日志进入 stderr，失败返回非零退出码。它不会确认、提交、创建或推送 tag，允许 detached HEAD 和脏工作区，只根据已提交的历史计算。仍需 Git 远程读取权限，会获取远程 tag 对象，但不创建本地 tag；浅克隆需先执行 `git fetch --unshallow --no-tags origin`。它与 `--dry-run` 互斥，其他版本／时区参数照常使用。
+**流水线仅计算版本：** `--print` 成功时 stdout 只有版本号及换行，错误和 `--debug` 日志进入 stderr，失败返回非零退出码。它不会确认、提交、创建或推送 tag，允许 detached HEAD 和脏工作区，只根据已提交的历史计算。每次计算仍查询一次远程 tag，优先在本地解析远程返回的确切提交 ID，仅在对象缺失时获取对象，不创建本地 tag；浅克隆需先执行 `git fetch --unshallow --no-tags origin`。它与 `--dry-run` 互斥，其他版本／时区参数照常使用。
 
-只输出不会保留版本或推进序号，因此重复运行可能产生同一版本（尤其是同秒运行或使用 `--notimestamp`）。`--print` 遇到非规范提交时，会根据能识别出的提交递增，无法识别时回退为 patch 并输出 stderr 提醒；可用 `--bump` 覆盖。正式版本后无新提交则拒绝的规则保持不变。
+只输出不会保留版本或推进序号，因此重复运行可能产生同一版本（尤其是同秒运行或使用 `--notimestamp`）。`--print` 遇到非规范提交时，会根据能识别出的提交递增，无法识别时静默回退为 patch；可用 `--bump` 覆盖。正式版本后无新提交则拒绝的规则保持不变。
 
 例如 catmit 源码位于蓝盾 `${{ci.workspace}}/catmit`，业务仓库位于 `${{ci.workspace}}/${{REPO_DIR}}`，可使用以下 Shell 步骤。先确定并导出版本，再执行构建，让 `build.sh` 也能读取版本。已有 `ZHIYAN_PKG_VERSION` 会保留：
 

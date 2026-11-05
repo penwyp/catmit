@@ -47,7 +47,7 @@ Increment rules:
      breaking changes (!) -> major; feat -> minor; otherwise -> patch.
      Non-Conventional Commits require an explicit --bump when publishing.
      With --print, recognized changes still determine the bump; if none imply
-     minor/major, use patch. A warning goes to stderr. No LLM is involved.
+     minor/major, use patch silently. No LLM is involved.
      The initial release uses --initial without inferring a bump.
   3. Continue the existing prerelease target without bumping its core each time.
      New features/breaking changes may raise it; an explicit --bump overrides it.
@@ -149,7 +149,7 @@ func runTag(cmd *cobra.Command, options workflow.TagOptions, debug bool) error {
 	if testDeps != nil {
 		runner = testDeps.GetGitRunner()
 	}
-	wf := workflow.NewTagWorkflow(runner, options, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+	wf := workflow.NewTagWorkflow(runner, options, cmd.OutOrStdout(), cmd.InOrStdin())
 	if err := wf.Run(cmd.Context()); err != nil {
 		cmd.SilenceUsage = true
 		return err

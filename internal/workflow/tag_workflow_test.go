@@ -406,7 +406,7 @@ func newTestTagWorkflow(manager *fakeTagManager, output *bytes.Buffer, input *st
 
 	workflow := NewTagWorkflow(tagWorkflowRunner{}, TagOptions{
 		Timeout: 30, Remote: "origin", Bump: "auto", InitialVersion: "v0.1.0", Timezone: "Asia/Shanghai",
-	}, output, &bytes.Buffer{}, input)
+	}, output, input)
 	workflow.manager = manager
 	workflow.now = func() time.Time { return time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC) }
 	return workflow
@@ -540,14 +540,11 @@ func TestTagPrintFallsBackForLegacyCommits(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := &fakeTagManager{head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: tt.messages}
-			var stdout, stderr bytes.Buffer
+			var stdout bytes.Buffer
 			wf := newTestTagWorkflow(manager, &stdout, nil)
-			wf.diagnostics = &stderr
 			wf.options.Print, wf.options.NoTimestamp = true, true
 			require.NoError(t, wf.Run(context.Background()))
 			assert.Equal(t, tt.want, stdout.String())
-			assert.Contains(t, stderr.String(), "Warning:")
-			assert.Contains(t, stderr.String(), "inferred "+tt.bump)
 			assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
 			assert.NotContains(t, strings.Join(manager.Calls(), ","), "push-tag:")
 			assert.NotContains(t, manager.Calls(), "current-branch")

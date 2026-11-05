@@ -61,7 +61,7 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 			var out bytes.Buffer
 			wf := NewTagWorkflow(directoryGitRunner{clone}, TagOptions{
 				Remote: "origin", Timeout: 10, Bump: "auto", InitialVersion: "v0.1.0", Timezone: "Asia/Shanghai",
-			}, &out, &bytes.Buffer{}, strings.NewReader("y\n"))
+			}, &out, strings.NewReader("y\n"))
 			wf.now = func() time.Time { return time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC) }
 			// CI calculation must work without a branch, clean worktree or local
 			// baseline tag. It must leave local and remote refs unchanged.
