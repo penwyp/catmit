@@ -17,14 +17,18 @@ func TestPushCapturesOutputAndFiltersMRLinks(t *testing.T) {
 		"remote: | Open in TGIT: https://git.woa.com/a/b/-/merge_requests/new |\n"
 	cases := []struct {
 		name      string
+		branch    string
 		pushURL   string
 		fail      bool
 		wantLinks int
 	}{
-		{"gongfeng", "git@git.woa.com:a/b.git", false, 2},
-		{"github", "git@github.com:a/b.git", false, 0},
-		{"subdomain", "git@other.git.woa.com:a/b.git", false, 0},
-		{"failed push", "git@git.woa.com:a/b.git", true, 0},
+		{"gongfeng", "feature/test", "git@git.woa.com:a/b.git", false, 2},
+		{"master", "master", "git@git.woa.com:a/b.git", false, 0},
+		{"branch containing master", "feature/master", "git@git.woa.com:a/b.git", false, 2},
+		{"github", "feature/test", "git@github.com:a/b.git", false, 0},
+		{"subdomain", "feature/test", "git@other.git.woa.com:a/b.git", false, 0},
+		{"failed push", "feature/test", "git@git.woa.com:a/b.git", true, 0},
+		{"failed master push", "master", "git@git.woa.com:a/b.git", true, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,10 +36,11 @@ func TestPushCapturesOutputAndFiltersMRLinks(t *testing.T) {
 			// Different fetch and push URLs ensure filtering uses the push URL.
 			fakeGit := `#!/bin/sh
 case "$*" in
-  'rev-parse --abbrev-ref HEAD') printf '%s\n' 'feature/test' ;;
+  'rev-parse --abbrev-ref HEAD') printf '%s\n' "$TEST_BRANCH" ;;
   'remote get-url --push origin') printf '%s\n' "$TEST_PUSH_URL" ;;
   'remote get-url origin') printf '%s\n' 'git@github.com:a/b.git' ;;
-  'push origin feature/test')
+  "push origin $TEST_BRANCH")
+    touch "$TEST_PUSH_MARKER"
     printf '%s' "$TEST_PUSH_OUTPUT"
     printf '%s\n' 'remote: hook diagnostic' >&2
     if [ "$TEST_PUSH_FAIL" = 1 ]; then exit 1; fi
@@ -45,6 +50,9 @@ esac
 `
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "git"), []byte(fakeGit), 0755))
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("TEST_BRANCH", tc.branch)
+			pushMarker := filepath.Join(dir, "pushed")
+			t.Setenv("TEST_PUSH_MARKER", pushMarker)
 			t.Setenv("TEST_PUSH_URL", tc.pushURL)
 			t.Setenv("TEST_PUSH_OUTPUT", pushOutput)
 			t.Setenv("TEST_PUSH_FAIL", "0")
@@ -64,6 +72,8 @@ esac
 				mrLinks: []git.MRLink{{Label: "Previous push", URL: "https://git.woa.com/old"}},
 			}
 			err = committer.Push(context.Background())
+			_, pushErr := os.Stat(pushMarker)
+			require.NoError(t, pushErr, "the branch must still be pushed")
 			if tc.fail {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "git push failed")

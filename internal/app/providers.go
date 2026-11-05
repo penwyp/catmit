@@ -205,6 +205,11 @@ func (d *defaultCommitter) Push(ctx context.Context) error {
 		return errors.Wrapf(errors.ErrTypeGit, "git push failed\nOutput: %s", err, string(output))
 	}
 
+	// Pushing master directly does not need a merge request back to master.
+	if branchName == "master" {
+		return nil
+	}
+
 	// 工蜂（git.woa.com）的 pre-receive 会在推送成功后打印 TAPD / TGIT 建 MR 链接，
 	// 这里把它们提取出来，便于调用方做额外输出。
 	d.mrLinks = git.MRLinksFromPush(d.pushRemoteURL(ctx), string(output))
