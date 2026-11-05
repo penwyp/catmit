@@ -187,7 +187,7 @@ catmit tag --remote upstream --yes
 **Increment rules:**
 
 - Use the latest remote stable tag reachable from HEAD as the baseline, preserving its `v` or empty prefix. Without version history, use `--initial` (default `v0.1.0`).
-- `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Non-Conventional Commits require an explicit `--bump patch|minor|major`. The initial version is determined by `--initial`.
+- `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Publishing with non-Conventional Commits requires an explicit `--bump patch|minor|major`. With `--print`, recognized features/breaking changes still determine the bump, otherwise it falls back to patch with a warning on stderr. The initial version is determined by `--initial`.
 - Prereleases retain their core target and increment a counter per version/channel. New features/breaking changes may raise the target; explicit `--bump` can select a different release line.
 - Example: `v1.2.3 → v1.2.4-dev.1+time → v1.2.4-dev.2+time → v1.2.4-rc.1+time → v1.2.4`. Stable promotion can tag the same tested commit. New fixes after the stable release start `v1.2.5-dev.1`.
 - Repeated prereleases of an unreleased commit get new counters. No new commits since the stable baseline means no new tag. Existing tags are never overwritten.
@@ -204,7 +204,7 @@ catmit tag --remote upstream --yes
 
 **Pipeline output:** `--print` writes exactly one version and a newline to stdout. Errors and `--debug` diagnostics go to stderr; failures exit nonzero. It never prompts, commits, creates tags or pushes. Detached HEAD and dirty worktrees are allowed; only committed history is considered. Remote read access is still required to fetch tag objects (without creating local tags). Shallow clones must first fetch full history, e.g. `git fetch --unshallow --no-tags origin`. `--print` conflicts with `--dry-run` and otherwise accepts the same version/timezone flags.
 
-Printing neither reserves a version nor advances its counter, so repeated calls can produce the same version, especially within one second or with `--notimestamp`. The usual bump rules still apply, including errors for non-Conventional Commits in auto mode or no new commits since the latest stable release.
+Printing neither reserves a version nor advances its counter, so repeated calls can produce the same version, especially within one second or with `--notimestamp`. In auto mode, `--print` tolerates non-Conventional Commits: recognized changes determine the bump, otherwise patch is used, with a warning on stderr. Use `--bump` to override. No new commits since the latest stable release still results in an error.
 
 Build catmit on the CI worker with `go build -o /absolute/path/to/catmit .` in its source directory, then run the binary from the business repository. For example:
 

@@ -31,28 +31,34 @@ type ReleasePlan struct {
 	BumpDetail         tagging.BumpDetail
 	ExplicitTag        bool
 	InitialTag         bool
+	Warning            string
 }
 
 type TagWorkflow struct {
-	runner  git.Runner
-	options TagOptions
-	now     func() time.Time
-	output  io.Writer
-	input   io.Reader
-	manager git.TagManager
+	runner      git.Runner
+	options     TagOptions
+	now         func() time.Time
+	output      io.Writer
+	diagnostics io.Writer
+	input       io.Reader
+	manager     git.TagManager
 }
 
-func NewTagWorkflow(runner git.Runner, options TagOptions, outputWriter io.Writer, inputReader io.Reader) *TagWorkflow {
+func NewTagWorkflow(runner git.Runner, options TagOptions, outputWriter, errorWriter io.Writer, inputReader io.Reader) *TagWorkflow {
 	if inputReader == nil {
 		inputReader = strings.NewReader("")
 	}
+	if errorWriter == nil {
+		errorWriter = io.Discard
+	}
 	return &TagWorkflow{
-		runner:  runner,
-		options: options,
-		now:     time.Now,
-		output:  outputWriter,
-		input:   inputReader,
-		manager: git.NewTagManager(runner),
+		runner:      runner,
+		options:     options,
+		now:         time.Now,
+		output:      outputWriter,
+		diagnostics: errorWriter,
+		input:       inputReader,
+		manager:     git.NewTagManager(runner),
 	}
 }
 
@@ -66,6 +72,9 @@ func (w *TagWorkflow) Run(ctx context.Context) error {
 		return err
 	}
 	if w.options.Print {
+		if plan.Warning != "" {
+			fmt.Fprintln(w.diagnostics, plan.Warning)
+		}
 		_, err := fmt.Fprintln(w.output, plan.NextTag)
 		return err
 	}
@@ -121,7 +130,6 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		if err := w.validateWorktreeStatus(worktreeStatus); err != nil {
 			return nil, err
 		}
-		var err error
 		branch, err = w.manager.CurrentBranch(ctx)
 		if err != nil {
 			return nil, err
@@ -159,11 +167,16 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	requestedBump, _ := tagging.NormalizeBump(w.options.Bump)
 	resolvedBump := requestedBump
 	bumpDetail := tagging.InferBumpWithDetail(messages)
+	warning := ""
 	if requestedBump == tagging.BumpAuto {
 		resolvedBump = bumpDetail.Bump
 		if history.hasStable && w.options.ExplicitTag == "" && !bumpDetail.AllConventional() {
-			return nil, errors.New(errors.ErrTypeValidation,
-				"cannot infer version from non-Conventional Commits; specify --bump patch, minor or major")
+			if !w.options.Print {
+				return nil, errors.New(errors.ErrTypeValidation,
+					"cannot infer version from non-Conventional Commits; specify --bump patch, minor or major")
+			}
+			warning = fmt.Sprintf("Warning: %d/%d commits do not follow Conventional Commits; --print inferred %s from recognized commits (patch fallback). Use --bump patch, minor or major to override.",
+				bumpDetail.TotalMessages-bumpDetail.ConventionalCount, bumpDetail.TotalMessages, resolvedBump)
 		}
 	}
 	nextVersion, err := w.nextVersion(history, remoteTags, resolvedBump)
@@ -191,6 +204,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		NextTag:    nextTag, RequestedBump: requestedBump, ResolvedBump: resolvedBump,
 		BumpDetail: bumpDetail, ExplicitTag: w.options.ExplicitTag != "",
 		InitialTag: !history.hasStable && !history.hasLatest,
+		Warning:    warning,
 	}
 	if history.hasLatest {
 		plan.LatestTag = history.latest.String()

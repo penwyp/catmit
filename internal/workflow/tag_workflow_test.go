@@ -406,7 +406,7 @@ func newTestTagWorkflow(manager *fakeTagManager, output *bytes.Buffer, input *st
 
 	workflow := NewTagWorkflow(tagWorkflowRunner{}, TagOptions{
 		Timeout: 30, Remote: "origin", Bump: "auto", InitialVersion: "v0.1.0", Timezone: "Asia/Shanghai",
-	}, output, input)
+	}, output, &bytes.Buffer{}, input)
 	workflow.manager = manager
 	workflow.now = func() time.Time { return time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC) }
 	return workflow
@@ -523,6 +523,34 @@ func TestTagWorkflowRejectsConcurrentSemanticRelease(t *testing.T) {
 			err = wf.Execute(context.Background(), plan)
 			require.ErrorContains(t, err, "conflicts with planned tag")
 			assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+		})
+	}
+}
+
+func TestTagPrintFallsBackForLegacyCommits(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		messages []string
+		want     string
+		bump     string
+	}{
+		{"legacy only", []string{"update files", "Merge branch 'feature'"}, "v1.2.4-dev.1\n", "patch"},
+		{"legacy and feature", []string{"update files", "feat: new feature"}, "v1.3.0-dev.1\n", "minor"},
+		{"legacy and breaking", []string{"Merge branch 'feature'", "fix!: drop old config"}, "v2.0.0-dev.1\n", "major"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &fakeTagManager{head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: tt.messages}
+			var stdout, stderr bytes.Buffer
+			wf := newTestTagWorkflow(manager, &stdout, nil)
+			wf.diagnostics = &stderr
+			wf.options.Print, wf.options.NoTimestamp = true, true
+			require.NoError(t, wf.Run(context.Background()))
+			assert.Equal(t, tt.want, stdout.String())
+			assert.Contains(t, stderr.String(), "Warning:")
+			assert.Contains(t, stderr.String(), "inferred "+tt.bump)
+			assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+			assert.NotContains(t, strings.Join(manager.Calls(), ","), "push-tag:")
+			assert.NotContains(t, manager.Calls(), "current-branch")
 		})
 	}
 }
