@@ -6,12 +6,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type tagWorkflowRunner struct{}
@@ -31,6 +30,9 @@ type fakeTagManager struct {
 	branchStatus    git.BranchStatus
 	remoteTags      []string
 	commitMessages  []string
+	historyFrom     string
+	unreachable     map[string]bool
+	createdTarget   string
 	localTagExists  bool
 	remoteTagExists bool
 	remoteTagChecks []bool
@@ -113,7 +115,8 @@ func (m *fakeTagManager) RemoteTagExists(context.Context, string, string) (bool,
 	return m.remoteTagExists, nil
 }
 
-func (m *fakeTagManager) CreateAnnotatedTag(_ context.Context, tagName, _, _ string) error {
+func (m *fakeTagManager) CreateAnnotatedTag(_ context.Context, tagName, _, target string) error {
+	m.createdTarget = target
 	m.appendCall("create-tag:" + tagName)
 	return nil
 }
@@ -123,14 +126,19 @@ func (m *fakeTagManager) PushTag(_ context.Context, remote, tagName string) erro
 	return nil
 }
 
-func (m *fakeTagManager) CommitMessagesSince(context.Context, string, string) ([]string, error) {
+func (m *fakeTagManager) CommitMessagesSince(_ context.Context, from, _ string) ([]string, error) {
+	m.historyFrom = from
 	m.appendCall("commit-messages")
 	return m.commitMessages, nil
 }
 
-func (m *fakeTagManager) ResolveRevision(context.Context, string) (string, error) {
-	m.appendCall("resolve")
-	return m.head, nil
+func (m *fakeTagManager) FetchRemoteTag(_ context.Context, _, tag string) (string, error) {
+	m.appendCall("fetch-tag:" + tag)
+	return "sha:" + tag, nil
+}
+
+func (m *fakeTagManager) IsAncestor(_ context.Context, ancestor, _ string) (bool, error) {
+	return !m.unreachable[ancestor], nil
 }
 
 func TestTagWorkflowPlanAutoMinor(t *testing.T) {
@@ -147,10 +155,9 @@ func TestTagWorkflowPlanAutoMinor(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "main", plan.Branch)
-	assert.False(t, plan.CommitNeeded)
 	assert.False(t, plan.PushBranch)
 	assert.Equal(t, "v1.2.3", plan.LatestTag)
-	assert.Equal(t, "v1.3.0", plan.NextTag)
+	assert.Equal(t, "v1.3.0-dev.1+20261105T153000UTC8", plan.NextTag)
 }
 
 func TestTagWorkflowPlanRejectsBehindBranch(t *testing.T) {
@@ -167,7 +174,7 @@ func TestTagWorkflowPlanRejectsBehindBranch(t *testing.T) {
 	assert.Contains(t, err.Error(), "behind origin/main")
 }
 
-func TestTagWorkflowPlanRejectsStageAllFalseWithoutStagedChanges(t *testing.T) {
+func TestTagWorkflowPlanRejectsUnstagedChanges(t *testing.T) {
 	manager := &fakeTagManager{
 		branch: "main",
 		head:   "abc123",
@@ -178,12 +185,11 @@ func TestTagWorkflowPlanRejectsStageAllFalseWithoutStagedChanges(t *testing.T) {
 		branchStatus: git.BranchStatus{RemoteExists: true},
 	}
 	workflow := newTestTagWorkflow(manager, nil, nil)
-	workflow.config.StageAll = false
 
 	_, err := workflow.Plan(context.Background())
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "none are staged")
+	assert.Contains(t, err.Error(), "uncommitted changes")
 }
 
 func TestTagWorkflowPlanRejectsUnmergedChanges(t *testing.T) {
@@ -204,7 +210,7 @@ func TestTagWorkflowPlanRejectsUnmergedChanges(t *testing.T) {
 	assert.Contains(t, err.Error(), "unresolved merge conflicts")
 }
 
-func TestTagWorkflowPlanRejectsStageAllFalseWithMixedChanges(t *testing.T) {
+func TestTagWorkflowPlanRejectsMixedChanges(t *testing.T) {
 	manager := &fakeTagManager{
 		branch: "main",
 		head:   "abc123",
@@ -216,58 +222,25 @@ func TestTagWorkflowPlanRejectsStageAllFalseWithMixedChanges(t *testing.T) {
 		branchStatus: git.BranchStatus{RemoteExists: true},
 	}
 	workflow := newTestTagWorkflow(manager, nil, nil)
-	workflow.config.StageAll = false
 
 	_, err := workflow.Plan(context.Background())
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unstaged or untracked changes")
+	assert.Contains(t, err.Error(), "uncommitted changes")
 }
 
-func TestTagWorkflowExecuteRunsCommitPushTagPushTag(t *testing.T) {
-	manager := &fakeTagManager{
-		branch: "main",
-		head:   "abc123",
-		worktreeStatus: git.WorktreeStatus{
-			HasChanges:       true,
-			HasStagedChanges: true,
-		},
-	}
+func TestTagWorkflowExecutePushesBranchThenPinnedTag(t *testing.T) {
+	manager := &fakeTagManager{branch: "main", head: "abc123"}
 	workflow := newTestTagWorkflow(manager, nil, nil)
-	workflow.config.StageAll = true
-	plan := &ReleasePlan{
-		Remote:        "origin",
-		Branch:        "main",
-		Head:          "abc123",
-		CommitNeeded:  true,
-		CommitMessage: "feat: release command",
-		PushBranch:    true,
-		NextTag:       "v1.3.0",
-	}
-
-	err := workflow.Execute(context.Background(), plan)
-
-	require.NoError(t, err)
+	plan := &ReleasePlan{Remote: "origin", Branch: "main", Head: "abc123", PushBranch: true, NextTag: "v1.3.0"}
+	require.NoError(t, workflow.Execute(context.Background(), plan))
 	calls := manager.Calls()
-	assert.Subset(t, calls, []string{
-		"current-branch",
-		"head",
-		"status",
-		"stage",
-		"commit:feat: release command",
-		"push-branch:origin/main",
-		"create-tag:v1.3.0",
-		"push-tag:origin/v1.3.0",
-	})
+	assert.NotContains(t, calls, "stage")
+	assert.NotContains(t, strings.Join(calls, ","), "commit:")
 	assert.Equal(t, 2, countCalls(calls, "remote-tag-exists"))
 	assert.Equal(t, 2, countCalls(calls, "local-tag-exists"))
-	assertCallOrder(t, calls,
-		"stage",
-		"commit:feat: release command",
-		"push-branch:origin/main",
-		"create-tag:v1.3.0",
-		"push-tag:origin/v1.3.0",
-	)
+	assert.Equal(t, plan.Head, manager.createdTarget)
+	assertCallOrder(t, calls, "push-branch:origin/main", "create-tag:v1.3.0", "push-tag:origin/v1.3.0")
 }
 
 func TestTagWorkflowExecuteSkipsSecondTagAvailabilityCheckWhenNothingMutates(t *testing.T) {
@@ -356,7 +329,7 @@ func TestTagWorkflowExecuteRejectsDirtyWorktreeWhenPlanSkippedCommit(t *testing.
 	err := workflow.Execute(context.Background(), plan)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "worktree changed after release plan")
+	assert.Contains(t, err.Error(), "uncommitted changes")
 	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag")
 }
 
@@ -431,25 +404,125 @@ func newTestTagWorkflow(manager *fakeTagManager, output *bytes.Buffer, input *st
 		input = strings.NewReader("y\n")
 	}
 
-	deps := &app.Dependencies{
-		Logger: zap.NewNop(),
-		GitRunnerFunc: func() git.Runner {
-			return tagWorkflowRunner{}
-		},
-	}
+	workflow := NewTagWorkflow(tagWorkflowRunner{}, TagOptions{
+		Timeout: 30, Remote: "origin", Bump: "auto", InitialVersion: "v0.1.0", Timezone: "Asia/Shanghai",
+	}, output, input)
+	workflow.manager = manager
+	workflow.now = func() time.Time { return time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC) }
+	return workflow
+}
 
-	return &TagWorkflow{
-		deps: deps,
-		config: &app.TagConfig{
-			Language:       "en",
-			Timeout:        30,
-			Remote:         "origin",
-			Bump:           "auto",
-			InitialVersion: "v0.1.0",
-			StageAll:       true,
-		},
-		output:  output,
-		input:   input,
-		manager: manager,
+func TestTagWorkflowReleaseTargets(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		tags     []string
+		messages []string
+		pre      string
+		bump     string
+		release  bool
+		want     string
+	}{
+		{name: "initial", want: "v0.1.0-dev.1"},
+		{name: "initial stable", release: true, want: "v0.1.0"},
+		{name: "unprefixed", tags: []string{"1.2.3"}, messages: []string{"fix: bug"}, want: "1.2.4-dev.1"},
+		{name: "continue counter", tags: []string{"v1.2.3", "v1.2.4-dev.1+20261104T010000UTC8"}, messages: []string{"fix: bug"}, want: "v1.2.4-dev.2"},
+		{name: "rc channel", tags: []string{"v1.2.3", "v1.2.4-dev.8"}, messages: []string{"fix: bug"}, pre: "rc", want: "v1.2.4-rc.1"},
+		{name: "promote same commit", tags: []string{"v1.2.3", "v1.2.4-rc.1"}, messages: []string{"fix: bug"}, release: true, want: "v1.2.4"},
+		{name: "promote first cycle", tags: []string{"1.3.0-rc.1"}, messages: []string{"initial commit"}, release: true, want: "1.3.0"},
+		{name: "preserve explicit higher target", tags: []string{"v1.2.3", "v1.3.0-dev.1"}, messages: []string{"fix: bug"}, want: "v1.3.0-dev.2"},
+		{name: "new feature raises core", tags: []string{"v1.2.3", "v1.2.4-dev.9"}, messages: []string{"fix: bug", "feat: new feature"}, want: "v1.3.0-dev.1"},
+		{name: "breaking raises core", tags: []string{"v1.2.3", "v1.3.0-dev.1"}, messages: []string{"feat!: breaking api"}, want: "v2.0.0-dev.1"},
+		{name: "explicit bump selects maintenance", tags: []string{"v1.2.3", "v1.3.0-dev.1"}, messages: []string{"feat: feature"}, bump: "patch", want: "v1.2.4-dev.1"},
+		{name: "new cycle", tags: []string{"v1.2.4", "v1.2.4-dev.9"}, messages: []string{"fix: next bug"}, want: "v1.2.5-dev.1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: tt.tags, commitMessages: tt.messages}
+			wf := newTestTagWorkflow(manager, nil, nil)
+			wf.options.NoTimestamp = true
+			wf.options.Pre, wf.options.Release = tt.pre, tt.release
+			if tt.bump != "" {
+				wf.options.Bump = tt.bump
+			}
+			plan, err := wf.Plan(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, plan.NextTag)
+			if plan.StableTag != "" {
+				assert.Equal(t, "sha:"+plan.StableTag, manager.historyFrom)
+			}
+		})
+	}
+}
+
+func TestTagWorkflowIgnoresUnreachableTags(t *testing.T) {
+	manager := &fakeTagManager{
+		branch: "main", head: "abc123", remoteTags: []string{"v9.0.0", "1.2.3"},
+		commitMessages: []string{"fix: bug"}, unreachable: map[string]bool{"sha:v9.0.0": true},
+	}
+	wf := newTestTagWorkflow(manager, nil, nil)
+	wf.options.NoTimestamp = true
+	plan, err := wf.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.3", plan.StableTag)
+	assert.Equal(t, "1.2.4-dev.1", plan.NextTag)
+}
+
+func TestTagWorkflowAutoRequiresConventionalCommits(t *testing.T) {
+	manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"made changes"}}
+	wf := newTestTagWorkflow(manager, nil, nil)
+	_, err := wf.Plan(context.Background())
+	require.ErrorContains(t, err, "specify --bump")
+	wf.options.Bump = "minor"
+	plan, err := wf.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "v1.3.0-dev.1+20261105T153000UTC8", plan.NextTag)
+}
+
+func TestTagWorkflowRejectsNoChangesSinceStable(t *testing.T) {
+	wf := newTestTagWorkflow(&fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}}, nil, nil)
+	_, err := wf.Plan(context.Background())
+	require.ErrorContains(t, err, "no new commit since latest stable")
+}
+
+func TestTagWorkflowExplicitTagIsExact(t *testing.T) {
+	wf := newTestTagWorkflow(&fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"anything"}}, nil, nil)
+	wf.options.ExplicitTag = "1.2.4-rc.2+custom"
+	plan, err := wf.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, wf.options.ExplicitTag, plan.NextTag)
+	wf.options.ExplicitTag = "v1.2.3+different"
+	_, err = wf.Plan(context.Background())
+	require.ErrorContains(t, err, "must be greater")
+}
+
+func TestTagWorkflowDryRunAndTimestampStayFixed(t *testing.T) {
+	manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"fix: bug"}}
+	var out bytes.Buffer
+	wf := newTestTagWorkflow(manager, &out, nil)
+	wf.options.Timezone = "Asia/Tokyo"
+	wf.options.DryRun = true
+	require.NoError(t, wf.Run(context.Background()))
+	assert.Contains(t, out.String(), "v1.2.4-dev.1+20261105T163000UTC9")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+	plan, err := wf.Plan(context.Background())
+	require.NoError(t, err)
+	wf.now = func() time.Time { panic("execution must use the confirmed timestamp") }
+	require.NoError(t, wf.Execute(context.Background(), plan))
+	assert.Contains(t, manager.Calls(), "create-tag:"+plan.NextTag)
+}
+
+func TestTagWorkflowRejectsConcurrentSemanticRelease(t *testing.T) {
+	for _, remoteTag := range []string{
+		"1.2.4-dev.1+other-time", "v1.2.4-dev.2", "v1.2.4",
+	} {
+		t.Run(remoteTag, func(t *testing.T) {
+			manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"fix: bug"}}
+			wf := newTestTagWorkflow(manager, nil, nil)
+			plan, err := wf.Plan(context.Background())
+			require.NoError(t, err)
+			manager.remoteTags = append(manager.remoteTags, remoteTag)
+			err = wf.Execute(context.Background(), plan)
+			require.ErrorContains(t, err, "conflicts with planned tag")
+			assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+		})
 	}
 }

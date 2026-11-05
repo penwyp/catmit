@@ -22,12 +22,55 @@ func TestParseVersion(t *testing.T) {
 }
 
 func TestParseVersionRejectsInvalidVersions(t *testing.T) {
-	invalid := []string{"", "v1.2", "v1.2.3.4", "release-1.2.3", "v01.2.3", "v1.02.3", "v1.2.03"}
+	invalid := []string{"", "v1.2", "v1.2.3.4", "release-1.2.3", "v01.2.3", "v1.02.3", "v1.2.03",
+		"v1.2.3-01", "1.2.3-dev.053000", "1.2.3+", "1.2.3-", "1.2.3+a..b", "1.2.3+build_1", "1.2.3-a..b"}
 	for _, value := range invalid {
 		t.Run(value, func(t *testing.T) {
 			_, err := ParseVersion(value)
 			assert.Error(t, err)
 		})
+	}
+}
+
+func TestVersionSuffixes(t *testing.T) {
+	for _, raw := range []string{"v1.2.3+20261105.053000", "1.2.3-rc.1+20261105.153000", "v1.2.3-dev.20261105T053000", "1.2.3-0"} {
+		t.Run(raw, func(t *testing.T) {
+			version, err := ParseVersion(raw)
+			require.NoError(t, err)
+			assert.Equal(t, raw, version.String())
+			next, err := version.Next(BumpPatch)
+			require.NoError(t, err)
+			assert.Equal(t, version.Prefix+"1.2.4", next.String())
+		})
+	}
+}
+
+func TestVersionPrecedence(t *testing.T) {
+	ordered := []string{"1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0-rc.999999999999999999999999999999", "1.0.0"}
+	for i, raw := range ordered {
+		left, err := ParseVersion(raw)
+		require.NoError(t, err)
+		for j, other := range ordered {
+			right, err := ParseVersion(other)
+			require.NoError(t, err)
+			assert.Equal(t, compareInt(i, j), left.Compare(right), "%s versus %s", raw, other)
+		}
+	}
+	left, err := ParseVersion("v1.0.0+20261105.153000")
+	require.NoError(t, err)
+	right, err := ParseVersion("1.0.0+20261106.010000")
+	require.NoError(t, err)
+	assert.Zero(t, left.Compare(right))
+}
+
+func TestLatestSemVerTagWithMetadata(t *testing.T) {
+	for _, tags := range [][]string{
+		{"v1.0.0+20261105.153000", "1.0.0", "v1.0.0-rc.1"},
+		{"v1.0.0-rc.1", "1.0.0", "v1.0.0+20261105.153000"},
+	} {
+		latest, ok := LatestSemVerTag(tags)
+		require.True(t, ok)
+		assert.Equal(t, "v1.0.0+20261105.153000", latest.String())
 	}
 }
 

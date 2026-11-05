@@ -147,33 +147,59 @@ $ catmit squash-history
 -  **Base Branch Detection**: Auto-detects main/master as base branch
 
 ### Semantic Version Tags
+
+`catmit tag` creates and pushes annotated tags for committed code using only Git. It never calls an LLM, reads project/LLM configuration, stages files, or creates commits. No API key is required; the worktree must be clean.
+
 ```bash
-# Inspect, confirm, then commit/push/tag/push tag as needed
+# Default dev prerelease, UTC+8: v1.2.4-dev.1+20261105T153000UTC8
 catmit tag
 
-# Fully automatic release
-catmit tag --yes
+# Full usage, timezone and increment rules
+catmit tag --help
 
-# Preview the release plan without writing anything
+# Preview (fetches refs, but does not commit, tag or push)
 catmit tag --dry-run
 
-# Force a specific semantic bump
-catmit tag --bump minor
+# Counter-only prerelease: v1.2.4-dev.2
+catmit tag --notimestamp
 
-# Use an explicit tag
-catmit tag --tag v2.0.0
+# Release candidate (--pre=rc also works)
+catmit tag --pre rc
 
-# Use a different remote
-catmit tag --remote upstream
+# UTC or another IANA timezone
+catmit tag --timezone UTC
+catmit tag --timezone Asia/Tokyo
+
+# Stable release: v1.2.4, without suffixes or timestamp
+catmit tag --release
+catmit tag --release --bump minor
+
+# Exact name, without automatic suffixes
+catmit tag --tag 1.2.4-rc.1
+
+# Another remote, without confirmation
+catmit tag --remote upstream --yes
 ```
 
-**Tag workflow:**
-- Detects pending worktree changes and generates a commit only when needed.
-- Pushes the current branch only when the remote branch is missing or local HEAD is ahead.
-- Reads the latest remote semantic version tag and calculates the next tag.
-- Creates an annotated tag and pushes `refs/tags/<tag>` after confirmation.
-- `--yes`/`-y` skips confirmation for fully automated release flows.
-- With `--stage-all=false`, unstaged or untracked changes are rejected so the generated message matches the committed diff.
+**Increment rules:**
+
+- Use the latest remote stable tag reachable from HEAD as the baseline, preserving its `v` or empty prefix. Without version history, use `--initial` (default `v0.1.0`).
+- `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Non-Conventional Commits require an explicit `--bump patch|minor|major`. The initial version is determined by `--initial`.
+- Prereleases retain their core target and increment a counter per version/channel. New features/breaking changes may raise the target; explicit `--bump` can select a different release line.
+- Example: `v1.2.3 → v1.2.4-dev.1+time → v1.2.4-dev.2+time → v1.2.4-rc.1+time → v1.2.4`. Stable promotion can tag the same tested commit. New fixes after the stable release start `v1.2.5-dev.1`.
+- Repeated prereleases of an unreleased commit get new counters. No new commits since the stable baseline means no new tag. Existing tags are never overwritten.
+- Timestamps are build metadata after `+` and do not affect precedence. Toggling `--notimestamp` preserves counter ordering; changing metadata alone is not a version upgrade.
+
+**Timezones and flags:**
+
+- `--timezone` defaults to `Asia/Shanghai`: `20261105T153000UTC8`. The same instant is `20261105T073000Z` in `UTC` or `20261105T163000UTC9` in `Asia/Tokyo`.
+- IANA daylight-saving offsets are honored. Fractional offsets use SemVer-safe forms such as `UTC5-30`, `UTC5-45` and `UTC-3-30`. The timestamp is fixed when the plan is created.
+- Explicit `--timezone` conflicts with `--notimestamp` and `--release` (stable releases have no timestamps).
+- `--pre`, `--release` and `--tag` are mutually exclusive. `--tag` also conflicts with `--bump`, `--initial`, `--notimestamp` and `--timezone`.
+- Behavior is controlled exclusively by CLI flags. The previous `tag [SEED_TEXT]`, `--seed`, `--lang` and `--stage-all` have been removed; commit your changes first.
+
+
+For catmit itself, GoReleaser marks prereleases automatically and skips Homebrew updates for them.
 
 ### Pull Request Creation
 ```bash

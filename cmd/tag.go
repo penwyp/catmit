@@ -1,127 +1,138 @@
 package cmd
 
 import (
-	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/errors"
+	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/logger"
 	"github.com/penwyp/catmit/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
-var (
-	tagDebug          bool
-	tagDryRun         bool
-	tagYes            bool
-	tagLang           string
-	tagTimeout        int
-	tagRemote         string
-	tagBump           string
-	tagExplicit       string
-	tagInitialVersion string
-	tagStageAll       bool
-	tagSeed           string
-)
-
-var tagCmd = &cobra.Command{
-	Use:   "tag [SEED_TEXT]",
-	Short: "Create and push the next semantic version tag",
-	Long: `Create and push a semantic version tag.
-
-The command can generate and commit pending changes, push the branch when needed,
-detect the latest remote semantic version tag, calculate the next tag, and push it.`,
-	Example: `  # Inspect, confirm, then commit/push/tag/push tag as needed
-  catmit tag
-
-  # Fully automatic release
-  catmit tag --yes
-
-  # Force a minor release
-  catmit tag --bump minor
-
-  # Preview the release plan
-  catmit tag --dry-run
-
-  # Use an explicit tag
-  catmit tag --tag v2.0.0`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runTag,
-}
+var tagCmd = newTagCommand()
 
 func init() {
 	rootCmd.AddCommand(tagCmd)
-
-	tagCmd.Flags().BoolVar(&tagDebug, "debug", false, "enable debug output for troubleshooting")
-	tagCmd.Flags().BoolVar(&tagDryRun, "dry-run", false, "preview release plan without executing")
-	tagCmd.Flags().BoolVarP(&tagYes, "yes", "y", false, "skip confirmation and execute immediately")
-	tagCmd.Flags().StringVarP(&tagLang, "lang", "l", "en", "output language for generated commit message (en/zh)")
-	tagCmd.Flags().IntVarP(&tagTimeout, "timeout", "t", 30, "timeout in seconds")
-	tagCmd.Flags().StringVarP(&tagRemote, "remote", "r", "origin", "remote to inspect and push to")
-	tagCmd.Flags().StringVar(&tagBump, "bump", "auto", "version bump strategy (auto/patch/minor/major)")
-	tagCmd.Flags().StringVar(&tagExplicit, "tag", "", "explicit semantic version tag to create")
-	tagCmd.Flags().StringVar(&tagInitialVersion, "initial", "v0.1.0", "initial tag when no remote semantic version tag exists")
-	tagCmd.Flags().BoolVar(&tagStageAll, "stage-all", true, "automatically stage all changes before committing")
-	tagCmd.Flags().StringVarP(&tagSeed, "seed", "s", "", "seed text for commit message generation")
 }
 
-func runTag(cmd *cobra.Command, args []string) error {
-	appLogger, err := logger.New(tagDebug)
+func newTagCommand() *cobra.Command {
+	var options workflow.TagOptions
+	var debug bool
+	cmd := &cobra.Command{
+		Use:   "tag",
+		Short: "Create and push a semantic version tag without an LLM",
+		Long: `Create and push an annotated semantic version tag for committed code.
+
+All behavior is controlled by command-line flags. No project configuration,
+LLM configuration, API key, staging or automatic commit is used. The worktree
+must be clean. The current branch is pushed first only when needed.
+
+Default: a dev prerelease with a counter and an Asia/Shanghai (UTC+8) timestamp,
+for example v1.2.4-dev.1+20261105T153000UTC8. --notimestamp removes only the
+build timestamp; the prerelease counter still increments. --release creates a
+plain stable version (v1.2.4), with no prerelease suffix or timestamp.
+
+Increment rules:
+  1. Use the latest remote stable tag reachable from HEAD as the baseline;
+     preserve its v/no-v prefix. With no history, use --initial (v0.1.0).
+  2. --bump auto examines ALL commits since that stable baseline:
+     breaking changes (!) -> major; feat -> minor; otherwise -> patch.
+     Non-Conventional Commits require an explicit --bump. No LLM is involved.
+     The initial release uses --initial without inferring a bump.
+  3. Continue the existing prerelease target without bumping its core each time.
+     New features/breaking changes may raise it; an explicit --bump overrides it.
+  4. Increment the counter separately for each core version and channel:
+     v1.2.4-dev.1 -> v1.2.4-dev.2 -> v1.2.4-rc.1 -> v1.2.4.
+     --release can promote the same tested commit, without another commit.
+     After v1.2.4, new fixes start v1.2.5-dev.1. No changes since the stable
+     release means no new tag. Repeated prereleases of an unreleased commit
+     are allowed and receive new counters.
+  5. Build timestamps do not affect SemVer precedence. Switching --notimestamp
+     on/off preserves counter ordering. Existing tags are never overwritten.
+     --tag uses an exact name, bypassing automatic naming and timestamps.
+
+Timezones:
+  --timezone defaults to Asia/Shanghai. UTC gives 20261105T073000Z;
+  Asia/Tokyo gives 20261105T163000UTC9 for the same instant. IANA daylight-saving
+  offsets are honored; fractional offsets use UTC5-30, UTC-3-30, etc.
+  Explicit --timezone and --notimestamp cannot be combined.
+  --release has no timestamp and cannot be combined with explicit --timezone.
+
+--pre [channel] defaults to dev; --pre=rc is also supported. --pre and --release
+are mutually exclusive. --tag cannot be combined with naming flags.`,
+		Example: `  # Default prerelease, with timestamp in UTC+8
+  catmit tag
+
+  # Preview the next tag (fetches Git refs, but does not commit, tag or push)
+  catmit tag --dry-run
+
+  # Counter-only prerelease
+  catmit tag --notimestamp
+
+  # Release candidate with UTC timestamp
+  catmit tag --pre rc --timezone UTC
+
+  # Stable release, or explicitly choose a minor release
+  catmit tag --release
+  catmit tag --release --bump minor
+
+  # Exact tag, preserving the supplied spelling
+  catmit tag --tag 1.2.4-rc.1
+
+  # Skip confirmation
+  catmit tag --yes`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 && cmd.Flags().Changed("pre") && options.Pre == "dev" {
+				options.Pre = args[0]
+				return nil
+			}
+			return cobra.NoArgs(cmd, args)
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runTag(cmd, options, debug)
+		},
+	}
+	flags := cmd.Flags()
+	flags.BoolVar(&debug, "debug", false, "enable Git debug output")
+	flags.BoolVar(&options.DryRun, "dry-run", false, "preview without creating a tag or pushing")
+	flags.BoolVarP(&options.Yes, "yes", "y", false, "skip confirmation")
+	flags.IntVarP(&options.Timeout, "timeout", "t", 30, "timeout per remote Git operation in seconds")
+	flags.StringVarP(&options.Remote, "remote", "r", "origin", "remote to inspect and push to")
+	flags.StringVar(&options.Bump, "bump", "auto", "core version bump from the stable baseline (auto/patch/minor/major)")
+	flags.StringVar(&options.ExplicitTag, "tag", "", "exact semantic version tag; disables automatic naming")
+	flags.StringVar(&options.InitialVersion, "initial", "v0.1.0", "initial core version when no reachable remote version exists")
+	flags.StringVar(&options.Pre, "pre", "", "prerelease channel (default dev); accepts --pre rc or --pre=rc")
+	flags.Lookup("pre").NoOptDefVal = "dev"
+	flags.BoolVar(&options.Release, "release", false, "create a stable release without a suffix or timestamp")
+	flags.BoolVar(&options.NoTimestamp, "notimestamp", false, "omit prerelease timestamp; keep the incrementing counter")
+	flags.StringVar(&options.Timezone, "timezone", "Asia/Shanghai", "timestamp timezone: UTC or an IANA name")
+	cmd.MarkFlagsMutuallyExclusive("pre", "release", "tag")
+	cmd.MarkFlagsMutuallyExclusive("timezone", "notimestamp")
+	for _, flag := range []string{"bump", "initial", "notimestamp", "timezone"} {
+		cmd.MarkFlagsMutuallyExclusive("tag", flag)
+	}
+	cmd.MarkFlagsMutuallyExclusive("release", "timezone")
+	return cmd
+}
+
+func runTag(cmd *cobra.Command, options workflow.TagOptions, debug bool) error {
+	if err := options.Validate(); err != nil {
+		return errors.Wrap(errors.ErrTypeConfig, "invalid tag options", err)
+	}
+	appLogger, err := logger.New(debug)
 	if err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "failed to initialize logger", err)
 	}
 	defer func() { _ = appLogger.Sync() }()
 
-	seedText := tagSeed
-	if seedText == "" && len(args) > 0 {
-		seedText = args[0]
-	}
-
-	config := &app.TagConfig{
-		Debug:          tagDebug,
-		DryRun:         tagDryRun,
-		Yes:            tagYes,
-		Language:       tagLang,
-		Timeout:        tagTimeout,
-		Remote:         tagRemote,
-		Bump:           tagBump,
-		ExplicitTag:    tagExplicit,
-		InitialVersion: tagInitialVersion,
-		StageAll:       tagStageAll,
-		SeedText:       seedText,
-	}
-	if err := config.Validate(); err != nil {
-		return errors.Wrap(errors.ErrTypeConfig, "invalid tag configuration", err)
-	}
-
-	var deps *app.Dependencies
+	// Tagging depends only on Git; it does not initialize app/LLM dependencies.
+	var runner git.Runner = git.NewRunnerWithLogger(debug, appLogger)
 	if testDeps != nil {
-		deps = testDeps
-	} else {
-		deps = app.NewDependencies(appLogger, tagDebug)
+		runner = testDeps.GetGitRunner()
 	}
-
-	tagWorkflow := workflow.NewTagWorkflow(deps, config, cmd.OutOrStdout(), cmd.InOrStdin())
-	if err := tagWorkflow.Run(cmd.Context()); err != nil {
-		if errors.Is(err, errors.ErrNoGitRepo) {
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-			errors.HandleFatal(err)
-		}
-
-		errType := errors.GetType(err)
-		switch errType {
-		case errors.ErrTypeGit, errors.ErrTypeNetwork, errors.ErrTypeAuth,
-			errors.ErrTypeTimeout, errors.ErrTypeLLM, errors.ErrTypeProvider,
-			errors.ErrTypePR, errors.ErrTypeExternal, errors.ErrTypeValidation:
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-			errors.HandleFatal(err)
-		case errors.ErrTypeConfig:
-			return err
-		default:
-			cmd.SilenceUsage = true
-			return err
-		}
+	wf := workflow.NewTagWorkflow(runner, options, cmd.OutOrStdout(), cmd.InOrStdin())
+	if err := wf.Run(cmd.Context()); err != nil {
+		cmd.SilenceUsage = true
+		return err
 	}
-
 	return nil
 }

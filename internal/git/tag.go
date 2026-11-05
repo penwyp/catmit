@@ -26,8 +26,6 @@ type TagManager interface {
 	CurrentBranch(ctx context.Context) (string, error)
 	HeadSHA(ctx context.Context, short bool) (string, error)
 	WorktreeStatus(ctx context.Context) (WorktreeStatus, error)
-	StageAll(ctx context.Context) error
-	Commit(ctx context.Context, message string) error
 	BranchStatus(ctx context.Context, remote, branch string) (BranchStatus, error)
 	PushBranch(ctx context.Context, remote, branch string) error
 	ListRemoteTags(ctx context.Context, remote string) ([]string, error)
@@ -36,7 +34,8 @@ type TagManager interface {
 	CreateAnnotatedTag(ctx context.Context, tagName, message, target string) error
 	PushTag(ctx context.Context, remote, tagName string) error
 	CommitMessagesSince(ctx context.Context, fromRef, toRef string) ([]string, error)
-	ResolveRevision(ctx context.Context, ref string) (string, error)
+	FetchRemoteTag(ctx context.Context, remote, tagName string) (string, error)
+	IsAncestor(ctx context.Context, ancestor, target string) (bool, error)
 }
 
 type tagManager struct {
@@ -80,22 +79,6 @@ func (m *tagManager) WorktreeStatus(ctx context.Context) (WorktreeStatus, error)
 		return WorktreeStatus{}, errors.Wrap(errors.ErrTypeGit, "failed to inspect worktree status", err)
 	}
 	return parseWorktreeStatus(output), nil
-}
-
-func (m *tagManager) StageAll(ctx context.Context) error {
-	_, err := m.runner.Run(ctx, "git", "add", "-A")
-	if err != nil {
-		return errors.Wrap(errors.ErrTypeGit, "failed to stage files", err)
-	}
-	return nil
-}
-
-func (m *tagManager) Commit(ctx context.Context, message string) error {
-	_, err := m.runner.Run(ctx, "git", "commit", "-m", message)
-	if err != nil {
-		return errors.Wrap(errors.ErrTypeGit, "failed to create commit", err)
-	}
-	return nil
 }
 
 func (m *tagManager) BranchStatus(ctx context.Context, remote, branch string) (BranchStatus, error) {
@@ -237,12 +220,23 @@ func (m *tagManager) CommitMessagesSince(ctx context.Context, fromRef, toRef str
 	return messages, nil
 }
 
-func (m *tagManager) ResolveRevision(ctx context.Context, ref string) (string, error) {
-	output, err := m.runner.Run(ctx, "git", "rev-parse", ref)
+// FetchRemoteTag resolves a remote tag to a commit without creating or replacing
+// any local tag. History calculations use the fetched SHA, not a local tag name.
+func (m *tagManager) FetchRemoteTag(ctx context.Context, remote, tagName string) (string, error) {
+	_, err := m.runner.Run(ctx, "git", "fetch", "--quiet", "--no-tags", remote, "refs/tags/"+tagName)
 	if err != nil {
-		return "", errors.Wrapf(errors.ErrTypeGit, "failed to resolve revision %q", err, ref)
+		return "", wrapGitCommandError(ctx, err, "failed to fetch tag %q from %q", tagName, remote)
+	}
+	output, err := m.runner.Run(ctx, "git", "rev-parse", "--verify", "FETCH_HEAD^{commit}")
+	if err != nil {
+		return "", errors.Wrapf(errors.ErrTypeGit, "failed to resolve tag %q to a commit", err, tagName)
 	}
 	return strings.TrimSpace(output), nil
+}
+
+func (m *tagManager) IsAncestor(ctx context.Context, ancestor, target string) (bool, error) {
+	count, err := m.revisionCount(ctx, target+".."+ancestor)
+	return count == 0, err
 }
 
 func (m *tagManager) revisionCount(ctx context.Context, rangeSpec string) (int, error) {

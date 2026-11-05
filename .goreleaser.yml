@@ -28,6 +28,8 @@ brews:
   - repository:
       owner: penwyp
       name: homebrew-catmit
+    # Prereleases are downloadable from GitHub but must not update the stable tap.
+    skip_upload: auto
     commit_author:
       name: penwyp bot
       email: wu.pen1120@gmail.com
@@ -38,6 +40,7 @@ brews:
       system "#{bin}/catmit", "--help"
 
 release:
+  prerelease: auto
   github:
     owner: penwyp
     name: catmit

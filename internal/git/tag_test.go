@@ -180,3 +180,26 @@ func TestParseWorktreeStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestTagManagerFetchRemoteTagWithoutLocalTag(t *testing.T) {
+	runner := newTagRunner()
+	runner.outputs["git rev-parse --verify FETCH_HEAD^{commit}"] = "abcdef\n"
+	sha, err := NewTagManager(runner).FetchRemoteTag(context.Background(), "origin", "v1.2.3-rc.1+20261105T153000UTC8")
+	require.NoError(t, err)
+	assert.Equal(t, "abcdef", sha)
+	require.Len(t, runner.calls, 2)
+	assert.Equal(t, []string{"fetch", "--quiet", "--no-tags", "origin", "refs/tags/v1.2.3-rc.1+20261105T153000UTC8"}, runner.calls[0].args)
+}
+
+func TestTagManagerIsAncestor(t *testing.T) {
+	runner := newTagRunner()
+	manager := NewTagManager(runner)
+	runner.outputs["git rev-list --count head..base"] = "0"
+	reachable, err := manager.IsAncestor(context.Background(), "base", "head")
+	require.NoError(t, err)
+	assert.True(t, reachable)
+	runner.outputs["git rev-list --count head..base"] = "2"
+	reachable, err = manager.IsAncestor(context.Background(), "base", "head")
+	require.NoError(t, err)
+	assert.False(t, reachable)
+}

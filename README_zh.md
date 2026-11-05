@@ -369,33 +369,61 @@ $ catmit squash-history
 -  **基础分支检测**：自动检测 main/master 作为基础分支
 
 ### 语义化版本标签
+
+`catmit tag` 只给已提交代码创建并推送 annotated tag，全程不调用 LLM，也不读取项目配置文件或 LLM 配置。不需要 API Key；工作区必须干净，不会自动暂存或提交。
+
 ```bash
-# 检查并确认后，按需执行 commit/push/tag/push tag
+# 默认 dev 预发布，带东八区时间：v1.2.4-dev.1+20261105T153000UTC8
 catmit tag
 
-# 全自动发布
-catmit tag --yes
+# 帮助包含完整说明、时区和递增规则
+catmit tag --help
 
-# 只预览发布计划，不写入任何内容
+# 预览（会读取/获取 Git 引用，不创建提交、tag 或推送）
 catmit tag --dry-run
 
-# 指定版本递增策略
-catmit tag --bump minor
+# 不带时间戳，仍递增预发布序号：v1.2.4-dev.2
+catmit tag --notimestamp
 
-# 使用明确的 tag
-catmit tag --tag v2.0.0
+# RC 预发布；--pre=rc 也可用
+catmit tag --pre rc
 
-# 使用其他远程仓库
-catmit tag --remote upstream
+# 使用 UTC 或其他 IANA 时区
+catmit tag --timezone UTC
+catmit tag --timezone Asia/Tokyo
+
+# 正式发布：v1.2.4，没有预发布后缀和时间戳
+catmit tag --release
+
+# 显式指定从正式基线递增 minor
+catmit tag --release --bump minor
+
+# 完全按给定名称打 tag，不自动附加后缀
+catmit tag --tag 1.2.4-rc.1
+
+# 指定远程、跳过确认
+catmit tag --remote upstream --yes
 ```
 
-**tag 工作流：**
-- 自动检测工作区变更，仅在需要时生成提交信息并创建 commit。
-- 仅在远程分支不存在或本地 HEAD 领先时 push 当前分支。
-- 从远程读取最新语义化版本 tag，并计算下一个 tag。
-- 确认后创建 annotated tag，并推送 `refs/tags/<tag>`。
-- `--yes`/`-y` 跳过确认，适合全自动发布流程。
-- 使用 `--stage-all=false` 时会拒绝 unstaged 或 untracked 变更，确保生成信息与实际提交 diff 一致。
+**递增规则：**
+
+- 以当前 HEAD 可达的最新远程正式 tag 为基准，保留历史 `v`／无 `v` 前缀。无版本历史时使用 `--initial`，默认 `v0.1.0`。
+- `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。遇到不符合 Conventional Commits 的提交，要求显式指定 `--bump patch|minor|major`；首次版本由 `--initial` 决定。
+- 同一轮预发布保持核心版本，每个版本和通道分别计数；新功能或破坏性变更可以提高目标版本，显式 `--bump` 可以选择另一条版本线。
+- 例如 `v1.2.3 → v1.2.4-dev.1+时间 → v1.2.4-dev.2+时间 → v1.2.4-rc.1+时间 → v1.2.4`。正式发布允许与已测试的预发布指向同一 commit，无需额外提交；正式版后有新修复才进入 `v1.2.5-dev.1`。
+- 同一未正式发布的 commit 可以多次预发布，序号继续递增；正式基线之后没有新提交时拒绝打新 tag。已有 tag 不覆盖。
+- 时间戳放在 `+` 后作为构建元数据，不参与版本排序，`--notimestamp` 开关不会打乱序号。仅修改构建元数据不算版本升级。
+
+**时间与参数：**
+
+- `--timezone` 默认 `Asia/Shanghai`，示例 `20261105T153000UTC8`；同一时刻在 `UTC` 为 `20261105T073000Z`，在 `Asia/Tokyo` 为 `20261105T163000UTC9`。
+- 支持 IANA 时区和夏令时；半小时／四十五分钟偏移用 `UTC5-30`、`UTC5-45`、`UTC-3-30` 等不含冒号的格式。时间在预览计划生成时固定，确认后不会重算。
+- 显式 `--timezone` 与 `--notimestamp` 冲突；正式版不带时间，因此 `--release` 与显式 `--timezone` 冲突。
+- `--pre`、`--release`、`--tag` 互斥。`--tag` 也不能与 `--bump`、`--initial`、`--notimestamp`、`--timezone` 混用。
+- 所有行为只通过命令行参数控制。原 `tag [SEED_TEXT]`、`--seed`、`--lang`、`--stage-all` 已移除；请先自行完成提交。
+
+
+catmit 自身的 GoReleaser 发布配置会自动标记预发布，并跳过预发布的 Homebrew 更新。
 
 ### Pull Request 创建
 ```bash

@@ -3,11 +3,8 @@
 package app
 
 import (
-	"fmt"
-
 	"github.com/penwyp/catmit/internal/git"
 	"github.com/penwyp/catmit/internal/pr"
-	tagging "github.com/penwyp/catmit/internal/tag"
 	"github.com/penwyp/catmit/pkg/gitinfo"
 	"github.com/penwyp/catmit/pkg/llm"
 	"github.com/penwyp/catmit/pkg/prompt"
@@ -151,42 +148,5 @@ type PROnlyConfig struct {
 // Validate validates the PR-only configuration
 func (c *PROnlyConfig) Validate() error {
 	// Add validation logic here if needed
-	return nil
-}
-
-// TagConfig holds configuration for the tag workflow.
-type TagConfig struct {
-	Debug          bool
-	DryRun         bool
-	Yes            bool
-	Language       string
-	Timeout        int
-	Remote         string
-	Bump           string
-	ExplicitTag    string
-	InitialVersion string
-	StageAll       bool
-	SeedText       string
-}
-
-// Validate validates the tag workflow configuration.
-func (c *TagConfig) Validate() error {
-	if c.Timeout <= 0 {
-		return fmt.Errorf("timeout must be greater than 0")
-	}
-	if c.Remote == "" {
-		return fmt.Errorf("remote must not be empty")
-	}
-	if _, err := tagging.NormalizeBump(c.Bump); err != nil {
-		return err
-	}
-	if _, err := tagging.ParseVersion(c.InitialVersion); err != nil {
-		return fmt.Errorf("invalid initial version: %w", err)
-	}
-	if c.ExplicitTag != "" {
-		if _, err := tagging.ParseVersion(c.ExplicitTag); err != nil {
-			return fmt.Errorf("invalid tag: %w", err)
-		}
-	}
 	return nil
 }
