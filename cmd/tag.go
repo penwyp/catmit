@@ -34,6 +34,7 @@ only committed history is considered. Remote history is still fetched, so Git
 read access and full history are required. --print conflicts with --dry-run.
 Printing does not reserve a version or advance the counter: repeated calls can
 produce the same version (especially with --notimestamp or within one second).
+Publishing-only checks (new commits, local/remote tag availability) are skipped.
 
 Default: a dev prerelease with a counter and an Asia/Shanghai (UTC+8) timestamp,
 for example v1.2.4-dev.1+20261105T153000UTC8. --notimestamp removes only the
@@ -55,7 +56,8 @@ Increment rules:
      v1.2.4-dev.1 -> v1.2.4-dev.2 -> v1.2.4-rc.1 -> v1.2.4.
      --release can promote the same tested commit, without another commit.
      After v1.2.4, new fixes start v1.2.5-dev.1. No changes since the stable
-     release means no new tag. Repeated prereleases of an unreleased commit
+     release means no new tag when publishing. --print still calculates the
+     next version (patch by default). Repeated prereleases of an unreleased commit
      are allowed and receive new counters.
   5. Build timestamps do not affect SemVer precedence. Switching --notimestamp
      on/off preserves counter ordering. Existing tags are never overwritten.

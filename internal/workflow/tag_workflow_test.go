@@ -551,3 +551,42 @@ func TestTagPrintFallsBackForLegacyCommits(t *testing.T) {
 		})
 	}
 }
+
+func TestTagPrintCalculatesNextVersionAtStableHead(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		bump    string
+		release bool
+		want    string
+	}{
+		{"default prerelease", "auto", false, "v1.2.56-dev.1\n"},
+		{"explicit minor", "minor", false, "v1.3.0-dev.1\n"},
+		{"stable output", "auto", true, "v1.2.56\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &fakeTagManager{head: "abc123", remoteTags: []string{"v1.2.55"}}
+			var stdout bytes.Buffer
+			wf := newTestTagWorkflow(manager, &stdout, nil)
+			wf.options.Print, wf.options.NoTimestamp = true, true
+			wf.options.Bump, wf.options.Release = tt.bump, tt.release
+			require.NoError(t, wf.Run(context.Background()))
+			assert.Equal(t, tt.want, stdout.String())
+			assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+			assert.NotContains(t, strings.Join(manager.Calls(), ","), "push-tag:")
+		})
+	}
+}
+
+func TestTagPrintIgnoresPublishingConflictsOnOtherBranches(t *testing.T) {
+	manager := &fakeTagManager{
+		head: "abc123", remoteTags: []string{"v1.2.55", "v1.2.56"},
+		unreachable: map[string]bool{"sha:v1.2.56": true}, localTagExists: true,
+	}
+	var stdout bytes.Buffer
+	wf := newTestTagWorkflow(manager, &stdout, nil)
+	wf.options.Print, wf.options.NoTimestamp = true, true
+	require.NoError(t, wf.Run(context.Background()))
+	assert.Equal(t, "v1.2.56-dev.1\n", stdout.String())
+	assert.NotContains(t, manager.Calls(), "local-tag-exists")
+	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+}

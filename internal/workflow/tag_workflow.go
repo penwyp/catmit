@@ -151,7 +151,7 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if history.hasStable && len(messages) == 0 {
+	if !w.options.Print && history.hasStable && len(messages) == 0 {
 		return nil, errors.Newf(errors.ErrTypeValidation,
 			"no new commit since latest stable tag %s; commit changes before tagging", history.stable.String())
 	}
@@ -181,9 +181,9 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		if localTagExists {
 			return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
 		}
-	}
-	if conflict := conflictingTag(remoteTags, nextTag); conflict != "" {
-		return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s conflicts with planned tag %s on %s", conflict, nextTag, remote)
+		if conflict := conflictingTag(remoteTags, nextTag); conflict != "" {
+			return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s conflicts with planned tag %s on %s", conflict, nextTag, remote)
+		}
 	}
 	plan := &ReleasePlan{
 		Remote: remote, Branch: branch, Head: head,

@@ -105,6 +105,10 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 			publish(prefix + "1.2.4")
 			_, err := wf.Plan(context.Background())
 			require.ErrorContains(t, err, "no new commit since latest stable")
+			wf.options.Print, wf.options.Release = true, false
+			out.Reset()
+			require.NoError(t, wf.Run(context.Background()))
+			assert.Equal(t, prefix+"1.2.5-dev.1\n", out.String())
 			assert.Empty(t, git(clone, "status", "--porcelain"))
 			assert.Empty(t, git(clone, "tag", "--list", prefix+"1.2.3"), "fetching the baseline must not create a local tag")
 			assert.Equal(t, head, git(clone, "rev-parse", "HEAD"), "tag must never create a commit")
