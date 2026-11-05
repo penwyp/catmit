@@ -157,7 +157,7 @@ func TestTagWorkflowPlanAutoMinor(t *testing.T) {
 	assert.Equal(t, "main", plan.Branch)
 	assert.False(t, plan.PushBranch)
 	assert.Equal(t, "v1.2.3", plan.LatestTag)
-	assert.Equal(t, "v1.3.0-dev.1+20261105T153000UTC8", plan.NextTag)
+	assert.Equal(t, "v1.3.0-dev.1.20261105T153000UTC8", plan.NextTag)
 }
 
 func TestTagWorkflowPlanRejectsBehindBranch(t *testing.T) {
@@ -425,7 +425,7 @@ func TestTagWorkflowReleaseTargets(t *testing.T) {
 		{name: "initial", want: "v0.1.0-dev.1"},
 		{name: "initial stable", release: true, want: "v0.1.0"},
 		{name: "unprefixed", tags: []string{"1.2.3"}, messages: []string{"fix: bug"}, want: "1.2.4-dev.1"},
-		{name: "continue counter", tags: []string{"v1.2.3", "v1.2.4-dev.1+20261104T010000UTC8"}, messages: []string{"fix: bug"}, want: "v1.2.4-dev.2"},
+		{name: "continue counter", tags: []string{"v1.2.3", "v1.2.4-dev.1.20261104T010000UTC8"}, messages: []string{"fix: bug"}, want: "v1.2.4-dev.2"},
 		{name: "rc channel", tags: []string{"v1.2.3", "v1.2.4-dev.8"}, messages: []string{"fix: bug"}, pre: "rc", want: "v1.2.4-rc.1"},
 		{name: "promote same commit", tags: []string{"v1.2.3", "v1.2.4-rc.1"}, messages: []string{"fix: bug"}, release: true, want: "v1.2.4"},
 		{name: "promote first cycle", tags: []string{"1.3.0-rc.1"}, messages: []string{"initial commit"}, release: true, want: "1.3.0"},
@@ -474,7 +474,7 @@ func TestTagWorkflowAutoRequiresConventionalCommits(t *testing.T) {
 	wf.options.Bump = "minor"
 	plan, err := wf.Plan(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "v1.3.0-dev.1+20261105T153000UTC8", plan.NextTag)
+	assert.Equal(t, "v1.3.0-dev.1.20261105T153000UTC8", plan.NextTag)
 }
 
 func TestTagWorkflowRejectsNoChangesSinceStable(t *testing.T) {
@@ -501,7 +501,7 @@ func TestTagWorkflowDryRunAndTimestampStayFixed(t *testing.T) {
 	wf.options.Timezone = "Asia/Tokyo"
 	wf.options.DryRun = true
 	require.NoError(t, wf.Run(context.Background()))
-	assert.Contains(t, out.String(), "v1.2.4-dev.1+20261105T163000UTC9")
+	assert.Contains(t, out.String(), "v1.2.4-dev.1.20261105T163000UTC9")
 	assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
 	plan, err := wf.Plan(context.Background())
 	require.NoError(t, err)
@@ -512,7 +512,8 @@ func TestTagWorkflowDryRunAndTimestampStayFixed(t *testing.T) {
 
 func TestTagWorkflowRejectsConcurrentSemanticRelease(t *testing.T) {
 	for _, remoteTag := range []string{
-		"1.2.4-dev.1+other-time", "v1.2.4-dev.2", "v1.2.4",
+		"1.2.4-dev.1.20261105T153000UTC8", "v1.2.4-dev.1.20261104T153000UTC8",
+		"v1.2.4-dev.1.20261106T153000UTC8", "v1.2.4-dev.1", "v1.2.4-dev.2", "v1.2.4",
 	} {
 		t.Run(remoteTag, func(t *testing.T) {
 			manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"fix: bug"}}

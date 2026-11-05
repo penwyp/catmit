@@ -75,7 +75,7 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				out.Reset()
 				require.NoError(t, wf.Run(context.Background()))
-				assert.Equal(t, prefix+"1.2.4-dev.1+20261105T153000UTC8\n", out.String())
+				assert.Equal(t, prefix+"1.2.4-dev.1.20261105T153000UTC8\n", out.String())
 			}
 			assert.Equal(t, refsBefore, git(clone, "show-ref"))
 			assert.Equal(t, remoteBefore, git(clone, "ls-remote", "origin"))
@@ -92,20 +92,24 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 				plan, err := wf.Plan(context.Background())
 				require.NoError(t, err)
 				assert.Equal(t, want, plan.NextTag)
+				assert.Regexp(t, `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`, plan.NextTag)
 				require.NoError(t, wf.Execute(context.Background(), plan))
 				assert.Equal(t, head, git(clone, "rev-parse", "refs/tags/"+want+"^{commit}"))
 				assert.Contains(t, git(clone, "ls-remote", "--tags", "origin", "refs/tags/"+want), "refs/tags/"+want)
 			}
-			publish(prefix + "1.2.4-dev.1+20261105T153000UTC8")
+			publish(prefix + "1.2.4-dev.1.20261105T153000UTC8")
+			publish(prefix + "1.2.4-dev.2.20261105T153000UTC8")
 			wf.options.NoTimestamp = true
-			publish(prefix + "1.2.4-dev.2")
+			publish(prefix + "1.2.4-dev.3")
+			wf.options.NoTimestamp = false
+			publish(prefix + "1.2.4-dev.4.20261105T153000UTC8")
 			wf.options.Pre = "rc"
-			publish(prefix + "1.2.4-rc.1")
+			publish(prefix + "1.2.4-rc.1.20261105T153000UTC8")
 			wf.options.Pre, wf.options.Release = "", true
 			publish(prefix + "1.2.4")
 			_, err := wf.Plan(context.Background())
 			require.ErrorContains(t, err, "no new commit since latest stable")
-			wf.options.Print, wf.options.Release = true, false
+			wf.options.Print, wf.options.Release, wf.options.NoTimestamp = true, false, true
 			out.Reset()
 			require.NoError(t, wf.Run(context.Background()))
 			assert.Equal(t, prefix+"1.2.5-dev.1\n", out.String())

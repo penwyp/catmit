@@ -92,8 +92,8 @@ func TestTagCommandUsesOnlyCLIWithoutLLM(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"--dry-run"}, "v0.1.0-dev.1+"},
-		{[]string{"--dry-run", "--pre"}, "v0.1.0-dev.1+"},
+		{[]string{"--dry-run"}, "v0.1.0-dev.1."},
+		{[]string{"--dry-run", "--pre"}, "v0.1.0-dev.1."},
 		{[]string{"--dry-run", "--pre", "rc", "--notimestamp"}, "Next tag: v0.1.0-rc.1\n"},
 		{[]string{"--dry-run", "--pre=beta", "--notimestamp"}, "Next tag: v0.1.0-beta.1\n"},
 		{[]string{"--dry-run", "--release"}, "Next tag: v0.1.0\n"},
@@ -164,11 +164,13 @@ func TestTagPrintOutputContract(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"--print"}, `^v0\.1\.0-dev\.1\+[0-9]{8}T[0-9]{6}UTC8\n$`},
+		{[]string{"--print"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}UTC8\n$`},
 		{[]string{"--print", "--notimestamp", "--yes"}, `^v0\.1\.0-dev\.1\n$`},
+		{[]string{"--print", "--pre", "rc"}, `^v0\.1\.0-rc\.1\.[0-9]{8}T[0-9]{6}UTC8\n$`},
+		{[]string{"--print", "--timezone", "Asia/Kolkata"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}UTC5-30\n$`},
 		{[]string{"--print", "--pre", "rc", "--notimestamp"}, `^v0\.1\.0-rc\.1\n$`},
 		{[]string{"--print", "--release"}, `^v0\.1\.0\n$`},
-		{[]string{"--print", "--timezone", "UTC", "--debug"}, `^v0\.1\.0-dev\.1\+[0-9]{8}T[0-9]{6}Z\n$`},
+		{[]string{"--print", "--timezone", "UTC", "--debug"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}Z\n$`},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			cmd := newTagCommand()
@@ -178,6 +180,7 @@ func TestTagPrintOutputContract(t *testing.T) {
 			cmd.SetArgs(tt.args)
 			require.NoError(t, cmd.Execute())
 			assert.Regexp(t, tt.want, stdout.String())
+			assert.Regexp(t, `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`, strings.TrimSuffix(stdout.String(), "\n"))
 			assert.Empty(t, stderr.String())
 		})
 	}

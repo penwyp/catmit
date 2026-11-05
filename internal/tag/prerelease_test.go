@@ -13,19 +13,25 @@ func TestPrereleaseCounterSurvivesTimestampToggle(t *testing.T) {
 	base, err := ParseVersion("1.2.4")
 	require.NoError(t, err)
 	now := time.Date(2026, 11, 5, 15, 30, 0, 0, time.FixedZone("UTC8", 8*3600))
-	tags := []string{"v1.2.4-dev.2+20261104T153000UTC8", "1.2.4-rc.8", "v2.0.0-dev.99", "invalid"}
+	tags := []string{"v1.2.4-dev.2.20261104T153000UTC8", "1.2.4-rc.8", "v2.0.0-dev.99", "invalid"}
 	first, err := NextPrerelease(base, "dev", true, tags, now)
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.4-dev.3", first.String())
 	tags = append(tags, first.String())
 	second, err := NextPrerelease(base, "dev", false, tags, now)
 	require.NoError(t, err)
-	assert.Equal(t, "1.2.4-dev.4+20261105T153000UTC8", second.String())
+	assert.Equal(t, "1.2.4-dev.4.20261105T153000UTC8", second.String())
 	assert.Positive(t, second.Compare(first))
 	tags = append(tags, second.String())
 	third, err := NextPrerelease(base, "dev", false, tags, now)
 	require.NoError(t, err)
-	assert.Equal(t, "1.2.4-dev.5+20261105T153000UTC8", third.String(), "same-second calls still have distinct ordered versions")
+	assert.Equal(t, "1.2.4-dev.5.20261105T153000UTC8", third.String(), "same-second calls still have distinct ordered versions")
+	tags = append(tags, third.String())
+	fourth, err := NextPrerelease(base, "dev", true, tags, now)
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.4-dev.6", fourth.String())
+	assert.Positive(t, fourth.Compare(third))
+
 	rc, err := NextPrerelease(base, "rc", true, tags, now)
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.4-rc.9", rc.String())
@@ -47,8 +53,14 @@ func TestTimestampZones(t *testing.T) {
 			require.NoError(t, err)
 			stamp := FormatTimestamp(instant.In(location))
 			assert.Equal(t, tt.want, stamp)
-			_, err = ParseVersion("v1.2.3-dev.1+" + stamp)
+			version, err := NextPrerelease(Version{Prefix: "v", Major: 1, Minor: 2, Patch: 3}, "dev", false, nil, instant.In(location))
 			require.NoError(t, err)
+			assert.Equal(t, "v1.2.3-dev.1."+stamp, version.String())
+			assert.Empty(t, version.Build)
+			assert.Regexp(t, `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`, version.String())
+			parsed, err := ParseVersion(version.String())
+			require.NoError(t, err)
+			assert.Equal(t, version, parsed)
 		})
 	}
 	location, err := time.LoadLocation("America/New_York")
@@ -65,4 +77,16 @@ func TestPrereleaseRejectsInvalidChannelAndOverflow(t *testing.T) {
 		_, err := NextPrerelease(Version{Major: 1}, "dev", true, []string{tag}, time.Time{})
 		require.ErrorContains(t, err, "overflow")
 	}
+}
+
+func TestPrereleaseCounterPrecedesTimestamp(t *testing.T) {
+	base, err := ParseVersion("v1.2.4")
+	require.NoError(t, err)
+	previous, err := ParseVersion("v1.2.4-dev.9.20261106T153000UTC8")
+	require.NoError(t, err)
+	now := time.Date(2026, 11, 5, 7, 30, 0, 0, time.UTC)
+	next, err := NextPrerelease(base, "dev", false, []string{previous.String()}, now)
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.4-dev.10.20261105T073000Z", next.String())
+	assert.Positive(t, next.Compare(previous), "the counter takes precedence even if the clock moves backwards")
 }
