@@ -385,9 +385,6 @@ catmit tag --bump minor
 # 使用明确的 tag
 catmit tag --tag v2.0.0
 
-# 附加北京时间（UTC+8），例如 v1.2.4+20261105.153000
-catmit tag --timestamp
-
 # 使用其他远程仓库
 catmit tag --remote upstream
 ```
@@ -396,10 +393,6 @@ catmit tag --remote upstream
 - 自动检测工作区变更，仅在需要时生成提交信息并创建 commit。
 - 仅在远程分支不存在或本地 HEAD 领先时 push 当前分支。
 - 从远程读取最新语义化版本 tag，并计算下一个 tag。
-- 自动递增沿用最新 tag 的 `v`／无 `v` 前缀；支持解析预发布标识与构建元数据。
-- `--timestamp` 可选地附加 `+YYYYMMDD.HHMMSS` 构建时间（UTC+8），时间在生成发布计划时固定，不参与版本优先级比较。不传此参数时不附加时间，也不继承旧 tag 的后缀。
-- `--tag` 和 `--initial` 支持显式后缀，例如 `v1.2.4-rc.1+20261105.053000`；已指定构建元数据时不能同时使用 `--timestamp`。仅修改构建元数据不算升级版本。
-- 预发布中的纯数字段不允许前导零；如需预发布时间，使用 `v1.2.4-dev.20261105T053000`。
 - 确认后创建 annotated tag，并推送 `refs/tags/<tag>`。
 - `--yes`/`-y` 跳过确认，适合全自动发布流程。
 - 使用 `--stage-all=false` 时会拒绝 unstaged 或 untracked 变更，确保生成信息与实际提交 diff 一致。

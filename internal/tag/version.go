@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	versionPattern            = regexp.MustCompile(`^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$`)
+	versionPattern            = regexp.MustCompile(`^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
 	breakingHeaderPattern     = regexp.MustCompile(`(?m)^[a-z]+(?:\([^)]+\))?!:`)
 	featureHeaderPattern      = regexp.MustCompile(`(?m)^feat(?:\([^)]+\))?:`)
 	conventionalCommitPattern = regexp.MustCompile(`^[a-z]+(?:\([^)]*\))?!?: .+`)
@@ -30,23 +30,16 @@ var (
 )
 
 type Version struct {
-	Prefix     string
-	Major      int
-	Minor      int
-	Patch      int
-	Prerelease string
-	Build      string
+	Prefix string
+	Major  int
+	Minor  int
+	Patch  int
 }
 
 func ParseVersion(raw string) (Version, error) {
 	matches := versionPattern.FindStringSubmatch(strings.TrimSpace(raw))
 	if matches == nil {
 		return Version{}, fmt.Errorf("invalid semantic version %q", raw)
-	}
-	for _, identifier := range strings.Split(matches[5], ".") {
-		if isNumericIdentifier(identifier) && len(identifier) > 1 && identifier[0] == '0' {
-			return Version{}, fmt.Errorf("invalid semantic version %q: numeric prerelease identifier has a leading zero", raw)
-		}
 	}
 
 	major, err := strconv.Atoi(matches[2])
@@ -63,24 +56,15 @@ func ParseVersion(raw string) (Version, error) {
 	}
 
 	return Version{
-		Prefix:     matches[1],
-		Major:      major,
-		Minor:      minor,
-		Patch:      patch,
-		Prerelease: matches[5],
-		Build:      matches[6],
+		Prefix: matches[1],
+		Major:  major,
+		Minor:  minor,
+		Patch:  patch,
 	}, nil
 }
 
 func (v Version) String() string {
-	version := fmt.Sprintf("%s%d.%d.%d", v.Prefix, v.Major, v.Minor, v.Patch)
-	if v.Prerelease != "" {
-		version += "-" + v.Prerelease
-	}
-	if v.Build != "" {
-		version += "+" + v.Build
-	}
-	return version
+	return fmt.Sprintf("%s%d.%d.%d", v.Prefix, v.Major, v.Minor, v.Patch)
 }
 
 func (v Version) Compare(other Version) int {
@@ -90,49 +74,7 @@ func (v Version) Compare(other Version) int {
 	if v.Minor != other.Minor {
 		return compareInt(v.Minor, other.Minor)
 	}
-	if v.Patch != other.Patch {
-		return compareInt(v.Patch, other.Patch)
-	}
-	if v.Prerelease == other.Prerelease {
-		return 0 // Build metadata does not affect SemVer precedence.
-	}
-	if v.Prerelease == "" {
-		return 1
-	}
-	if other.Prerelease == "" {
-		return -1
-	}
-	left, right := strings.Split(v.Prerelease, "."), strings.Split(other.Prerelease, ".")
-	for i := 0; i < len(left) && i < len(right); i++ {
-		if left[i] == right[i] {
-			continue
-		}
-		leftNumeric, rightNumeric := isNumericIdentifier(left[i]), isNumericIdentifier(right[i])
-		if leftNumeric && rightNumeric {
-			// Compare arbitrary-length numbers without integer overflow.
-			if len(left[i]) != len(right[i]) {
-				return compareInt(len(left[i]), len(right[i]))
-			}
-		} else if leftNumeric {
-			return -1
-		} else if rightNumeric {
-			return 1
-		}
-		return strings.Compare(left[i], right[i])
-	}
-	return compareInt(len(left), len(right))
-}
-
-func isNumericIdentifier(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, c := range value {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
+	return compareInt(v.Patch, other.Patch)
 }
 
 func (v Version) Next(bump Bump) (Version, error) {
@@ -161,10 +103,6 @@ func LatestSemVerTag(tags []string) (Version, bool) {
 	}
 
 	sort.Slice(versions, func(i, j int) bool {
-		if versions[i].Compare(versions[j]) == 0 {
-			// Pick a deterministic ref for equal precedence, regardless of input order.
-			return versions[i].String() < versions[j].String()
-		}
 		return versions[i].Compare(versions[j]) < 0
 	})
 

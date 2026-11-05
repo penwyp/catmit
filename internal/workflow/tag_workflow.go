@@ -183,12 +183,6 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if w.config.Timestamp {
-		if nextVersion.Build != "" {
-			return nil, errors.New(errors.ErrTypeConfig, "--timestamp cannot replace existing build metadata")
-		}
-		nextVersion.Build = time.Now().In(time.FixedZone("UTC+8", 8*60*60)).Format("20060102.150405")
-	}
 	nextTag := nextVersion.String()
 
 	localTagExists, err := w.manager.LocalTagExists(ctx, nextTag)

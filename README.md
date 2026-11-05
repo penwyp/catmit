@@ -163,9 +163,6 @@ catmit tag --bump minor
 # Use an explicit tag
 catmit tag --tag v2.0.0
 
-# Append build time in UTC+8, e.g. v1.2.4+20261105.153000
-catmit tag --timestamp
-
 # Use a different remote
 catmit tag --remote upstream
 ```
@@ -174,10 +171,6 @@ catmit tag --remote upstream
 - Detects pending worktree changes and generates a commit only when needed.
 - Pushes the current branch only when the remote branch is missing or local HEAD is ahead.
 - Reads the latest remote semantic version tag and calculates the next tag.
-- Automatic bumps preserve the latest tag's `v` or empty prefix; prerelease identifiers and build metadata are supported.
-- Optional `--timestamp` appends `+YYYYMMDD.HHMMSS` in UTC+8, fixed when the release plan is generated. Build metadata does not affect version precedence. Without this flag, automatic bumps omit timestamps and do not inherit previous suffixes.
-- `--tag` and `--initial` accept explicit suffixes, such as `v1.2.4-rc.1+20261105.053000`; existing build metadata cannot be combined with `--timestamp`. Changing only build metadata does not count as a version upgrade.
-- Numeric prerelease identifiers cannot contain leading zeros; use a format such as `v1.2.4-dev.20261105T053000` for prerelease timestamps.
 - Creates an annotated tag and pushes `refs/tags/<tag>` after confirmation.
 - `--yes`/`-y` skips confirmation for fully automated release flows.
 - With `--stage-all=false`, unstaged or untracked changes are rejected so the generated message matches the committed diff.

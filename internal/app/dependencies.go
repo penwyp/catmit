@@ -165,7 +165,6 @@ type TagConfig struct {
 	Bump           string
 	ExplicitTag    string
 	InitialVersion string
-	Timestamp      bool
 	StageAll       bool
 	SeedText       string
 }
@@ -187,16 +186,6 @@ func (c *TagConfig) Validate() error {
 	if c.ExplicitTag != "" {
 		if _, err := tagging.ParseVersion(c.ExplicitTag); err != nil {
 			return fmt.Errorf("invalid tag: %w", err)
-		}
-	}
-	if c.Timestamp {
-		raw := c.InitialVersion
-		if c.ExplicitTag != "" {
-			raw = c.ExplicitTag
-		}
-		version, _ := tagging.ParseVersion(raw)
-		if version.Build != "" {
-			return fmt.Errorf("--timestamp cannot be combined with build metadata in --tag or --initial")
 		}
 	}
 	return nil

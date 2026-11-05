@@ -22,7 +22,6 @@ func TestTagCommandFlags(t *testing.T) {
 		"initial",
 		"stage-all",
 		"seed",
-		"timestamp",
 	} {
 		assert.NotNil(t, flags.Lookup(name), "expected --%s flag", name)
 	}
