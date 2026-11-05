@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/penwyp/catmit/internal/app"
 	"github.com/penwyp/catmit/internal/git"
@@ -23,6 +24,55 @@ func (r tagWorkflowRunner) Run(_ context.Context, command string, args ...string
 	return "", nil
 }
 
+func TestTagWorkflowTimestamp(t *testing.T) {
+	for _, prefix := range []string{"", "v"} {
+		for _, timestamp := range []bool{false, true} {
+			manager := &fakeTagManager{
+				branch: "main", head: "abc123",
+				branchStatus:   git.BranchStatus{RemoteExists: true},
+				remoteTags:     []string{prefix + "1.2.3+20261105.053000"},
+				commitMessages: []string{"fix: bug"},
+			}
+			workflow := newTestTagWorkflow(manager, nil, nil)
+			workflow.config.Timestamp = timestamp
+			before := time.Now().Truncate(time.Second)
+			plan, err := workflow.Plan(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, manager.remoteTags[0], plan.LatestTag)
+			assert.Equal(t, manager.remoteTags[0], manager.historyFrom)
+			if timestamp {
+				require.True(t, strings.HasPrefix(plan.NextTag, prefix+"1.2.4+"))
+				stamp := strings.TrimPrefix(plan.NextTag, prefix+"1.2.4+")
+				parsed, err := time.ParseInLocation("20060102.150405", stamp, time.FixedZone("UTC+8", 8*60*60))
+				require.NoError(t, err)
+				assert.False(t, parsed.Before(before))
+				assert.False(t, parsed.After(time.Now()))
+				require.NoError(t, workflow.Execute(context.Background(), plan))
+				assert.Contains(t, manager.Calls(), "create-tag:"+plan.NextTag)
+				assert.Contains(t, manager.Calls(), "push-tag:origin/"+plan.NextTag)
+			} else {
+				assert.Equal(t, prefix+"1.2.4", plan.NextTag)
+			}
+		}
+	}
+}
+
+func TestTagWorkflowExplicitMetadata(t *testing.T) {
+	manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"fix: bug"}}
+	workflow := newTestTagWorkflow(manager, nil, nil)
+	workflow.config.ExplicitTag = "v1.2.3+20261105.153000"
+	_, err := workflow.Plan(context.Background())
+	require.ErrorContains(t, err, "must be greater")
+	workflow.config.ExplicitTag = "v1.2.4+20261105.153000"
+	plan, err := workflow.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, workflow.config.ExplicitTag, plan.NextTag)
+	workflow.config.Timestamp = true
+	require.Error(t, workflow.config.Validate())
+	_, err = workflow.Plan(context.Background())
+	require.ErrorContains(t, err, "cannot replace")
+}
+
 type fakeTagManager struct {
 	mu              sync.Mutex
 	branch          string
@@ -31,6 +81,7 @@ type fakeTagManager struct {
 	branchStatus    git.BranchStatus
 	remoteTags      []string
 	commitMessages  []string
+	historyFrom     string
 	localTagExists  bool
 	remoteTagExists bool
 	remoteTagChecks []bool
@@ -123,7 +174,8 @@ func (m *fakeTagManager) PushTag(_ context.Context, remote, tagName string) erro
 	return nil
 }
 
-func (m *fakeTagManager) CommitMessagesSince(context.Context, string, string) ([]string, error) {
+func (m *fakeTagManager) CommitMessagesSince(_ context.Context, from, _ string) ([]string, error) {
+	m.historyFrom = from
 	m.appendCall("commit-messages")
 	return m.commitMessages, nil
 }

@@ -20,6 +20,7 @@ var (
 	tagInitialVersion string
 	tagStageAll       bool
 	tagSeed           string
+	tagTimestamp      bool
 )
 
 var tagCmd = &cobra.Command{
@@ -41,6 +42,9 @@ detect the latest remote semantic version tag, calculate the next tag, and push 
   # Preview the release plan
   catmit tag --dry-run
 
+  # Include build time (UTC+8)
+  catmit tag --timestamp
+
   # Use an explicit tag
   catmit tag --tag v2.0.0`,
 	Args: cobra.MaximumNArgs(1),
@@ -61,6 +65,7 @@ func init() {
 	tagCmd.Flags().StringVar(&tagInitialVersion, "initial", "v0.1.0", "initial tag when no remote semantic version tag exists")
 	tagCmd.Flags().BoolVar(&tagStageAll, "stage-all", true, "automatically stage all changes before committing")
 	tagCmd.Flags().StringVarP(&tagSeed, "seed", "s", "", "seed text for commit message generation")
+	tagCmd.Flags().BoolVar(&tagTimestamp, "timestamp", false, "append build timestamp in UTC+8 (YYYYMMDD.HHMMSS)")
 }
 
 func runTag(cmd *cobra.Command, args []string) error {
@@ -87,6 +92,7 @@ func runTag(cmd *cobra.Command, args []string) error {
 		InitialVersion: tagInitialVersion,
 		StageAll:       tagStageAll,
 		SeedText:       seedText,
+		Timestamp:      tagTimestamp,
 	}
 	if err := config.Validate(); err != nil {
 		return errors.Wrap(errors.ErrTypeConfig, "invalid tag configuration", err)
