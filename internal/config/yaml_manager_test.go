@@ -91,7 +91,7 @@ func TestYAMLConfigManager_SaveAndLoad(t *testing.T) {
 			// Create temp directory
 			tempDir, err := os.MkdirTemp("", "catmit-config-test")
 			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			configPath := filepath.Join(tempDir, "config"+tt.extension)
 			manager, err := NewYAMLConfigManager(configPath)
@@ -138,7 +138,7 @@ func TestYAMLConfigManager_FormatFallback(t *testing.T) {
 	// Create temp directory
 	tempDir, err := os.MkdirTemp("", "catmit-config-test")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Write JSON content to a .yaml file
 	configPath := filepath.Join(tempDir, "config.yaml")
@@ -191,7 +191,7 @@ func TestYAMLConfigManager_CreateDefaultConfig(t *testing.T) {
 			// Create temp directory
 			tempDir, err := os.MkdirTemp("", "catmit-config-test")
 			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			configPath := filepath.Join(tempDir, "config"+tt.extension)
 			manager, err := NewYAMLConfigManager(configPath)
@@ -224,7 +224,7 @@ func TestYAMLConfigManager_UpdateRemote(t *testing.T) {
 	// Create temp directory
 	tempDir, err := os.MkdirTemp("", "catmit-config-test")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	configPath := filepath.Join(tempDir, "config.yaml")
 	manager, err := NewYAMLConfigManager(configPath)
@@ -265,7 +265,7 @@ func TestYAMLConfigManager_ConvertFormat(t *testing.T) {
 	// Create temp directory
 	tempDir, err := os.MkdirTemp("", "catmit-config-test")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Start with JSON
 	configPath := filepath.Join(tempDir, "config.json")
@@ -311,7 +311,7 @@ func TestYAMLConfigManager_ConcurrentAccess(t *testing.T) {
 	// Create temp directory
 	tempDir, err := os.MkdirTemp("", "catmit-config-test")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	configPath := filepath.Join(tempDir, "config.yaml")
 	manager, err := NewYAMLConfigManager(configPath)

@@ -50,9 +50,10 @@ func (m *remoteManager) GetRemotes(ctx context.Context) ([]Remote, error) {
 			remotes[name] = &Remote{Name: name}
 		}
 
-		if typeStr == "fetch" {
+		switch typeStr {
+		case "fetch":
 			remotes[name].FetchURL = url
-		} else if typeStr == "push" {
+		case "push":
 			remotes[name].PushURL = url
 		}
 	}

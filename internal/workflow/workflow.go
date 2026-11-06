@@ -74,14 +74,14 @@ func (w *Workflow) runDryRun(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Fprintln(w.output, message)
+	_, _ = fmt.Fprintln(w.output, message)
 	return nil
 }
 
 // runAutomatic executes the automatic commit workflow (-y flag)
 func (w *Workflow) runAutomatic(ctx context.Context) error {
 	// Show non-streaming progress for automatic mode
-	fmt.Fprintln(w.output, output.RenderStatusBar("Generating commit message...", false))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Generating commit message...", false))
 
 	message, err := w.generateCommitMessage(ctx)
 	if err != nil {
@@ -89,10 +89,10 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 	}
 
 	// Display the generated message
-	fmt.Fprintln(w.output, message)
+	_, _ = fmt.Fprintln(w.output, message)
 
 	// Commit the changes
-	fmt.Fprintln(w.output, output.RenderStatusBar("Committing...", false))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Committing...", false))
 
 	committer := w.deps.GetCommitter()
 
@@ -106,15 +106,15 @@ func (w *Workflow) runAutomatic(ctx context.Context) error {
 	if err := committer.Commit(ctx, message); err != nil {
 		return errors.Wrap(errors.ErrTypeGit, "failed to commit", err)
 	}
-	fmt.Fprintln(w.output, output.RenderStatusBar("Committed successfully", true))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Committed successfully", true))
 
 	// Push if enabled
 	if w.config.Push {
-		fmt.Fprintln(w.output, output.RenderStatusBar("Pushing...", false))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pushing...", false))
 		if err := committer.Push(ctx); err != nil {
 			return errors.Wrap(errors.ErrTypeGit, "push failed", err)
 		}
-		fmt.Fprintln(w.output, output.RenderStatusBar("Pushed successfully", true))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pushed successfully", true))
 		// For Tencent Gongfeng (git.woa.com) remotes, echo the merge request
 		// links the remote announced, so they are easy to grab from the terminal.
 		printMRLinks(w.output, committer)
@@ -189,7 +189,7 @@ func (w *Workflow) runInteractive(ctx context.Context) error {
 			printMRLinks(w.output, committer)
 			return nil
 		case ui.DecisionCancel:
-			fmt.Fprintln(w.output, "Canceled.")
+			_, _ = fmt.Fprintln(w.output, "Canceled.")
 		}
 	}
 

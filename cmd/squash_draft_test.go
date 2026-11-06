@@ -65,7 +65,6 @@ func NewTestableSquashCommand() *TestableCommand {
 	}
 }
 
-
 func TestReadMessagesFromStdin(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -128,7 +127,7 @@ docs: update docs`,
 			// Create a temporary file to simulate stdin
 			tmpfile, err := os.CreateTemp("", "test-stdin")
 			assert.NoError(t, err)
-			defer os.Remove(tmpfile.Name())
+			defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 			// Write test input
 			_, err = tmpfile.WriteString(tt.input)
@@ -205,8 +204,8 @@ docs: update readme
 
 	// Write test data to pipe
 	go func() {
-		fmt.Fprint(w, input)
-		w.Close()
+		_, _ = fmt.Fprint(w, input)
+		_ = w.Close()
 	}()
 
 	// Mock term.IsTerminal to return false (piped input)
@@ -225,8 +224,7 @@ func TestGetMessagesFromEditor_EditorInteraction(t *testing.T) {
 	// This test simulates the editor interaction flow
 	t.Run("editor environment variable", func(t *testing.T) {
 		// Test with CATMIT_EDITOR set
-		os.Setenv("CATMIT_EDITOR", "custom-editor")
-		defer os.Unsetenv("CATMIT_EDITOR")
+		t.Setenv("CATMIT_EDITOR", "custom-editor")
 
 		// The actual editor interaction would be tested in integration tests
 		// Here we just verify the environment variable is respected
@@ -236,7 +234,7 @@ func TestGetMessagesFromEditor_EditorInteraction(t *testing.T) {
 
 	t.Run("default editor fallback", func(t *testing.T) {
 		// Ensure CATMIT_EDITOR is not set
-		os.Unsetenv("CATMIT_EDITOR")
+		t.Setenv("CATMIT_EDITOR", "")
 
 		// Default should be vim
 		editor := os.Getenv("CATMIT_EDITOR")

@@ -63,7 +63,7 @@ esac
 			// Capture both terminal streams to catch accidental raw-output passthrough.
 			terminal, err := os.CreateTemp(dir, "terminal")
 			require.NoError(t, err)
-			defer terminal.Close()
+			defer func() { _ = terminal.Close() }()
 			stdout, stderr := os.Stdout, os.Stderr
 			os.Stdout, os.Stderr = terminal, terminal
 			defer func() { os.Stdout, os.Stderr = stdout, stderr }()

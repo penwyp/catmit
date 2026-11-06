@@ -122,7 +122,7 @@ func (m *CommitWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle phase-specific keyboard input
 		switch m.phase {
 		case WorkflowPhaseReview:
-			if cmd := m.BaseWorkflowModel.updateReview(msg); cmd != nil {
+			if cmd := m.updateReview(msg); cmd != nil {
 				return m, cmd
 			}
 		case WorkflowPhasePRPreview:

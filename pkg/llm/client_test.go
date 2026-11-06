@@ -197,9 +197,7 @@ func TestOpenAICompatibleProvider_GetCompletion(t *testing.T) {
 	// Test environment variable configuration
 	t.Run("missing API key", func(t *testing.T) {
 		// Save and clear env vars
-		oldKey := os.Getenv("CATMIT_LLM_API_KEY")
-		os.Unsetenv("CATMIT_LLM_API_KEY")
-		defer os.Setenv("CATMIT_LLM_API_KEY", oldKey)
+		t.Setenv("CATMIT_LLM_API_KEY", "")
 
 		provider := &OpenAICompatibleProvider{
 			apiURL: "https://api.test.com",
@@ -297,21 +295,21 @@ func TestDefaultProviderFromEnv(t *testing.T) {
 			oldVars := make(map[string]string)
 			for _, k := range envVars {
 				oldVars[k] = os.Getenv(k)
-				os.Unsetenv(k)
+				_ = os.Unsetenv(k)
 			}
 
 			// Set test env vars
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				_ = os.Setenv(k, v)
 			}
 
 			defer func() {
 				// Restore original env vars
 				for k, v := range oldVars {
 					if v == "" {
-						os.Unsetenv(k)
+						_ = os.Unsetenv(k)
 					} else {
-						os.Setenv(k, v)
+						_ = os.Setenv(k, v)
 					}
 				}
 			}()

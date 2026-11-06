@@ -183,7 +183,7 @@ Closes #{{.IssueNumber}}
 			// Create temporary directory
 			tmpDir, err := os.MkdirTemp("", "template-test-*")
 			require.NoError(t, err)
-			defer os.RemoveAll(tmpDir)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
 
 			// Execute setup
 			if tt.setup != nil {
@@ -213,7 +213,7 @@ func TestFileLoader_ListTemplates(t *testing.T) {
 	// Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "template-list-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Setup multiple templates
 	githubDir := filepath.Join(tmpDir, ".github", "PULL_REQUEST_TEMPLATE")
@@ -252,7 +252,7 @@ func TestCachedLoader(t *testing.T) {
 	// Create temporary directory and template
 	tmpDir, err := os.MkdirTemp("", "cached-loader-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	githubDir := filepath.Join(tmpDir, ".github")
 	require.NoError(t, os.MkdirAll(githubDir, 0755))

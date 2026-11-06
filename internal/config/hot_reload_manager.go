@@ -59,17 +59,20 @@ func NewHotReloadManager(baseManager Manager, configPath string) (*HotReloadMana
 	config, err := baseManager.Load()
 	if err != nil {
 		if !os.IsNotExist(err) {
-			watcher.Close()
+			_ = watcher.Close()
+			cancel()
 			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load initial config", err)
 		}
 		// Create default config if not exists
 		if err := baseManager.CreateDefaultConfig(); err != nil {
-			watcher.Close()
+			_ = watcher.Close()
+			cancel()
 			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to create default config", err)
 		}
 		config, err = baseManager.Load()
 		if err != nil {
-			watcher.Close()
+			_ = watcher.Close()
+			cancel()
 			return nil, errors.Wrap(errors.ErrTypeConfig, "failed to load default config", err)
 		}
 	}
@@ -77,7 +80,8 @@ func NewHotReloadManager(baseManager Manager, configPath string) (*HotReloadMana
 
 	// Start watching
 	if err := m.startWatching(); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
+		cancel()
 		return nil, err
 	}
 

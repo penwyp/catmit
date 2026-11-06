@@ -100,7 +100,7 @@ func (m *RebaseWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Use the base model's keyboard handler for action navigation
-			if cmd := m.BaseModel.HandleKeyboard(msg); cmd != nil {
+			if cmd := m.HandleKeyboard(msg); cmd != nil {
 				return m, cmd
 			}
 			return m, nil
@@ -108,7 +108,7 @@ func (m *RebaseWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle phase-specific keyboard input
 		if m.phase == WorkflowPhaseReview {
-			if cmd := m.BaseWorkflowModel.updateReview(msg); cmd != nil {
+			if cmd := m.updateReview(msg); cmd != nil {
 				return m, cmd
 			}
 		}

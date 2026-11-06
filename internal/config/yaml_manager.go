@@ -130,7 +130,7 @@ func (m *yamlConfigManager) Save(config *Config) error {
 	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		// Clean up temp file
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
@@ -212,7 +212,7 @@ func (m *yamlConfigManager) saveWithHeader(config *Config) error {
 	}
 
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 
@@ -302,7 +302,7 @@ func (m *yamlConfigManager) UpdateRemote(host string, remoteConfig RemoteConfig)
 	// Atomic rename
 	if err := os.Rename(tmpFile, m.configPath); err != nil {
 		// Clean up temp file
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return errors.Wrap(errors.ErrTypeConfig, "failed to save config file", err)
 	}
 

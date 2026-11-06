@@ -15,7 +15,7 @@ func TestDefaultManager_LoadTemplate(t *testing.T) {
 	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "manager-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create GitHub template
 	githubDir := filepath.Join(tmpDir, ".github")
@@ -123,7 +123,7 @@ func TestDefaultManager_ProcessTemplate(t *testing.T) {
 	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "process-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create template
 	githubDir := filepath.Join(tmpDir, ".github")
@@ -184,11 +184,11 @@ func TestConfigurableManager(t *testing.T) {
 	// Create main directory and custom directory
 	mainDir, err := os.MkdirTemp("", "main-dir-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(mainDir)
+	defer func() { _ = os.RemoveAll(mainDir) }()
 
 	customDir, err := os.MkdirTemp("", "custom-dir-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(customDir)
+	defer func() { _ = os.RemoveAll(customDir) }()
 
 	// Create default template in main directory
 	githubDir := filepath.Join(mainDir, ".github")
@@ -237,7 +237,7 @@ func TestFindRepositoryRoot(t *testing.T) {
 	// Create temporary directory structure
 	tmpDir, err := os.MkdirTemp("", "repo-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create .git directory
 	gitDir := filepath.Join(tmpDir, ".git")
@@ -269,7 +269,7 @@ func TestFindRepositoryRoot(t *testing.T) {
 	// Test not in a git repository
 	noGitDir, err := os.MkdirTemp("", "no-git-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(noGitDir)
+	defer func() { _ = os.RemoveAll(noGitDir) }()
 
 	require.NoError(t, os.Chdir(noGitDir))
 

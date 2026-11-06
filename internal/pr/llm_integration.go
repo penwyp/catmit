@@ -81,7 +81,7 @@ func (g *LLMGenerator) buildTitlePromptFromCommits(data *PRAnalysisData) string 
 	for _, commit := range data.Commits {
 		// Include first line of commit message
 		firstLine := strings.Split(commit.Message, "\n")[0]
-		sb.WriteString(fmt.Sprintf("- %s\n", firstLine))
+		fmt.Fprintf(&sb, "- %s\n", firstLine)
 	}
 
 	if data.DiffStats != "" {
@@ -104,7 +104,7 @@ func (g *LLMGenerator) buildTitlePromptFromBranch(branchName string) string {
 	sb.WriteString("Types: Feature, Fix, Refactor, Docs, Chore\n")
 	sb.WriteString("Keep the title under 72 characters.\n\n")
 
-	sb.WriteString(fmt.Sprintf("Branch name: %s\n\n", branchName))
+	fmt.Fprintf(&sb, "Branch name: %s\n\n", branchName)
 
 	sb.WriteString("Examples:\n")
 	sb.WriteString("- feature/user-auth → [Feature] Add user authentication\n")
@@ -128,19 +128,19 @@ func (g *LLMGenerator) buildBodyPrompt(template string, data *PRAnalysisData) st
 
 	// Provide context
 	sb.WriteString("Context:\n")
-	sb.WriteString(fmt.Sprintf("Branch: %s\n", data.BranchName))
+	fmt.Fprintf(&sb, "Branch: %s\n", data.BranchName)
 
 	if len(data.Commits) > 0 {
 		sb.WriteString("\nCommit messages:\n")
 		for _, commit := range data.Commits {
-			sb.WriteString(fmt.Sprintf("---\n%s\n", commit.Message))
+			fmt.Fprintf(&sb, "---\n%s\n", commit.Message)
 		}
 	}
 
 	if len(data.ChangedFiles) > 0 {
 		sb.WriteString("\nChanged files:\n")
 		for _, file := range data.ChangedFiles {
-			sb.WriteString(fmt.Sprintf("- %s\n", file))
+			fmt.Fprintf(&sb, "- %s\n", file)
 		}
 	}
 

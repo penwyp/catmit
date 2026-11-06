@@ -128,7 +128,7 @@ func TestE2E_PRCreation_WithTemplate(t *testing.T) {
 			// Create a temporary directory
 			tmpDir, err := os.MkdirTemp("", "pr-template-test-*")
 			require.NoError(t, err)
-			defer os.RemoveAll(tmpDir)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
 
 			// Initialize git repository
 			ctx := context.Background()
@@ -220,7 +220,7 @@ func TestE2E_PRTemplate_Integration(t *testing.T) {
 	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "pr-template-integration-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Initialize git repository
 	ctx := context.Background()

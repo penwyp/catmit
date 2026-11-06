@@ -58,7 +58,7 @@ func NewTagWorkflow(runner git.Runner, options TagOptions, outputWriter io.Write
 
 func (w *TagWorkflow) Run(ctx context.Context) error {
 	if !w.options.Print {
-		fmt.Fprintln(w.output, output.RenderStatusBar("Inspecting release state...", false))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Inspecting release state...", false))
 	}
 
 	plan, err := w.Plan(ctx)
@@ -72,8 +72,8 @@ func (w *TagWorkflow) Run(ctx context.Context) error {
 
 	w.printPlan(plan)
 	if w.options.DryRun {
-		fmt.Fprintln(w.output)
-		fmt.Fprintln(w.output, "Dry run: no commits, tags or pushes were made.")
+		_, _ = fmt.Fprintln(w.output)
+		_, _ = fmt.Fprintln(w.output, "Dry run: no commits, tags or pushes were made.")
 		return nil
 	}
 
@@ -83,7 +83,7 @@ func (w *TagWorkflow) Run(ctx context.Context) error {
 			return err
 		}
 		if !ok {
-			fmt.Fprintln(w.output, "Canceled.")
+			_, _ = fmt.Fprintln(w.output, "Canceled.")
 			return nil
 		}
 	}
@@ -246,11 +246,11 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 	}
 
 	if plan.PushBranch {
-		fmt.Fprintln(w.output, output.RenderStatusBar("Pushing branch...", false))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pushing branch...", false))
 		if err := w.pushBranch(ctx, plan.Remote, plan.Branch); err != nil {
 			return err
 		}
-		fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
 	}
 
 	if plan.PushBranch {
@@ -259,18 +259,18 @@ func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
 		}
 	}
 
-	fmt.Fprintln(w.output, output.RenderStatusBar("Creating tag...", false))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Creating tag...", false))
 	if err := w.manager.CreateAnnotatedTag(ctx, plan.NextTag, "Release "+plan.NextTag, plan.Head); err != nil {
 		return err
 	}
-	fmt.Fprintln(w.output, output.RenderStatusBar("Tag created successfully", true))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Tag created successfully", true))
 
-	fmt.Fprintln(w.output, output.RenderStatusBar("Pushing tag...", false))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pushing tag...", false))
 	if err := w.pushTag(ctx, plan.Remote, plan.NextTag); err != nil {
 		return err
 	}
-	fmt.Fprintln(w.output, output.RenderStatusBar("Tag pushed successfully", true))
-	fmt.Fprintf(w.output, "Released %s\n", plan.NextTag)
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Tag pushed successfully", true))
+	_, _ = fmt.Fprintf(w.output, "Released %s\n", plan.NextTag)
 
 	return nil
 }
@@ -520,47 +520,47 @@ func (w *TagWorkflow) nextVersion(history tagHistory, remoteTags []string, bump 
 }
 
 func (w *TagWorkflow) printPlan(plan *ReleasePlan) {
-	fmt.Fprintln(w.output)
-	fmt.Fprintln(w.output, "Release plan")
-	fmt.Fprintf(w.output, "  Branch: %s\n", plan.Branch)
-	fmt.Fprintf(w.output, "  HEAD: %s\n", plan.Head)
-	fmt.Fprintf(w.output, "  Remote: %s\n", plan.Remote)
-	fmt.Fprintf(w.output, "  Push branch: %s\n", formatBoolAction(plan.PushBranch, "push", "skip"))
+	_, _ = fmt.Fprintln(w.output)
+	_, _ = fmt.Fprintln(w.output, "Release plan")
+	_, _ = fmt.Fprintf(w.output, "  Branch: %s\n", plan.Branch)
+	_, _ = fmt.Fprintf(w.output, "  HEAD: %s\n", plan.Head)
+	_, _ = fmt.Fprintf(w.output, "  Remote: %s\n", plan.Remote)
+	_, _ = fmt.Fprintf(w.output, "  Push branch: %s\n", formatBoolAction(plan.PushBranch, "push", "skip"))
 	if plan.BranchRemoteExists {
-		fmt.Fprintf(w.output, "  Branch ahead/behind: +%d/-%d\n", plan.BranchAhead, plan.BranchBehind)
+		_, _ = fmt.Fprintf(w.output, "  Branch ahead/behind: +%d/-%d\n", plan.BranchAhead, plan.BranchBehind)
 	} else {
-		fmt.Fprintln(w.output, "  Branch ahead/behind: remote branch does not exist")
+		_, _ = fmt.Fprintln(w.output, "  Branch ahead/behind: remote branch does not exist")
 	}
 	if plan.LatestTag == "" {
-		fmt.Fprintln(w.output, "  Latest remote tag: none")
+		_, _ = fmt.Fprintln(w.output, "  Latest remote tag: none")
 	} else {
-		fmt.Fprintf(w.output, "  Latest remote tag: %s\n", plan.LatestTag)
+		_, _ = fmt.Fprintf(w.output, "  Latest remote tag: %s\n", plan.LatestTag)
 	}
 	if plan.StableTag != "" {
-		fmt.Fprintf(w.output, "  Stable baseline: %s\n", plan.StableTag)
+		_, _ = fmt.Fprintf(w.output, "  Stable baseline: %s\n", plan.StableTag)
 	}
 	next, _ := tagging.ParseVersion(plan.NextTag)
 	if next.Prerelease == "" {
-		fmt.Fprintln(w.output, "  Mode: stable release")
+		_, _ = fmt.Fprintln(w.output, "  Mode: stable release")
 	} else {
-		fmt.Fprintln(w.output, "  Mode: prerelease")
+		_, _ = fmt.Fprintln(w.output, "  Mode: prerelease")
 	}
 	if plan.ExplicitTag {
-		fmt.Fprintln(w.output, "  Bump: manual")
+		_, _ = fmt.Fprintln(w.output, "  Bump: manual")
 	} else if plan.InitialTag {
-		fmt.Fprintln(w.output, "  Bump: initial")
+		_, _ = fmt.Fprintln(w.output, "  Bump: initial")
 	} else {
-		fmt.Fprintf(w.output, "  Bump: %s", plan.ResolvedBump)
+		_, _ = fmt.Fprintf(w.output, "  Bump: %s", plan.ResolvedBump)
 		if plan.RequestedBump == tagging.BumpAuto {
-			fmt.Fprint(w.output, " (auto)")
+			_, _ = fmt.Fprint(w.output, " (auto)")
 		}
-		fmt.Fprintln(w.output)
+		_, _ = fmt.Fprintln(w.output)
 	}
-	fmt.Fprintf(w.output, "  Next tag: %s\n", plan.NextTag)
+	_, _ = fmt.Fprintf(w.output, "  Next tag: %s\n", plan.NextTag)
 }
 
 func (w *TagWorkflow) confirm() (bool, error) {
-	fmt.Fprint(w.output, "\nProceed? [y/N] ")
+	_, _ = fmt.Fprint(w.output, "\nProceed? [y/N] ")
 	line, err := bufio.NewReader(w.input).ReadString('\n')
 	if err != nil && len(line) == 0 {
 		return false, nil

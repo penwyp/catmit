@@ -247,7 +247,7 @@ func (p *CLIProvider) GetCompletionStream(ctx context.Context, systemPrompt, use
 		// Write prompt to stdin if needed
 		if p.needsStdinInput() {
 			go func() {
-				defer stdin.Close()
+				defer func() { _ = stdin.Close() }()
 				_, _ = io.WriteString(stdin, fullPrompt)
 			}()
 		}

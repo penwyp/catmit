@@ -69,8 +69,8 @@ func TestRebaseWorkflowModel_Init(t *testing.T) {
 	// Test initialization
 	cmd := model.Init()
 	assert.NotNil(t, cmd)
-	assert.Equal(t, WorkflowPhaseLoading, model.BaseWorkflowModel.phase)
-	assert.Equal(t, StageCollect, model.BaseWorkflowModel.loadingStage)
+	assert.Equal(t, WorkflowPhaseLoading, model.phase)
+	assert.Equal(t, StageCollect, model.loadingStage)
 }
 
 func TestRebaseWorkflowModel_AnalyzeRepository_Success(t *testing.T) {
@@ -91,7 +91,7 @@ func TestRebaseWorkflowModel_AnalyzeRepository_Success(t *testing.T) {
 	
 	assert.Equal(t, analysis, rebaseModel.analysis)
 	assert.True(t, rebaseModel.needsAnalysisConfirmation)
-	assert.Equal(t, WorkflowPhaseReview, rebaseModel.BaseWorkflowModel.phase)
+	assert.Equal(t, WorkflowPhaseReview, rebaseModel.phase)
 }
 
 func TestRebaseWorkflowModel_AnalyzeRepository_CannotRebase(t *testing.T) {
@@ -117,8 +117,8 @@ func TestRebaseWorkflowModel_AnalyzeRepository_CannotRebase(t *testing.T) {
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
 	// When CanRebase is false, the model doesn't set an error, it just sets done=true and returns tea.Quit
-	assert.Nil(t, rebaseModel.BaseWorkflowModel.err)
-	assert.True(t, rebaseModel.BaseWorkflowModel.done)
+	assert.Nil(t, rebaseModel.err)
+	assert.True(t, rebaseModel.done)
 	assert.NotNil(t, cmd) // Should return tea.Quit
 	assert.Equal(t, "No unpushed commits to rebase", rebaseModel.analysis.Message)
 }
@@ -140,8 +140,8 @@ func TestRebaseWorkflowModel_AnalyzeRepository_Error(t *testing.T) {
 	updatedModel, cmd := model.Update(analysisMsg)
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.Equal(t, expectedErr, rebaseModel.BaseWorkflowModel.err)
-	assert.True(t, rebaseModel.BaseWorkflowModel.done)
+	assert.Equal(t, expectedErr, rebaseModel.err)
+	assert.True(t, rebaseModel.done)
 	assert.NotNil(t, cmd) // Should return tea.Quit
 }
 
@@ -164,8 +164,8 @@ func TestRebaseWorkflowModel_ConfirmAnalysis(t *testing.T) {
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
 	assert.False(t, rebaseModel.needsAnalysisConfirmation)
-	assert.Equal(t, WorkflowPhaseLoading, rebaseModel.BaseWorkflowModel.phase)
-	assert.Equal(t, StageQuery, rebaseModel.BaseWorkflowModel.loadingStage)
+	assert.Equal(t, WorkflowPhaseLoading, rebaseModel.phase)
+	assert.Equal(t, StageQuery, rebaseModel.loadingStage)
 	assert.NotNil(t, cmd)
 }
 
@@ -186,7 +186,7 @@ func TestRebaseWorkflowModel_ConfirmAnalysis_Reject(t *testing.T) {
 	updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.True(t, rebaseModel.BaseWorkflowModel.done)
+	assert.True(t, rebaseModel.done)
 	assert.NotNil(t, cmd) // Should return tea.Quit
 }
 
@@ -212,9 +212,9 @@ func TestRebaseWorkflowModel_GenerateMessage_Success(t *testing.T) {
 	updatedModel, _ := model.Update(generatedMsg)
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.Equal(t, expectedMessage, rebaseModel.BaseWorkflowModel.message)
-	assert.Equal(t, WorkflowPhaseReview, rebaseModel.BaseWorkflowModel.phase)
-	assert.Equal(t, expectedMessage, rebaseModel.BaseWorkflowModel.textArea.Value())
+	assert.Equal(t, expectedMessage, rebaseModel.message)
+	assert.Equal(t, WorkflowPhaseReview, rebaseModel.phase)
+	assert.Equal(t, expectedMessage, rebaseModel.textArea.Value())
 	// Note: We can't test clipboard in unit tests, but copySuccess should be attempted
 }
 
@@ -237,16 +237,16 @@ func TestRebaseWorkflowModel_GenerateMessage_Error(t *testing.T) {
 	updatedModel, _ := model.Update(generatedMsg)
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.Equal(t, expectedErr, rebaseModel.BaseWorkflowModel.err)
-	assert.Equal(t, WorkflowPhaseReview, rebaseModel.BaseWorkflowModel.phase)
+	assert.Equal(t, expectedErr, rebaseModel.err)
+	assert.Equal(t, WorkflowPhaseReview, rebaseModel.phase)
 }
 
 func TestRebaseWorkflowModel_ReviewActions(t *testing.T) {
 	workflow := new(mockRebaseWorkflow)
 	model := createTestRebaseModel(workflow)
-	model.BaseWorkflowModel.phase = WorkflowPhaseReview
-	model.BaseWorkflowModel.message = "feat: test message"
-	model.BaseWorkflowModel.editing = false
+	model.phase = WorkflowPhaseReview
+	model.message = "feat: test message"
+	model.editing = false
 
 	// Update actions for review phase
 	model.updateActionsForPhase()
@@ -270,17 +270,17 @@ func TestRebaseWorkflowModel_HandleAccept(t *testing.T) {
 	workflow.On("ExecuteRebase", mock.Anything, analysis, "feat: test message").Return(nil)
 
 	model := createTestRebaseModel(workflow)
-	model.BaseWorkflowModel.phase = WorkflowPhaseReview
+	model.phase = WorkflowPhaseReview
 	model.analysis = analysis
-	model.BaseWorkflowModel.message = "feat: test message"
+	model.message = "feat: test message"
 
 	// Handle accept
 	cmd := model.handleAccept()
 	assert.NotNil(t, cmd)
 	assert.True(t, model.accepted)
-	assert.Equal(t, DecisionAccept, model.BaseWorkflowModel.reviewDecision)
-	assert.Equal(t, WorkflowPhaseCommit, model.BaseWorkflowModel.phase)
-	assert.Equal(t, CommitStageCommitting, model.BaseWorkflowModel.commitStage)
+	assert.Equal(t, DecisionAccept, model.reviewDecision)
+	assert.Equal(t, WorkflowPhaseCommit, model.phase)
+	assert.Equal(t, CommitStageCommitting, model.commitStage)
 }
 
 func TestRebaseWorkflowModel_ExecuteRebase_Success(t *testing.T) {
@@ -291,7 +291,7 @@ func TestRebaseWorkflowModel_ExecuteRebase_Success(t *testing.T) {
 
 	model := createTestRebaseModel(workflow)
 	model.analysis = analysis
-	model.BaseWorkflowModel.message = "feat: test message"
+	model.message = "feat: test message"
 
 	// Execute rebase
 	cmd := model.executeRebase()
@@ -305,9 +305,9 @@ func TestRebaseWorkflowModel_ExecuteRebase_Success(t *testing.T) {
 	updatedModel, cmd := model.Update(executedMsg)
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.NoError(t, rebaseModel.BaseWorkflowModel.err)
+	assert.NoError(t, rebaseModel.err)
 	assert.Equal(t, "feature_bak", rebaseModel.backupBranch)
-	assert.Equal(t, CommitStageDone, rebaseModel.BaseWorkflowModel.commitStage)
+	assert.Equal(t, CommitStageDone, rebaseModel.commitStage)
 	assert.NotNil(t, cmd) // Should have timeout command
 }
 
@@ -320,7 +320,7 @@ func TestRebaseWorkflowModel_ExecuteRebase_Error(t *testing.T) {
 
 	model := createTestRebaseModel(workflow)
 	model.analysis = analysis
-	model.BaseWorkflowModel.message = "feat: test message"
+	model.message = "feat: test message"
 
 	// Execute rebase
 	cmd := model.executeRebase()
@@ -331,8 +331,8 @@ func TestRebaseWorkflowModel_ExecuteRebase_Error(t *testing.T) {
 	updatedModel, cmd := model.Update(executedMsg)
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.Equal(t, expectedErr, rebaseModel.BaseWorkflowModel.err)
-	assert.Equal(t, CommitStagePushFailed, rebaseModel.BaseWorkflowModel.commitStage) // Reused for error state
+	assert.Equal(t, expectedErr, rebaseModel.err)
+	assert.Equal(t, CommitStagePushFailed, rebaseModel.commitStage) // Reused for error state
 	assert.NotNil(t, cmd) // Should have timeout command
 }
 
@@ -349,21 +349,21 @@ func TestRebaseWorkflowModel_HandleRegenerate(t *testing.T) {
 	// Handle regenerate
 	cmd := model.handleRegenerate()
 	assert.NotNil(t, cmd)
-	assert.Equal(t, WorkflowPhaseLoading, model.BaseWorkflowModel.phase)
-	assert.Equal(t, StageQuery, model.BaseWorkflowModel.loadingStage)
+	assert.Equal(t, WorkflowPhaseLoading, model.phase)
+	assert.Equal(t, StageQuery, model.loadingStage)
 	assert.False(t, model.copySuccess)
 }
 
 func TestRebaseWorkflowModel_EditMode(t *testing.T) {
 	workflow := new(mockRebaseWorkflow)
 	model := createTestRebaseModel(workflow)
-	model.BaseWorkflowModel.phase = WorkflowPhaseReview
-	model.BaseWorkflowModel.message = "feat: original message"
-	model.BaseWorkflowModel.textArea.SetValue(model.BaseWorkflowModel.message)
+	model.phase = WorkflowPhaseReview
+	model.message = "feat: original message"
+	model.textArea.SetValue(model.message)
 
 	// Enter edit mode
 	model.handleEdit()
-	assert.True(t, model.BaseWorkflowModel.editing)
+	assert.True(t, model.editing)
 
 	// Update actions should be nil in edit mode
 	model.updateActionsForPhase()
@@ -371,11 +371,11 @@ func TestRebaseWorkflowModel_EditMode(t *testing.T) {
 
 	// Save edit (Ctrl+S)
 	newMessage := "feat: edited message"
-	model.BaseWorkflowModel.textArea.SetValue(newMessage)
+	model.textArea.SetValue(newMessage)
 	cmd := model.updateReview(tea.KeyMsg{Type: tea.KeyCtrlS})
 	assert.Nil(t, cmd)
-	assert.False(t, model.BaseWorkflowModel.editing)
-	assert.Equal(t, newMessage, model.BaseWorkflowModel.message)
+	assert.False(t, model.editing)
+	assert.Equal(t, newMessage, model.message)
 
 	// Actions should be restored
 	model.updateActionsForPhase()
@@ -385,21 +385,21 @@ func TestRebaseWorkflowModel_EditMode(t *testing.T) {
 func TestRebaseWorkflowModel_CancelEdit(t *testing.T) {
 	workflow := new(mockRebaseWorkflow)
 	model := createTestRebaseModel(workflow)
-	model.BaseWorkflowModel.phase = WorkflowPhaseReview
+	model.phase = WorkflowPhaseReview
 	originalMessage := "feat: original message"
-	model.BaseWorkflowModel.message = originalMessage
-	model.BaseWorkflowModel.textArea.SetValue(originalMessage)
+	model.message = originalMessage
+	model.textArea.SetValue(originalMessage)
 
 	// Enter edit mode
 	model.handleEdit()
-	model.BaseWorkflowModel.textArea.SetValue("feat: changed but will cancel")
+	model.textArea.SetValue("feat: changed but will cancel")
 
 	// Cancel edit (Esc)
 	cmd := model.updateReview(tea.KeyMsg{Type: tea.KeyEsc})
 	assert.Nil(t, cmd)
-	assert.False(t, model.BaseWorkflowModel.editing)
+	assert.False(t, model.editing)
 	// Message should not change when cancelled
-	assert.Equal(t, originalMessage, model.BaseWorkflowModel.message)
+	assert.Equal(t, originalMessage, model.message)
 }
 
 func TestRebaseWorkflowModel_GlobalKeyboardShortcuts(t *testing.T) {
@@ -410,8 +410,8 @@ func TestRebaseWorkflowModel_GlobalKeyboardShortcuts(t *testing.T) {
 	handled, cmd := model.HandleGlobalKeys(tea.KeyMsg{Type: tea.KeyCtrlC})
 	assert.True(t, handled)
 	assert.NotNil(t, cmd)
-	assert.Equal(t, context.Canceled, model.BaseWorkflowModel.err)
-	assert.True(t, model.BaseWorkflowModel.done)
+	assert.Equal(t, context.Canceled, model.err)
+	assert.True(t, model.done)
 }
 
 func TestRebaseWorkflowModel_SpinnerUpdate(t *testing.T) {
@@ -448,7 +448,7 @@ func TestRebaseWorkflowModel_FinalTimeout(t *testing.T) {
 	updatedModel, cmd := model.Update(finalTimeoutMsg{})
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.True(t, rebaseModel.BaseWorkflowModel.done)
+	assert.True(t, rebaseModel.done)
 	assert.NotNil(t, cmd) // Should return tea.Quit
 }
 
@@ -458,7 +458,7 @@ func TestRebaseWorkflowModel_Getters(t *testing.T) {
 
 	// Set test values
 	model.accepted = true
-	model.BaseWorkflowModel.message = "feat: test message"
+	model.message = "feat: test message"
 	model.copySuccess = true
 	model.backupBranch = "feature_bak"
 
@@ -519,10 +519,10 @@ func TestRebaseWorkflowModel_PhaseTitles(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		model.BaseWorkflowModel.phase = tt.phase
-		model.BaseWorkflowModel.loadingStage = tt.loadingStage
-		model.BaseWorkflowModel.commitStage = tt.commitStage
-		model.BaseWorkflowModel.editing = tt.editing
+		model.phase = tt.phase
+		model.loadingStage = tt.loadingStage
+		model.commitStage = tt.commitStage
+		model.editing = tt.editing
 		model.needsAnalysisConfirmation = tt.needsAnalysisConfirmation
 
 		title := model.getPhaseTitle()
@@ -544,18 +544,18 @@ func TestRebaseWorkflowModel_RenderContent(t *testing.T) {
 
 	// Test other phases
 	model.needsAnalysisConfirmation = false
-	model.BaseWorkflowModel.phase = WorkflowPhaseLoading
+	model.phase = WorkflowPhaseLoading
 	content = model.renderContent()
 	assert.NotEmpty(t, content)
 
-	model.BaseWorkflowModel.phase = WorkflowPhaseReview
-	model.BaseWorkflowModel.message = "feat: test message"
+	model.phase = WorkflowPhaseReview
+	model.message = "feat: test message"
 	content = model.renderContent()
 	assert.Contains(t, content, "feat: test message")
 
 	// Test execution phase
-	model.BaseWorkflowModel.phase = WorkflowPhaseCommit
-	model.BaseWorkflowModel.commitStage = CommitStageDone
+	model.phase = WorkflowPhaseCommit
+	model.commitStage = CommitStageDone
 	model.backupBranch = "feature_bak"
 	content = model.renderContent()
 	assert.Contains(t, content, "✅ Rebase completed successfully!")
@@ -571,8 +571,8 @@ func TestRebaseWorkflowModel_ErrorHandling(t *testing.T) {
 	updatedModel, cmd := model.Update(errorMsg{err: testError})
 	rebaseModel := updatedModel.(*RebaseWorkflowModel)
 	
-	assert.Equal(t, testError, rebaseModel.BaseWorkflowModel.err)
-	assert.True(t, rebaseModel.BaseWorkflowModel.done)
+	assert.Equal(t, testError, rebaseModel.err)
+	assert.True(t, rebaseModel.done)
 	assert.NotNil(t, cmd) // Should return tea.Quit
 }
 
@@ -596,20 +596,20 @@ func TestRebaseWorkflowModel_CompleteWorkflow(t *testing.T) {
 	// 2. Confirm analysis
 	updatedModel, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	model = updatedModel.(*RebaseWorkflowModel)
-	assert.Equal(t, WorkflowPhaseLoading, model.BaseWorkflowModel.phase)
+	assert.Equal(t, WorkflowPhaseLoading, model.phase)
 
 	// 3. Send generated message result
 	genMsg := rebaseGeneratedMsg{message: generatedMessage, err: nil}
 	updatedModel, _ = model.Update(genMsg)
 	model = updatedModel.(*RebaseWorkflowModel)
-	assert.Equal(t, generatedMessage, model.BaseWorkflowModel.message)
-	assert.Equal(t, WorkflowPhaseReview, model.BaseWorkflowModel.phase) // Goes back to Review
+	assert.Equal(t, generatedMessage, model.message)
+	assert.Equal(t, WorkflowPhaseReview, model.phase) // Goes back to Review
 	assert.False(t, model.needsAnalysisConfirmation) // No longer in confirmation mode
 
 	// 4. Accept the generated message - directly call handleAccept since we're testing the model
 	// The Update method would handle keyboard navigation which depends on BaseModel state
 	model.handleAccept()
-	assert.Equal(t, WorkflowPhaseCommit, model.BaseWorkflowModel.phase)
+	assert.Equal(t, WorkflowPhaseCommit, model.phase)
 	assert.True(t, model.accepted)
 	
 	// 5. Send execution result
@@ -617,10 +617,10 @@ func TestRebaseWorkflowModel_CompleteWorkflow(t *testing.T) {
 	updatedModel, _ = model.Update(execMsg)
 	model = updatedModel.(*RebaseWorkflowModel)
 	assert.Equal(t, "feature_bak", model.backupBranch)
-	assert.Equal(t, CommitStageDone, model.BaseWorkflowModel.commitStage)
+	assert.Equal(t, CommitStageDone, model.commitStage)
 	
 	// 6. Send final timeout to mark as done
 	updatedModel, _ = model.Update(finalTimeoutMsg{})
 	model = updatedModel.(*RebaseWorkflowModel)
-	assert.True(t, model.BaseWorkflowModel.done)
+	assert.True(t, model.done)
 }

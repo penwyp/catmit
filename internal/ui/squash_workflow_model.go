@@ -76,7 +76,7 @@ func (m *SquashWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle phase-specific keyboard input
 		if m.phase == WorkflowPhaseReview {
-			if cmd := m.BaseWorkflowModel.updateReview(msg); cmd != nil {
+			if cmd := m.updateReview(msg); cmd != nil {
 				return m, cmd
 			}
 		}
@@ -203,7 +203,7 @@ func (m *SquashWorkflowModel) renderLoadingContent() string {
 	var content strings.Builder
 	content.WriteString(m.spinner.View() + " " + progressStyle.Render("Generating consolidated commit message..."))
 	content.WriteString("\n\n")
-	content.WriteString(fmt.Sprintf("Processing %d commit messages", len(m.messages)))
+	fmt.Fprintf(&content, "Processing %d commit messages", len(m.messages))
 	
 	return content.String()
 }

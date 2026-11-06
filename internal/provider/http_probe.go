@@ -19,7 +19,6 @@ type httpProber struct {
 // ProberOption is a configuration option for httpProber
 type ProberOption func(*httpProber)
 
-
 // NewHTTPProber creates a new HTTP prober
 func NewHTTPProber(opts ...ProberOption) HTTPProber {
 	p := &httpProber{
@@ -72,16 +71,17 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 			// Network error, continue to retry
 			continue
 		}
-		defer resp.Body.Close()
 
 		// Server error (5xx), continue to retry
 		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+			_ = resp.Body.Close()
 			lastErr = errors.Newf(errors.ErrTypeExternal, "server error: %d", resp.StatusCode)
 			continue
 		}
 
 		// Other non-200 status codes, do not retry
 		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
 			return ProbeResult{
 				IsGitea: false,
 			}
@@ -93,11 +93,13 @@ func (p *httpProber) ProbeGitea(ctx context.Context, baseURL string) ProbeResult
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
+			_ = resp.Body.Close()
 			// JSON parsing error, not Gitea
 			return ProbeResult{
 				IsGitea: false,
 			}
 		}
+		_ = resp.Body.Close()
 
 		// Successfully detected Gitea
 		return ProbeResult{

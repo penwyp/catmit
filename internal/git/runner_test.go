@@ -188,10 +188,10 @@ func TestRunnerInterfaceCompliance(t *testing.T) {
 	var _ Runner = (*realRunner)(nil)
 	
 	// Test that both constructors return Runner interface
-	var runner1 Runner = NewRunnerWithLogger(false, nil)
+	runner1 := NewRunnerWithLogger(false, nil)
 	assert.NotNil(t, runner1)
 	
 	logger := zaptest.NewLogger(t)
-	var runner2 Runner = NewRunnerWithLogger(true, logger)
+	runner2 := NewRunnerWithLogger(true, logger)
 	assert.NotNil(t, runner2)
 }

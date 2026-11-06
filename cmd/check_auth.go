@@ -56,7 +56,7 @@ func NewCheckAuthCommand(git AuthGitRunner, providerDetector AuthProviderDetecto
 			}
 
 			if len(remotes) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No git remotes found")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No git remotes found")
 				return nil
 			}
 
@@ -131,15 +131,16 @@ func NewCheckAuthCommand(git AuthGitRunner, providerDetector AuthProviderDetecto
 
 			// Output table
 			table := formatAuthStatusTable(statuses)
-			fmt.Fprintln(cmd.OutOrStdout(), table)
+			out := cmd.OutOrStdout()
+			_, _ = fmt.Fprintln(out, table)
 
 			// Output install suggestions
 			if len(installSuggestions) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "\nInstall with:")
+				_, _ = fmt.Fprintln(out, "\nInstall with:")
 				for cli, suggestions := range installSuggestions {
-					fmt.Fprintf(cmd.OutOrStdout(), "\n%s:\n", cli)
+					_, _ = fmt.Fprintf(out, "\n%s:\n", cli)
 					for _, suggestion := range suggestions {
-						fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", suggestion)
+						_, _ = fmt.Fprintf(out, "  %s\n", suggestion)
 					}
 				}
 			}
@@ -159,12 +160,12 @@ func formatAuthStatusTable(statuses []RemoteAuthStatus) string {
 	w := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', tabwriter.Debug)
 
 	// Print table header
-	fmt.Fprintf(w, "Remote\tProvider\tCLI\tStatus\tVersion\tUser\n")
-	fmt.Fprintf(w, "------\t--------\t---\t------\t-------\t----\n")
+	_, _ = fmt.Fprintf(w, "Remote\tProvider\tCLI\tStatus\tVersion\tUser\n")
+	_, _ = fmt.Fprintf(w, "------\t--------\t---\t------\t-------\t----\n")
 
 	// Print data rows
 	for _, status := range statuses {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			status.Remote,
 			status.Provider,
 			status.CLI,
@@ -174,6 +175,6 @@ func formatAuthStatusTable(statuses []RemoteAuthStatus) string {
 		)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	return sb.String()
 }

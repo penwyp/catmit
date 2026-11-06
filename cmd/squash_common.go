@@ -64,7 +64,7 @@ func createContext(cmd *cobra.Command, timeout int) (context.Context, context.Ca
 		cancel()
 		// Check if the context was cancelled due to timeout
 		if ctx.Err() == context.DeadlineExceeded {
-			fmt.Fprintf(cmd.ErrOrStderr(), "\nOperation timed out after %d seconds\n", timeout)
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\nOperation timed out after %d seconds\n", timeout)
 		}
 	}
 	

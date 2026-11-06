@@ -119,7 +119,7 @@ func (m *PRWorkflowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle phase-specific keyboard input
 		switch m.phase {
 		case WorkflowPhaseReview:
-			if cmd := m.BaseWorkflowModel.updateReview(msg); cmd != nil {
+			if cmd := m.updateReview(msg); cmd != nil {
 				return m, cmd
 			}
 		case WorkflowPhasePRPreview:
@@ -541,8 +541,9 @@ func (m *PRWorkflowModel) buildPRPromptCmd() tea.Cmd {
 		// Analyze commits relative to the PR base branch
 		analysisData, err := analyzer.AnalyzeForPR(m.ctx, m.prRemote, m.prBase)
 		if err != nil {
-			// Even if analysis fails, we can still try to use branch name
-			// Don't return error immediately
+			// Even if analysis fails, we still fall back to the branch name below,
+			// so keep going instead of returning the error immediately.
+			analysisData = nil
 		}
 		
 		// Build user prompt based on analysis data

@@ -31,7 +31,7 @@ func TestSquashCommand_E2E(t *testing.T) {
 		}`
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, response)
+		_, _ = fmt.Fprint(w, response)
 	}))
 	defer server.Close()
 
@@ -160,7 +160,7 @@ docs: update guide`)
 		}`
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, response)
+		_, _ = fmt.Fprint(w, response)
 	}))
 	defer server.Close()
 
@@ -275,7 +275,7 @@ func TestSquashHistoryCommand_E2E(t *testing.T) {
 		}`
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, response)
+		_, _ = fmt.Fprint(w, response)
 	}))
 	defer server.Close()
 

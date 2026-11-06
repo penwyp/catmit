@@ -38,7 +38,7 @@ func (m *MockHTTPClient) GenerateCommitMessage(ctx context.Context, prompt strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
 	body, err := io.ReadAll(resp.Body)
@@ -80,7 +80,7 @@ func TestSquash_Integration(t *testing.T) {
 			}`
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, response)
+			_, _ = fmt.Fprint(w, response)
 		}),
 	}
 
@@ -119,7 +119,7 @@ func TestSquash_ChineseIntegration(t *testing.T) {
 			}`
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, response)
+			_, _ = fmt.Fprint(w, response)
 		}),
 	}
 
@@ -148,7 +148,7 @@ func TestSquash_ErrorHandling(t *testing.T) {
 	mockClient := &MockHTTPClient{
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"error": "Internal server error"}`)
+			_, _ = fmt.Fprint(w, `{"error": "Internal server error"}`)
 		}),
 	}
 
@@ -185,7 +185,7 @@ func TestSquash_UIModel(t *testing.T) {
 			}`, mockResponse)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, response)
+			_, _ = fmt.Fprint(w, response)
 		}),
 	}
 
@@ -251,7 +251,7 @@ func TestSquash_YesMode(t *testing.T) {
 	fmt.Println(expectedMessage)
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read output

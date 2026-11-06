@@ -154,11 +154,12 @@ func TestPRWorkflowModel_NonCancelKeys(t *testing.T) {
 			model.reviewDecision = DecisionNone
 			
 			var keyMsg tea.KeyMsg
-			if key == "space" {
+			switch key {
+			case "space":
 				keyMsg = tea.KeyMsg{Type: tea.KeySpace}
-			} else if key == "enter" {
+			case "enter":
 				keyMsg = tea.KeyMsg{Type: tea.KeyEnter}
-			} else {
+			default:
 				keyMsg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 			}
 			

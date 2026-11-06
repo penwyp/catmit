@@ -16,8 +16,8 @@ func TestPRTemplateManager(t *testing.T) {
 	
 	// Override home directory for testing
 	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
+	_ = os.Setenv("HOME", tmpDir)
+	defer func() { _ = os.Setenv("HOME", originalHome) }()
 	
 	t.Run("NewPRTemplateManager", func(t *testing.T) {
 		manager := NewPRTemplateManager()
@@ -76,8 +76,8 @@ func TestPRTemplateManager(t *testing.T) {
 	t.Run("LoadTemplate", func(t *testing.T) {
 		// Create a fresh directory for this test
 		tmpDir3 := t.TempDir()
-		os.Setenv("HOME", tmpDir3)
-		defer os.Setenv("HOME", tmpDir)
+		_ = os.Setenv("HOME", tmpDir3)
+		defer func() { _ = os.Setenv("HOME", tmpDir) }()
 		
 		manager := NewPRTemplateManager()
 		
@@ -96,8 +96,8 @@ func TestPRTemplateManager(t *testing.T) {
 	t.Run("LoadTemplate_CreatesIfNotExists", func(t *testing.T) {
 		// Create new manager with fresh directory
 		tmpDir2 := t.TempDir()
-		os.Setenv("HOME", tmpDir2)
-		defer os.Setenv("HOME", tmpDir)
+		_ = os.Setenv("HOME", tmpDir2)
+		defer func() { _ = os.Setenv("HOME", tmpDir) }()
 		
 		manager := NewPRTemplateManager()
 		

@@ -149,9 +149,11 @@ func runTag(cmd *cobra.Command, options workflow.TagOptions, debug bool) error {
 	defer func() { _ = appLogger.Sync() }()
 
 	// Tagging depends only on Git; it does not initialize app/LLM dependencies.
-	var runner git.Runner = git.NewRunnerWithLogger(debug, appLogger)
+	var runner git.Runner
 	if testDeps != nil {
 		runner = testDeps.GetGitRunner()
+	} else {
+		runner = git.NewRunnerWithLogger(debug, appLogger)
 	}
 	wf := workflow.NewTagWorkflow(runner, options, cmd.OutOrStdout(), cmd.InOrStdin())
 	if err := wf.Run(cmd.Context()); err != nil {

@@ -18,7 +18,7 @@ import (
 func TestNewCLIProvider_WithBinaryName(t *testing.T) {
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
 	// Test with a commonly available command
 	testCmd := "echo"
@@ -26,7 +26,7 @@ func TestNewCLIProvider_WithBinaryName(t *testing.T) {
 		testCmd = "cmd"
 	}
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", testCmd)
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", testCmd)
 
 	provider := NewCLIProvider(nil)
 	assert.NotNil(t, provider)
@@ -38,13 +38,13 @@ func TestNewCLIProvider_WithBinaryName(t *testing.T) {
 func TestNewCLIProvider_WithAbsolutePath(t *testing.T) {
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
 	// Find echo command path
 	echoPath, err := exec.LookPath("echo")
 	require.NoError(t, err)
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", echoPath)
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", echoPath)
 
 	provider := NewCLIProvider(nil)
 	assert.NotNil(t, provider)
@@ -56,9 +56,9 @@ func TestNewCLIProvider_WithAbsolutePath(t *testing.T) {
 func TestNewCLIProvider_MissingEnvVar(t *testing.T) {
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Unsetenv("CATMIT_LLM_CLI_TOOL")
+	_ = os.Unsetenv("CATMIT_LLM_CLI_TOOL")
 
 	assert.Panics(t, func() {
 		NewCLIProvider(nil)
@@ -69,9 +69,9 @@ func TestNewCLIProvider_MissingEnvVar(t *testing.T) {
 func TestNewCLIProvider_NonExistentBinary(t *testing.T) {
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", "nonexistent_binary_12345")
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", "nonexistent_binary_12345")
 
 	assert.Panics(t, func() {
 		NewCLIProvider(nil)
@@ -82,9 +82,9 @@ func TestNewCLIProvider_NonExistentBinary(t *testing.T) {
 func TestNewCLIProvider_NonExistentPath(t *testing.T) {
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", "/nonexistent/path/to/binary")
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", "/nonexistent/path/to/binary")
 
 	assert.Panics(t, func() {
 		NewCLIProvider(nil)
@@ -322,9 +322,9 @@ func TestCLIProvider_GetCompletion_Echo(t *testing.T) {
 
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
 
 	provider := NewCLIProvider(nil)
 	
@@ -356,9 +356,9 @@ func TestCLIProvider_GetCompletionStream(t *testing.T) {
 
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
 
 	provider := NewCLIProvider(nil)
 	
@@ -411,9 +411,9 @@ func TestCLIProvider_ContextCancellation(t *testing.T) {
 
 	// Save original env
 	originalTool := os.Getenv("CATMIT_LLM_CLI_TOOL")
-	defer os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool)
+	defer func() { _ = os.Setenv("CATMIT_LLM_CLI_TOOL", originalTool) }()
 
-	os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
+	_ = os.Setenv("CATMIT_LLM_CLI_TOOL", scriptPath)
 
 	provider := NewCLIProvider(nil)
 	
@@ -425,8 +425,9 @@ func TestCLIProvider_ContextCancellation(t *testing.T) {
 	select {
 	case <-contentChan:
 		// Should be closed due to cancellation
-	case <-errChan:
+	case err := <-errChan:
 		// May or may not have an error
+		_ = err
 	case <-time.After(1 * time.Second):
 		t.Fatal("Should have cancelled quickly")
 	}

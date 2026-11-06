@@ -18,7 +18,7 @@ func TestHotReloadManager_Basic(t *testing.T) {
 	// Create a temporary directory for test
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -87,7 +87,7 @@ func TestHotReloadManager_Basic(t *testing.T) {
 func TestHotReloadManager_MultipleChanges(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -131,7 +131,7 @@ func TestHotReloadManager_MultipleChanges(t *testing.T) {
 func TestHotReloadManager_UpdateRemote(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -169,7 +169,7 @@ func TestHotReloadManager_UpdateRemote(t *testing.T) {
 func TestHotReloadManager_FileRemoval(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -203,7 +203,7 @@ func TestHotReloadManager_FileRemoval(t *testing.T) {
 func TestHotReloadManager_InvalidConfig(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -235,7 +235,7 @@ func TestHotReloadManager_InvalidConfig(t *testing.T) {
 func TestHotReloadManager_ConcurrentAccess(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -318,7 +318,7 @@ func TestHotReloadManager_ConcurrentAccess(t *testing.T) {
 func TestHotReloadManager_StopCleanup(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 
@@ -357,7 +357,7 @@ func TestHotReloadManager_StopCleanup(t *testing.T) {
 func TestHotReloadManager_CallbackPanic(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "catmit-hotreload-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "providers.yaml")
 

@@ -53,16 +53,16 @@ func (w *PRWorkflow) Run(ctx context.Context) error {
 		
 		// Provide user-friendly feedback based on error type
 		if errors.Is(err, errors.ErrCLINotInstalled) || errors.Is(err, errors.ErrCLINotAuthed) {
-			fmt.Fprintf(w.output, "%s\n", output.RenderStatusBarWithType(
+			_, _ = fmt.Fprintf(w.output, "%s\n", output.RenderStatusBarWithType(
 				fmt.Sprintf("Note: PR existence check skipped (%s). Install and authenticate CLI tools for better optimization.", w.getProviderCLIName()),
 				output.StatusInfo))
 		} else if w.config.Debug {
-			fmt.Fprintf(w.output, "%s\n", output.RenderStatusBarWithType(
+			_, _ = fmt.Fprintf(w.output, "%s\n", output.RenderStatusBarWithType(
 				fmt.Sprintf("PR existence check failed: %v (continuing with full workflow)", err),
 				output.StatusWarning))
 		} else {
 			// In non-debug mode, just show a brief note
-			fmt.Fprintln(w.output, output.RenderStatusBarWithType(
+			_, _ = fmt.Fprintln(w.output, output.RenderStatusBarWithType(
 				"Note: Unable to check for existing PRs, proceeding with creation workflow.",
 				output.StatusInfo))
 		}
@@ -70,17 +70,17 @@ func (w *PRWorkflow) Run(ctx context.Context) error {
 		// PR already exists, display URL and exit - LLM call avoided!
 		w.logger.Debug("Found existing PR, skipping LLM generation and entire creation workflow",
 			zap.String("pr_url", prURL))
-		fmt.Fprintln(w.output, output.RenderStatusBar("Pull request already exists", true))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pull request already exists", true))
 		
 		if prURL != "" {
-			fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+			_, _ = fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
 		} else {
-			fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
+			_, _ = fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
 		}
 		
 		// Show optimization benefit in debug mode
 		if w.config.Debug {
-			fmt.Fprintln(w.output, output.RenderStatusBarWithType(
+			_, _ = fmt.Fprintln(w.output, output.RenderStatusBarWithType(
 				"Optimization: Skipped LLM call and PR creation workflow",
 				output.StatusInfo))
 		}
@@ -175,18 +175,18 @@ func (w *PRWorkflow) runDryRun(ctx context.Context) error {
 	}
 
 	// Display PR preview
-	fmt.Fprintln(w.output, output.RenderStatusBar("Pull Request Preview (Dry Run)", true))
-	fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
-	fmt.Fprintf(w.output, "  Title: %s\n", title)
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pull Request Preview (Dry Run)", true))
+	_, _ = fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
+	_, _ = fmt.Fprintf(w.output, "  Title: %s\n", title)
 	if body != "" {
-		fmt.Fprintln(w.output, "  Body:")
+		_, _ = fmt.Fprintln(w.output, "  Body:")
 		bodyLines := strings.Split(body, "\n")
 		for _, line := range bodyLines {
-			fmt.Fprintf(w.output, "    %s\n", line)
+			_, _ = fmt.Fprintf(w.output, "    %s\n", line)
 		}
 	}
 	if w.config.PRConfig.Draft {
-		fmt.Fprintln(w.output, "  Draft: Yes")
+		_, _ = fmt.Fprintln(w.output, "  Draft: Yes")
 	}
 
 	return nil
@@ -206,11 +206,11 @@ func (w *PRWorkflow) runAutomatic(ctx context.Context) error {
 	}
 
 	if needsPush {
-		fmt.Fprintln(w.output, output.RenderStatusBar("Pushing branch...", false))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pushing branch...", false))
 		if err := committer.Push(ctx); err != nil {
 			return errors.Wrap(errors.ErrTypeGit, "failed to push branch", err)
 		}
-		fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
+		_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Branch pushed successfully", true))
 		// For Tencent Gongfeng (git.woa.com) remotes, echo the merge request
 		// links the remote announced, so they are easy to grab from the terminal.
 		printMRLinks(w.output, committer)
@@ -227,24 +227,24 @@ func (w *PRWorkflow) runAutomatic(ctx context.Context) error {
 	}
 
 	// Create pull request
-	fmt.Fprintln(w.output, output.RenderStatusBar("Creating pull request...", false))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Creating pull request...", false))
 	prURL, err := committer.CreatePullRequest(ctx)
 	if err != nil {
 		var prExists *pr.ErrPRAlreadyExists
 		if errors.As(err, &prExists) {
-			fmt.Fprintln(w.output, output.RenderStatusBar("Pull request already exists", true))
+			_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pull request already exists", true))
 			if prExists.URL != "" {
-				fmt.Fprintf(w.output, "PR URL: %s\n", prExists.URL)
+				_, _ = fmt.Fprintf(w.output, "PR URL: %s\n", prExists.URL)
 			} else {
-				fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
+				_, _ = fmt.Fprintln(w.output, "Please check your Git hosting platform for the existing PR")
 			}
 			return nil
 		}
 		return errors.Wrap(errors.ErrTypePR, "failed to create pull request", err)
 	}
-	fmt.Fprintln(w.output, output.RenderStatusBar("Pull request created successfully", true))
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pull request created successfully", true))
 	if prURL != "" {
-		fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
+		_, _ = fmt.Fprintf(w.output, "PR URL: %s\n", prURL)
 	}
 
 	return nil
@@ -368,21 +368,21 @@ func (w *PRWorkflow) showPRPreview(ctx context.Context, title, body string) erro
 		branchName = "current branch"
 	}
 
-	fmt.Fprintln(w.output, "")
-	fmt.Fprintln(w.output, output.RenderStatusBar("Pull Request Preview", true))
-	fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
-	fmt.Fprintf(w.output, "  Title: %s\n", title)
+	_, _ = fmt.Fprintln(w.output, "")
+	_, _ = fmt.Fprintln(w.output, output.RenderStatusBar("Pull Request Preview", true))
+	_, _ = fmt.Fprintf(w.output, "  Branch: %s → %s\n", branchName, w.config.PRConfig.BaseBranch)
+	_, _ = fmt.Fprintf(w.output, "  Title: %s\n", title)
 	if body != "" {
-		fmt.Fprintln(w.output, "  Body:")
+		_, _ = fmt.Fprintln(w.output, "  Body:")
 		bodyLines := strings.Split(body, "\n")
 		for _, line := range bodyLines {
-			fmt.Fprintf(w.output, "    %s\n", line)
+			_, _ = fmt.Fprintf(w.output, "    %s\n", line)
 		}
 	}
 	if w.config.PRConfig.Draft {
-		fmt.Fprintln(w.output, "  Draft: Yes")
+		_, _ = fmt.Fprintln(w.output, "  Draft: Yes")
 	}
-	fmt.Fprintln(w.output, "")
+	_, _ = fmt.Fprintln(w.output, "")
 
 	return nil
 }

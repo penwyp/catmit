@@ -179,7 +179,9 @@ func getMessagesFromEditor() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	tmpfile.Close()
+	if err := tmpfile.Close(); err != nil {
+		return nil, err
+	}
 
 	// Open the editor
 	editorCmd := exec.Command(editor, tmpfile.Name())

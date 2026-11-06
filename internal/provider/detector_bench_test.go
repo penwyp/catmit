@@ -206,12 +206,12 @@ func (d *defaultProviderDetector) DetectFromRemote(ctx context.Context, remoteUR
 
 	// Detect provider from host
 	host := info.Host
-	switch {
-	case host == "github.com" || host == "www.github.com":
+	switch host {
+	case "github.com", "www.github.com":
 		info.Provider = "github"
-	case host == "gitlab.com" || host == "www.gitlab.com":
+	case "gitlab.com", "www.gitlab.com":
 		info.Provider = "gitlab"
-	case host == "gitea.com" || host == "gitea.io":
+	case "gitea.com", "gitea.io":
 		info.Provider = "gitea"
 	default:
 		info.Provider = "unknown"
