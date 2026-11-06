@@ -411,7 +411,7 @@ catmit tag --remote upstream --yes
 **递增规则：**
 
 - 以当前 HEAD 可达的最新远程正式 tag 为基准，保留历史 `v`／无 `v` 前缀。无版本历史时使用 `--initial`，默认 `v0.1.0`。
-- `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。实际发布时，遇到不符合 Conventional Commits 的提交，要求显式指定 `--bump patch|minor|major`；`--print` 则保留能识别出的 feat／破坏性变更判断，否则静默回退为 patch。首次版本由 `--initial` 决定。
+- `--bump auto` 检查正式基线以来的全部提交：破坏性变更（`!` 或 `BREAKING CHANGE`）升 major，`feat` 升 minor，其余升 patch。实际发布和 `--print` 都允许不符合 Conventional Commits 的提交：保留能识别出的 feat／破坏性变更判断，否则静默回退为 patch，可用 `--bump patch|minor|major` 覆盖。首次版本由 `--initial` 决定。
 - 同一轮预发布保持核心版本，每个版本和通道分别计数；新功能或破坏性变更可以提高目标版本，显式 `--bump` 可以选择另一条版本线。
 - 例如 `v1.2.3 → v1.2.4-dev.1.时间 → v1.2.4-dev.2.时间 → v1.2.4-rc.1.时间 → v1.2.4`。正式发布允许与已测试的预发布指向同一 commit，无需额外提交；正式版后有新修复才进入 `v1.2.5-dev.1`。
 - 同一未正式发布的 commit 可以多次预发布，序号继续递增；实际发布时，正式基线之后没有新提交会拒绝打新 tag；`--print` 仍可计算下一版本，默认递增 patch。已有 tag 不覆盖。

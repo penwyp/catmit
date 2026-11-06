@@ -160,13 +160,6 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	bumpDetail := tagging.InferBumpWithDetail(messages)
 	if requestedBump == tagging.BumpAuto {
 		resolvedBump = bumpDetail.Bump
-		if history.hasStable && w.options.ExplicitTag == "" && !bumpDetail.AllConventional() {
-			if !w.options.Print {
-				return nil, errors.New(errors.ErrTypeValidation,
-					"cannot infer version from non-Conventional Commits; specify --bump patch, minor or major")
-			}
-
-		}
 	}
 	nextVersion, err := w.nextVersion(history, remoteTags, resolvedBump)
 	if err != nil {

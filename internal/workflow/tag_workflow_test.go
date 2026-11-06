@@ -466,15 +466,55 @@ func TestTagWorkflowIgnoresUnreachableTags(t *testing.T) {
 	assert.Equal(t, "1.2.4-dev.1", plan.NextTag)
 }
 
-func TestTagWorkflowAutoRequiresConventionalCommits(t *testing.T) {
+func TestTagWorkflowExplicitBumpOverridesFallback(t *testing.T) {
 	manager := &fakeTagManager{branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: []string{"made changes"}}
 	wf := newTestTagWorkflow(manager, nil, nil)
-	_, err := wf.Plan(context.Background())
-	require.ErrorContains(t, err, "specify --bump")
 	wf.options.Bump = "minor"
 	plan, err := wf.Plan(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "v1.3.0-dev.1.20261105T153000UTC8", plan.NextTag)
+}
+
+func TestTagWorkflowPublishesNonConventionalCommits(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		messages []string
+		want     string
+	}{
+		{"free-form only", []string{"update files", "Merge branch 'feature'"}, "v1.2.4"},
+		{"mixed fixes", []string{"update files", "fix: release bug"}, "v1.2.4"},
+		{"mixed feature", []string{"update files", "feat: new feature"}, "v1.3.0"},
+		{"mixed breaking", []string{"Merge branch 'feature'", "fix!: drop old config"}, "v2.0.0"},
+	} {
+		for _, mode := range []string{"prerelease", "stable", "dry-run"} {
+			t.Run(tt.name+"/"+mode, func(t *testing.T) {
+				manager := &fakeTagManager{
+					branch: "main", head: "abc123", remoteTags: []string{"v1.2.3"}, commitMessages: tt.messages,
+				}
+				var out bytes.Buffer
+				wf := newTestTagWorkflow(manager, &out, nil)
+				wf.options.Yes = true
+				wf.input = strings.NewReader("")
+				wf.options.Release = mode == "stable"
+				wf.options.DryRun = mode == "dry-run"
+				want := tt.want
+				if !wf.options.Release {
+					want += "-dev.1.20261105T153000UTC8"
+				}
+
+				require.NoError(t, wf.Run(context.Background()))
+				assert.Contains(t, out.String(), "Next tag: "+want+"\n")
+				assert.NotContains(t, out.String(), "Proceed?")
+				if wf.options.DryRun {
+					assert.NotContains(t, strings.Join(manager.Calls(), ","), "create-tag:")
+					assert.NotContains(t, strings.Join(manager.Calls(), ","), "push-tag:")
+				} else {
+					assert.Contains(t, manager.Calls(), "create-tag:"+want)
+					assert.Contains(t, manager.Calls(), "push-tag:origin/"+want)
+				}
+			})
+		}
+	}
 }
 
 func TestTagWorkflowRejectsNoChangesSinceStable(t *testing.T) {

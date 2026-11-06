@@ -56,7 +56,8 @@ func TestTagWorkflowGitReleaseCycle(t *testing.T) {
 			assert.Empty(t, git(clone, "tag", "--list"))
 			require.NoError(t, os.WriteFile(filepath.Join(clone, "file.txt"), []byte("fixed\n"), 0600))
 			git(clone, "add", "file.txt")
-			git(clone, "commit", "-m", "fix: release bug")
+			// Free-form commits must support the full release cycle via patch fallback.
+			git(clone, "commit", "-m", "release bug fix")
 			head := git(clone, "rev-parse", "HEAD")
 			var out bytes.Buffer
 			wf := NewTagWorkflow(directoryGitRunner{clone}, TagOptions{

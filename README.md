@@ -187,7 +187,7 @@ catmit tag --remote upstream --yes
 **Increment rules:**
 
 - Use the latest remote stable tag reachable from HEAD as the baseline, preserving its `v` or empty prefix. Without version history, use `--initial` (default `v0.1.0`).
-- `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Publishing with non-Conventional Commits requires an explicit `--bump patch|minor|major`. With `--print`, recognized features/breaking changes still determine the bump, otherwise it silently falls back to patch. The initial version is determined by `--initial`.
+- `--bump auto` examines all commits since that stable baseline: breaking changes (`!` or `BREAKING CHANGE`) imply major, `feat` implies minor, otherwise patch. Non-Conventional Commits are allowed when publishing and printing: recognized features/breaking changes still determine the bump, otherwise it silently falls back to patch. Use `--bump patch|minor|major` to override. The initial version is determined by `--initial`.
 - Prereleases retain their core target and increment a counter per version/channel. New features/breaking changes may raise the target; explicit `--bump` can select a different release line.
 - Example: `v1.2.3 → v1.2.4-dev.1.time → v1.2.4-dev.2.time → v1.2.4-rc.1.time → v1.2.4`. Stable promotion can tag the same tested commit. New fixes after the stable release start `v1.2.5-dev.1`.
 - Repeated prereleases of an unreleased commit get new counters. Publishing requires new commits since the stable baseline; `--print` can still calculate the next version, defaulting to a patch bump. Existing tags are never overwritten.
