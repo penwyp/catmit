@@ -151,3 +151,24 @@ func TestTagCIOptionsRejectInvalidPolicy(t *testing.T) {
 	options.Version.Timezone = "Unknown/Zone"
 	require.Error(t, options.Validate())
 }
+
+type ciFailedGitRunner struct{ *ciTestRunner }
+
+func (r ciFailedGitRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "ls-remote" {
+		return "fatal: authentication failed for the configured remote\n", fmt.Errorf("exit status 128")
+	}
+	return r.ciTestRunner.Run(ctx, name, args...)
+}
+
+func TestTagCIHistoryFallbackRetainsGitDiagnostics(t *testing.T) {
+	options := ciTestOptions()
+	options.VersionOrder = "history,timestamp"
+	var stdout, stderr bytes.Buffer
+	wf := NewTagCIWorkflow(ciFailedGitRunner{&ciTestRunner{}}, options, &stdout, &stderr, nil)
+	wf.getenv = func(string) string { return "" }
+	require.NoError(t, wf.Run(context.Background(), nil))
+	assert.Regexp(t, `^[0-9]{14}\n$`, stdout.String())
+	assert.Contains(t, stderr.String(), "fatal: authentication failed for the configured remote")
+	assert.Contains(t, stderr.String(), "来源  timestamp")
+}

@@ -493,6 +493,21 @@ catmit tag ci --provider bk-ci \
 
 `--provider bk-ci` 只负责读取蓝盾触发变量（`BK_CI_START_TYPE`、`BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE`、`BK_CI_REPO_GIT_WEBHOOK_TAG_NAME`）；业务变量名由 `--version-env` 指定。`--checkout` 在 webhook tag 非空时从远程解析 commit，再检出 detached HEAD，不信任陈旧的本地同名 tag，不强制覆盖工作区。非 tag 触发保持 HEAD；未指定 `--checkout` 时由流水线负责检出正确提交。检出独立于来源顺序，即使 `env` 排在前面，也会准备 webhook tag 对应的代码。
 
+触发摘要按 `BK_CI_START_TYPE` 映射：
+
+| 值 | 摘要 |
+| --- | --- |
+| `MANUAL` | `manual` 手动触发 |
+| `WEB_HOOK` | `webhook(TAG_PUSH)` / `webhook(PUSH)` / `webhook(MR)`，未知事件保留事件名 |
+| `TIME_TRIGGER` | `schedule` 定时触发 |
+| `PIPELINE` | `pipeline` 子流水线 |
+| `SERVICE` | `service` 服务调用 |
+| `REMOTE` | `remote` 远程触发 |
+| 空或未设置 | `unknown` |
+| 其他值 | 原样显示 |
+
+本地执行未注入变量时显示 `unknown`，不会推断为手动触发；`MANUAL` 才显示 `manual`。触发方式与版本来源独立：手动触发也可以使用上游变量、历史计算或时间戳。
+
 只有尝试 `history` 时才要求完整历史，浅克隆会自动补全；远程操作受 `--timeout`（默认每次 30 秒）限制，远程由 `--remote` 指定（默认 `origin`）。`--bump`、`--initial`、`--pre`、`--release`、`--notimestamp` 仅影响 `history`；`--timezone` 同时影响历史版本和时间戳来源。显式 `--pre` 与 `--release` 互斥。
 
 **同一步准备并构建：**

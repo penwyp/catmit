@@ -26,7 +26,7 @@ type TagCIWorkflow struct {
 
 func NewTagCIWorkflow(runner git.Runner, options TagCIOptions, stdout, stderr io.Writer, stdin io.Reader) *TagCIWorkflow {
 	return &TagCIWorkflow{
-		runner: runner, options: options, stdout: stdout, stderr: stderr, stdin: stdin,
+		runner: ciDiagnosticRunner{runner}, options: options, stdout: stdout, stderr: stderr, stdin: stdin,
 		getenv: os.Getenv, now: time.Now,
 	}
 }
@@ -111,8 +111,8 @@ func (w *TagCIWorkflow) checkoutTag(ctx context.Context, tag string) error {
 	if err != nil {
 		return fmt.Errorf("resolve webhook tag %q: %w", tag, err)
 	}
-	if out, err := w.runner.Run(ctx, "git", "checkout", "--quiet", "--detach", sha); err != nil {
-		return fmt.Errorf("checkout webhook tag %q: %w: %s", tag, err, strings.TrimSpace(out))
+	if _, err := w.runner.Run(ctx, "git", "checkout", "--quiet", "--detach", sha); err != nil {
+		return fmt.Errorf("checkout webhook tag %q: %w", tag, err)
 	}
 	w.stage("checkout", fmt.Sprintf("tag %s → %s", tag, sha[:min(12, len(sha))]))
 	return nil
@@ -162,10 +162,10 @@ func (w *TagCIWorkflow) historyVersion(ctx context.Context, head string) (string
 	if strings.TrimSpace(shallow) == "true" {
 		w.stage("history", "补全浅克隆历史")
 		remoteCtx, cancel := context.WithTimeout(ctx, time.Duration(w.options.Version.Timeout)*time.Second)
-		out, err := w.runner.Run(remoteCtx, "git", "fetch", "--unshallow", "--no-tags", w.options.Version.Remote)
+		_, err := w.runner.Run(remoteCtx, "git", "fetch", "--unshallow", "--no-tags", w.options.Version.Remote)
 		cancel()
 		if err != nil {
-			return "", fmt.Errorf("fetch full history: %w: %s", err, strings.TrimSpace(out))
+			return "", fmt.Errorf("fetch full history: %w", err)
 		}
 		shallow, err = w.runner.Run(ctx, "git", "rev-parse", "--is-shallow-repository")
 		if err != nil {
@@ -222,4 +222,16 @@ func ciSourceNote(source string) string {
 	default:
 		return "时间戳兜底"
 	}
+}
+
+// Git managers return errors through a separate channel from captured output.
+// Retain Git's diagnostics even when history failure selects a fallback version.
+type ciDiagnosticRunner struct{ git.Runner }
+
+func (r ciDiagnosticRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
+	out, err := r.Runner.Run(ctx, name, args...)
+	if err != nil && strings.TrimSpace(out) != "" {
+		return out, fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+	}
+	return out, err
 }

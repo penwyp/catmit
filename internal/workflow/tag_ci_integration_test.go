@@ -24,6 +24,14 @@ func ciGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(out)
 }
 
+func ciChdir(t *testing.T, dir string) {
+	t.Helper()
+	previous, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(dir))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(previous)) })
+}
+
 func newCIRepository(t *testing.T, shallow bool) ciRepository {
 	t.Helper()
 	r := ciRepository{root: t.TempDir()}
@@ -80,7 +88,7 @@ func TestTagCICheckoutUsesRemoteCommitAndStreamsBuild(t *testing.T) {
 	// Workflows run in the caller's working directory, including a repository subdirectory.
 	subdir := filepath.Join(r.clone, "app")
 	require.NoError(t, os.Mkdir(subdir, 0700))
-	t.Chdir(subdir)
+	ciChdir(t, subdir)
 	command := []string{"sh", "-c", `printf 'stdout:%s:%s\n' "$CATMIT_VERSION" "$ZHIYAN_PKG_VERSION"; printf 'stderr:build-log\n' >&2; test "$(cat ../file.txt)" = baseline`}
 	require.NoError(t, wf.Run(context.Background(), command))
 	assert.Equal(t, "v1.2.3\n", stdout.String())
@@ -130,7 +138,7 @@ func TestTagCICheckoutFailureNeverFallsBackOrBuilds(t *testing.T) {
 				}
 				return ""
 			}
-			t.Chdir(r.clone)
+			ciChdir(t, r.clone)
 			require.Error(t, wf.Run(context.Background(), []string{"sh", "-c", "touch built"}))
 			assert.Empty(t, stdout.String())
 			assert.NotContains(t, stderr.String(), "版本摘要")
@@ -172,7 +180,7 @@ func TestTagCIRejectsBuildChangingCommit(t *testing.T) {
 		}
 		return ""
 	}
-	t.Chdir(r.clone)
+	ciChdir(t, r.clone)
 	err := wf.Run(context.Background(), []string{"git", "checkout", "--detach", r.baseline})
 	require.ErrorContains(t, err, "build changed HEAD")
 	assert.Empty(t, stdout.String())
