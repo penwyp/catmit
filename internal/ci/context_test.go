@@ -20,7 +20,7 @@ func TestBKCIContext(t *testing.T) {
 		{"PIPELINE", "", "pipeline  子流水线"},
 		{"SERVICE", "", "service  服务调用"},
 		{"REMOTE", "", "remote  远程触发"},
-		{"", "", "unknown"}, {"OTHER", "", "OTHER"},
+		{"", "", "manual  手动触发"}, {"OTHER", "", "manual  手动触发"},
 	} {
 		env := map[string]string{"BK_CI_START_TYPE": tt.start, "BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE": tt.event, "BK_CI_REPO_GIT_WEBHOOK_TAG_NAME": "v1.2.3"}
 		info, err := Read("bk-ci", func(key string) string { return env[key] })

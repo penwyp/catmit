@@ -87,6 +87,7 @@ func TestTagCIVersionPriority(t *testing.T) {
 			require.NoError(t, wf.Run(context.Background(), nil))
 			assert.Equal(t, tt.want+"\n", stdout.String())
 			assert.Contains(t, stderr.String(), "来源  "+tt.source)
+			assert.Contains(t, stderr.String(), "触发  manual  手动触发")
 			assert.Equal(t, 1, strings.Count(stderr.String(), "版本摘要"))
 			assert.Contains(t, stderr.String(), "提交  0123456789abcdef0123456789abcdef01234567")
 			assert.Contains(t, stderr.String(), "env=ZHIYAN_PKG_VERSION")

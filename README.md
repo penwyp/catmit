@@ -263,7 +263,7 @@ Sources may be omitted or reordered, but not repeated. Omitting `timestamp` disa
 
 `--provider bk-ci` maps `BK_CI_START_TYPE`, `BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE` and `BK_CI_REPO_GIT_WEBHOOK_TAG_NAME`. The business variable is explicitly named by `--version-env`. `--checkout` resolves a nonempty webhook tag from `--remote` (default `origin`) and checks out its commit detached, ignoring stale same-named local tags and without forcibly overwriting local changes. Checkout is independent of version-source order. Other triggers retain HEAD; without `--checkout`, the pipeline owns checkout correctness.
 
-Trigger summaries map `BK_CI_START_TYPE` as follows: `MANUAL` → `manual`, `WEB_HOOK` → `webhook` with its event, `TIME_TRIGGER` → `schedule`, `PIPELINE` → `pipeline`, `SERVICE` → `service`, and `REMOTE` → `remote`. An absent/empty value displays `unknown` (including local runs without injected variables); other values are preserved. Trigger type and version source are independent.
+Trigger summaries map `BK_CI_START_TYPE` as follows: `MANUAL` → `manual`, `WEB_HOOK` → `webhook` with its event, `TIME_TRIGGER` → `schedule`, `PIPELINE` → `pipeline`, `SERVICE` → `service`, and `REMOTE` → `remote`. An absent, empty or unrecognized start type falls back to `manual`, including local runs without injected variables. Trigger type and version source are independent.
 
 Only the `history` source requires full history; shallow clones are automatically unshallowed when that source is reached. Remote operations each use `--timeout` (default 30 seconds). `--bump`, `--initial`, `--pre`, `--release` and `--notimestamp` affect only history; `--timezone` affects both history and fallback timestamps. Explicit `--pre` and `--release` are mutually exclusive.
 

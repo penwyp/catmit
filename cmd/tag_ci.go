@@ -42,6 +42,7 @@ func newTagCICommand() *cobra.Command {
     BK_CI_START_TYPE
     BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE
     BK_CI_REPO_GIT_WEBHOOK_TAG_NAME
+  触发类型缺失或无法识别时，兜底显示 manual（手动触发）。
   业务变量由 --version-env 单独指定。
   --checkout 按远程 tag 的 commit 检出，不信任本地同名 tag。
   不强制覆盖工作区；非 tag 触发保持 HEAD。

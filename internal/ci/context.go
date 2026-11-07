@@ -38,10 +38,8 @@ func Read(provider string, getenv func(string) string) (Context, error) {
 		info.Trigger = "service  服务调用"
 	case "REMOTE":
 		info.Trigger = "remote  远程触发"
-	case "":
-		info.Trigger = "unknown"
 	default:
-		info.Trigger = start
+		info.Trigger = "manual  手动触发"
 	}
 	return info, nil
 }

@@ -41,7 +41,7 @@ func TestTagCIHelpExplainsPriorityAndOutput(t *testing.T) {
 	command.SetErr(&out)
 	command.SetArgs([]string{"ci", "--help"})
 	require.NoError(t, command.Execute())
-	for _, text := range []string{"--version-order", "webhook-tag,env,history,timestamp", "从左到右", "命中后立即停止", "失败或为空", "BK_CI_REPO_GIT_WEBHOOK_TAG_NAME", "--version-env", "--checkout", "stdout", "stderr", "setEnv", "-- sh build.sh"} {
+	for _, text := range []string{"--version-order", "webhook-tag,env,history,timestamp", "从左到右", "命中后立即停止", "失败或为空", "BK_CI_REPO_GIT_WEBHOOK_TAG_NAME", "兜底显示 manual", "--version-env", "--checkout", "stdout", "stderr", "setEnv", "-- sh build.sh"} {
 		assert.Contains(t, out.String(), text)
 	}
 }
