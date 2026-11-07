@@ -139,33 +139,17 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	remoteTags, err := w.listRemoteTags(ctx, remote)
+	calculator := tagCalculator{manager: w.manager, options: w.options, now: w.now}
+	calculation, err := calculator.calculate(ctx, head)
 	if err != nil {
 		return nil, err
 	}
-	history, err := w.releaseHistory(ctx, remoteTags, head)
-	if err != nil {
-		return nil, err
-	}
-	messages, err := w.manager.CommitMessagesSince(ctx, history.stableSHA, head)
-	if err != nil {
-		return nil, err
-	}
-	if !w.options.Print && history.hasStable && len(messages) == 0 {
+	plan := calculation.plan
+	if !w.options.Print && plan.StableTag != "" && !calculation.hasNewCommits {
 		return nil, errors.Newf(errors.ErrTypeValidation,
-			"no new commit since latest stable tag %s; commit changes before tagging", history.stable.String())
+			"no new commit since latest stable tag %s; commit changes before tagging", plan.StableTag)
 	}
-	requestedBump, _ := tagging.NormalizeBump(w.options.Bump)
-	resolvedBump := requestedBump
-	bumpDetail := tagging.InferBumpWithDetail(messages)
-	if requestedBump == tagging.BumpAuto {
-		resolvedBump = bumpDetail.Bump
-	}
-	nextVersion, err := w.nextVersion(history, remoteTags, resolvedBump)
-	if err != nil {
-		return nil, err
-	}
-	nextTag := nextVersion.String()
+	nextTag := plan.NextTag
 	if !w.options.Print {
 		localTagExists, err := w.manager.LocalTagExists(ctx, nextTag)
 		if err != nil {
@@ -174,63 +158,16 @@ func (w *TagWorkflow) Plan(ctx context.Context) (*ReleasePlan, error) {
 		if localTagExists {
 			return nil, errors.Newf(errors.ErrTypeValidation, "local tag %s already exists", nextTag)
 		}
-		if conflict := conflictingTag(remoteTags, nextTag); conflict != "" {
+		if conflict := conflictingTag(calculation.remoteTags, nextTag); conflict != "" {
 			return nil, errors.Newf(errors.ErrTypeValidation, "remote tag %s conflicts with planned tag %s on %s", conflict, nextTag, remote)
 		}
 	}
-	plan := &ReleasePlan{
-		Remote: remote, Branch: branch, Head: head,
-		BranchRemoteExists: branchStatus.RemoteExists,
-		BranchAhead:        branchStatus.Ahead, BranchBehind: branchStatus.Behind,
-		PushBranch: !w.options.Print && (!branchStatus.RemoteExists || branchStatus.Ahead > 0),
-		NextTag:    nextTag, RequestedBump: requestedBump, ResolvedBump: resolvedBump,
-		BumpDetail: bumpDetail, ExplicitTag: w.options.ExplicitTag != "",
-		InitialTag: !history.hasStable && !history.hasLatest,
-	}
-	if history.hasLatest {
-		plan.LatestTag = history.latest.String()
-	}
-	if history.hasStable {
-		plan.StableTag = history.stable.String()
-	}
+	plan.Branch = branch
+	plan.BranchRemoteExists = branchStatus.RemoteExists
+	plan.BranchAhead = branchStatus.Ahead
+	plan.BranchBehind = branchStatus.Behind
+	plan.PushBranch = !w.options.Print && (!branchStatus.RemoteExists || branchStatus.Ahead > 0)
 	return plan, nil
-}
-
-// releaseHistory selects reachable tags, so unrelated branches cannot set this
-// branch's release target. A fetched commit SHA also works in clones without tags.
-type tagHistory struct {
-	latest    tagging.Version
-	hasLatest bool
-	stable    tagging.Version
-	stableSHA string
-	hasStable bool
-}
-
-func (w *TagWorkflow) releaseHistory(ctx context.Context, tags []string, head string) (tagHistory, error) {
-	var history tagHistory
-	for _, version := range tagging.SortedVersions(tags) {
-		remoteCtx, cancel := w.remoteOperationContext(ctx)
-		sha, err := w.manager.FetchRemoteTag(remoteCtx, w.options.Remote, version.String())
-		cancel()
-		if err != nil {
-			return history, err
-		}
-		reachable, err := w.manager.IsAncestor(ctx, sha, head)
-		if err != nil {
-			return history, err
-		}
-		if !reachable {
-			continue
-		}
-		if !history.hasLatest {
-			history.latest, history.hasLatest = version, true
-		}
-		if version.Prerelease == "" {
-			history.stable, history.hasStable, history.stableSHA = version, true, sha
-			break
-		}
-	}
-	return history, nil
 }
 
 func (w *TagWorkflow) Execute(ctx context.Context, plan *ReleasePlan) error {
@@ -417,12 +354,6 @@ func (w *TagWorkflow) branchStatus(ctx context.Context, remote, branch string) (
 	return w.manager.BranchStatus(remoteCtx, remote, branch)
 }
 
-func (w *TagWorkflow) listRemoteTags(ctx context.Context, remote string) ([]string, error) {
-	remoteCtx, cancel := w.remoteOperationContext(ctx)
-	defer cancel()
-	return w.manager.ListRemoteTags(remoteCtx, remote)
-}
-
 func (w *TagWorkflow) remoteTagExists(ctx context.Context, remote, tagName string) (bool, error) {
 	remoteCtx, cancel := w.remoteOperationContext(ctx)
 	defer cancel()
@@ -464,52 +395,6 @@ func (w *TagWorkflow) checkGitRepository(ctx context.Context) error {
 		return errors.ErrNoGitRepo
 	}
 	return nil
-}
-
-func (w *TagWorkflow) nextVersion(history tagHistory, remoteTags []string, bump tagging.Bump) (tagging.Version, error) {
-	if w.options.ExplicitTag != "" {
-		explicit, err := tagging.ParseVersion(w.options.ExplicitTag)
-		if err != nil {
-			return tagging.Version{}, errors.Wrap(errors.ErrTypeConfig, "invalid explicit tag", err)
-		}
-		if history.hasStable && explicit.Compare(history.stable) <= 0 {
-			return tagging.Version{}, errors.Newf(errors.ErrTypeValidation,
-				"explicit tag %s must be greater than latest stable tag %s", explicit.String(), history.stable.String())
-		}
-		return explicit, nil
-	}
-	base, err := tagging.ParseVersion(w.options.InitialVersion)
-	if history.hasStable {
-		base, err = history.stable.Next(bump)
-	}
-	if err != nil {
-		return tagging.Version{}, errors.Wrap(errors.ErrTypeConfig, "cannot calculate release target", err)
-	}
-	// Continue an existing prerelease target without repeatedly bumping its core.
-	// An explicit --bump can intentionally select a different release line.
-	requested, _ := tagging.NormalizeBump(w.options.Bump)
-	if history.hasLatest && history.latest.Prerelease != "" && (requested == tagging.BumpAuto || !history.hasStable) {
-		previous := history.latest.Core()
-		if previous.Compare(base) >= 0 || !history.hasStable {
-			base = previous
-		}
-	}
-	if w.options.Release {
-		return base.Core(), nil
-	}
-	channel := w.options.Pre
-	if channel == "" {
-		channel = "dev"
-	}
-	location, err := time.LoadLocation(w.options.Timezone)
-	if err != nil {
-		return tagging.Version{}, errors.Wrap(errors.ErrTypeConfig, "invalid timezone", err)
-	}
-	next, err := tagging.NextPrerelease(base, channel, w.options.NoTimestamp, remoteTags, w.now().In(location))
-	if err != nil {
-		return tagging.Version{}, errors.Wrap(errors.ErrTypeValidation, "cannot calculate prerelease", err)
-	}
-	return next, nil
 }
 
 func (w *TagWorkflow) printPlan(plan *ReleasePlan) {

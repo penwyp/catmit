@@ -228,6 +228,49 @@ The Bash example validates both calculated and supplied versions before exportin
 
 For catmit itself, GoReleaser marks prereleases automatically and skips Homebrew updates for them.
 
+
+### CI Code Preparation and Artifact Versions
+
+`catmit tag ci` prepares code, selects one artifact version and optionally runs a build. Install a release containing this command on the worker first. It never creates or pushes Git tags, calls an LLM, reads project configuration or invokes BK-CI's `setEnv` itself.
+
+Make priority visible at the call site:
+
+```sh
+#!/bin/sh
+set -eu
+cd "${{ci.workspace}}/storage-aiops/storage-aiops"
+version=$(
+    catmit tag ci \
+        --provider bk-ci \
+        --version-order webhook-tag,env,history,timestamp \
+        --version-env ZHIYAN_PKG_VERSION \
+        --checkout --timezone Asia/Shanghai \
+        -- sh build.sh
+)
+setEnv "ZHIYAN_PKG_VERSION" "$version" >&2
+```
+
+The default order is also `webhook-tag,env,history,timestamp`. Sources are tried left to right and stop at the first usable version:
+
+| Source | Selection rule |
+| --- | --- |
+| `webhook-tag` | Use nonempty `BK_CI_REPO_GIT_WEBHOOK_TAG_NAME`, ahead of an existing upstream variable |
+| `env` | Use the nonempty variable named by `--version-env` (default `CATMIT_VERSION`) |
+| `history` | Reuse the existing Git history algorithm; on failure or empty output try the next source |
+| `timestamp` | Format `YYYYMMDDHHmmss` in `--timezone` (default `Asia/Shanghai`) |
+
+Sources may be omitted or reordered, but not repeated. Omitting `timestamp` disables timestamp fallback; exhausting the list fails. Invalid supplied versions, checkout failures, build failures and cancellation are fatal. External versions need not be SemVer, but must be nonempty single lines without surrounding whitespace or control characters. Validate separately for Docker tags or other artifact-specific constraints.
+
+`--provider bk-ci` maps `BK_CI_START_TYPE`, `BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE` and `BK_CI_REPO_GIT_WEBHOOK_TAG_NAME`. The business variable is explicitly named by `--version-env`. `--checkout` resolves a nonempty webhook tag from `--remote` (default `origin`) and checks out its commit detached, ignoring stale same-named local tags and without forcibly overwriting local changes. Checkout is independent of version-source order. Other triggers retain HEAD; without `--checkout`, the pipeline owns checkout correctness.
+
+Only the `history` source requires full history; shallow clones are automatically unshallowed when that source is reached. Remote operations each use `--timeout` (default 30 seconds). `--bump`, `--initial`, `--pre`, `--release` and `--notimestamp` affect only history; `--timezone` affects both history and fallback timestamps. Explicit `--pre` and `--release` are mutually exclusive.
+
+For **preparation only**, omit `-- sh build.sh` and use `cd "${{ci.workspace}}"` (or the actual business checkout directory). The command still prepares code and returns a version. Subsequent steps reuse the propagated version; a different worker or fresh checkout must also use the same full commit SHA. `setEnv` propagates to subsequent BK-CI steps; use `export ZHIYAN_PKG_VERSION="$version"` if later commands in the current shell need it.
+
+For **managed builds**, the version is selected once before execution and injected as both `CATMIT_VERSION` and the named variable. Commands after `--` execute directly; use `sh -c '...'` for shell syntax. Build stdout and stderr stream to catmit's stderr along with progress and one Chinese summary containing policy, source and full commit. Only the successful final version plus a newline goes to stdout, so `$(...)` does not swallow build logs. Failures leave stdout empty and preserve build exit codes; changing HEAD during the build is also rejected.
+
+Like `--print`, this does not reserve a version or advance the remote prerelease counter. Neither generated versions nor second-resolution timestamps guarantee uniqueness across concurrent builds. Download/installation failures occur before catmit starts and are outside its fallback policy.
+
 ### Pull Request Creation
 ```bash
 # Create a pull request with AI-generated description

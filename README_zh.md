@@ -469,6 +469,92 @@ sh build.sh
 
 catmit 自身的 GoReleaser 发布配置会自动标记预发布，并跳过预发布的 Homebrew 更新。
 
+
+### CI 代码准备与制品版本
+
+`catmit tag ci` 把代码准备、版本选择和可选的业务构建组合为一步。它不创建或推送 Git tag，不调用 LLM，不读取项目配置。请先在构建节点安装包含此子命令的 catmit；安装、下载失败不属于命令内部的兜底范围。
+
+优先级直接写进 CLI：
+
+```sh
+catmit tag ci --provider bk-ci \
+    --version-order webhook-tag,env,history,timestamp \
+    --version-env ZHIYAN_PKG_VERSION --checkout -- sh build.sh
+```
+
+| 来源 | 何时使用 / 继续 |
+| --- | --- |
+| `webhook-tag` | `BK_CI_REPO_GIT_WEBHOOK_TAG_NAME` 非空即使用，即使已有上游版本变量 |
+| `env` | 读取 `--version-env` 指定的变量，非空即使用；默认变量名 `CATMIT_VERSION` |
+| `history` | 复用 `tag --print` 的历史算法；失败或为空时尝试下一个来源 |
+| `timestamp` | 使用 `--timezone`（默认 `Asia/Shanghai`）生成 `YYYYMMDDHHmmss` |
+
+默认顺序也是 `webhook-tag,env,history,timestamp`，建议流水线显式写出。来源可以省略或重排，不能重复；命中后立即停止。没有 `timestamp` 就不会隐式兜底，所有来源耗尽则失败。非空但非法的输入直接报错，不会被低优先级来源覆盖。版本值不要求 SemVer，但必须无首尾空白、单行且无控制字符；若用于 Docker tag，仍需自行按目标格式校验。
+
+`--provider bk-ci` 只负责读取蓝盾触发变量（`BK_CI_START_TYPE`、`BK_CI_REPO_GIT_WEBHOOK_EVENT_TYPE`、`BK_CI_REPO_GIT_WEBHOOK_TAG_NAME`）；业务变量名由 `--version-env` 指定。`--checkout` 在 webhook tag 非空时从远程解析 commit，再检出 detached HEAD，不信任陈旧的本地同名 tag，不强制覆盖工作区。非 tag 触发保持 HEAD；未指定 `--checkout` 时由流水线负责检出正确提交。检出独立于来源顺序，即使 `env` 排在前面，也会准备 webhook tag 对应的代码。
+
+只有尝试 `history` 时才要求完整历史，浅克隆会自动补全；远程操作受 `--timeout`（默认每次 30 秒）限制，远程由 `--remote` 指定（默认 `origin`）。`--bump`、`--initial`、`--pre`、`--release`、`--notimestamp` 仅影响 `history`；`--timezone` 同时影响历史版本和时间戳来源。显式 `--pre` 与 `--release` 互斥。
+
+**同一步准备并构建：**
+
+```sh
+#!/bin/sh
+set -eu
+cd "${{ci.workspace}}/storage-aiops/storage-aiops"
+
+zhiyan_pkg_version=$(
+    catmit tag ci \
+        --provider bk-ci \
+        --version-order webhook-tag,env,history,timestamp \
+        --version-env ZHIYAN_PKG_VERSION \
+        --checkout \
+        --timezone Asia/Shanghai \
+        -- sh build.sh
+)
+setEnv "ZHIYAN_PKG_VERSION" "$zhiyan_pkg_version" >&2
+```
+
+版本在构建前仅确定一次，向构建进程同时注入 `CATMIT_VERSION` 和指定业务变量。`--` 后按参数直接执行命令，需要 Shell 语法时显式使用 `sh -c '...'`。构建失败保留命令退出码，不输出成功版本；构建改变 HEAD 也会拒绝输出版本。
+
+**仅准备代码和版本，后续步骤自行构建：**
+
+```sh
+#!/bin/sh
+set -eu
+cd "${{ci.workspace}}"
+
+zhiyan_pkg_version=$(
+    catmit tag ci \
+        --provider bk-ci \
+        --version-order webhook-tag,env,history,timestamp \
+        --version-env ZHIYAN_PKG_VERSION \
+        --checkout \
+        --timezone Asia/Shanghai
+)
+setEnv "ZHIYAN_PKG_VERSION" "$zhiyan_pkg_version" >&2
+```
+
+`setEnv` 由蓝盾 Shell 环境提供，用于后续步骤。若当前 Shell 还要执行构建，先 `export ZHIYAN_PKG_VERSION="$zhiyan_pkg_version"`。换节点或重新 checkout 时，还需检出本次相同的完整 commit SHA；后续步骤复用版本，不再计算。
+
+进度、完整构建 stdout/stderr 和末尾一次中文摘要全部实时进入 stderr；`$(...)` 只捕获成功时的一行版本。准备或构建失败时 stdout 为空；取消、检出失败或构建失败不触发版本兜底。摘要包含策略、命中来源和完整提交，示例：
+
+```text
+[checkout] tag v1.2.4 → a1b2c3d4e5f6
+[version] v1.2.4（webhook-tag）
+[build] 开始执行：sh build.sh
+这里实时显示业务构建日志……
+[build] detached @ a1b2c3d4e5f6  完成
+  版本摘要
+  触发  webhook(TAG_PUSH)  TAG 推送
+  策略  webhook-tag > env > history > timestamp; env=ZHIYAN_PKG_VERSION
+  版本  v1.2.4
+  来源  webhook-tag（来自 tag 推送）
+  代码  detached @ a1b2c3d4e5f6
+  提交  a1b2c3d4e5f6012345678901234567890123456789
+```
+
+与 `--print` 一样，该命令不保留版本，不推进远程预发布序号，也不保证并发构建唯一。时间戳精度为秒；制品禁止覆盖时需另行确定唯一编号策略。
+
 ### Pull Request 创建
 ```bash
 # 创建带有 AI 生成描述的 pull request

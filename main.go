@@ -21,6 +21,11 @@ func main() {
 
 	// Execute the root command.
 	if err := cmd.ExecuteContext(ctx); err != nil {
+		var exitErr *cmd.ExitError
+		if errors.As(err, &exitErr) {
+			log.Printf("catmit error: %v", err)
+			os.Exit(exitErr.Code)
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Use 124 to indicate timeout, following CLI conventions
 			log.Println("Timeout exceeded")

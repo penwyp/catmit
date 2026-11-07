@@ -130,6 +130,7 @@ are mutually exclusive. --tag cannot be combined with naming flags.`,
 		cmd.MarkFlagsMutuallyExclusive("tag", flag)
 	}
 	cmd.MarkFlagsMutuallyExclusive("release", "timezone")
+	cmd.AddCommand(newTagCICommand())
 	return cmd
 }
 
