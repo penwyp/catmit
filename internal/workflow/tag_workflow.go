@@ -354,6 +354,12 @@ func (w *TagWorkflow) branchStatus(ctx context.Context, remote, branch string) (
 	return w.manager.BranchStatus(remoteCtx, remote, branch)
 }
 
+func (w *TagWorkflow) listRemoteTags(ctx context.Context, remote string) ([]string, error) {
+	remoteCtx, cancel := w.remoteOperationContext(ctx)
+	defer cancel()
+	return w.manager.ListRemoteTags(remoteCtx, remote)
+}
+
 func (w *TagWorkflow) remoteTagExists(ctx context.Context, remote, tagName string) (bool, error) {
 	remoteCtx, cancel := w.remoteOperationContext(ctx)
 	defer cancel()
