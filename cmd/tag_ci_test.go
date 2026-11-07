@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -106,6 +108,30 @@ func TestTagCICommandPrepareAndBuild(t *testing.T) {
 				} else {
 					assert.NotContains(t, stderr.String(), "[build]")
 				}
+			}
+		})
+	}
+}
+
+func TestTagCIHelpFitsTerminalWidth(t *testing.T) {
+	for _, width := range []int{40, 60, 80} {
+		t.Run(strconv.Itoa(width), func(t *testing.T) {
+			t.Setenv("COLUMNS", strconv.Itoa(width))
+			command := newTagCommand()
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			command.SetArgs([]string{"ci", "-h"})
+			require.NoError(t, command.Execute())
+			assert.Empty(t, stderr.String())
+			for _, line := range strings.Split(stdout.String(), "\n") {
+				assert.LessOrEqual(t, ansi.StringWidth(line), width, "line: %s", line)
+			}
+			for _, mixed := range []string{"Usage:", "Flags:", "Examples:", "(default", "help for ci"} {
+				assert.NotContains(t, stdout.String(), mixed)
+			}
+			for _, section := range []string{"用法", "版本来源", "代码与构建", "输出约定", "版本与代码选项", "运行选项", "历史计算选项", "示例"} {
+				assert.Contains(t, stdout.String(), section)
 			}
 		})
 	}

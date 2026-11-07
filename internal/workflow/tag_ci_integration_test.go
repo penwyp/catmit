@@ -180,13 +180,15 @@ func TestTagCIRejectsBuildChangingCommit(t *testing.T) {
 }
 
 type cancelBuildWriter struct {
-	bytes.Buffer
+	buffer bytes.Buffer
 	cancel context.CancelFunc
 }
 
+func (w *cancelBuildWriter) String() string { return w.buffer.String() }
+
 func (w *cancelBuildWriter) Write(p []byte) (int, error) {
-	n, err := w.Buffer.Write(p)
-	if strings.Contains(w.Buffer.String(), "child-started") {
+	n, err := w.buffer.Write(p)
+	if strings.Contains(w.buffer.String(), "child-started") {
 		w.cancel()
 	}
 	return n, err
