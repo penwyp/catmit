@@ -373,7 +373,7 @@ $ catmit squash-history
 `catmit tag` 只给已提交代码创建并推送 annotated tag，全程不调用 LLM，也不读取项目配置文件或 LLM 配置。不需要 API Key；实际打 tag 时工作区必须干净，不会自动暂存或提交。
 
 ```bash
-# 默认 dev 预发布，带东八区时间：v1.2.4-dev.1.20261105T153000UTC8
+# 默认 dev 预发布，带东八区时间：v1.2.4-dev.1.20261105.153000UTC8
 catmit tag
 
 # 帮助包含完整说明、时区和递增规则
@@ -419,7 +419,7 @@ catmit tag --remote upstream --yes
 
 **时间与参数：**
 
-- `--timezone` 默认 `Asia/Shanghai`，示例 `20261105T153000UTC8`；同一时刻在 `UTC` 为 `20261105T073000Z`，在 `Asia/Tokyo` 为 `20261105T163000UTC9`。
+- `--timezone` 默认 `Asia/Shanghai`，示例 `20261105.153000UTC8`；同一时刻在 `UTC` 为 `20261105.073000Z`，在 `Asia/Tokyo` 为 `20261105.163000UTC9`。
 - 支持 IANA 时区和夏令时；半小时／四十五分钟偏移用 `UTC5-30`、`UTC5-45`、`UTC-3-30` 等不含冒号的格式。时间在预览计划生成时固定，确认后不会重算。
 - 显式 `--timezone` 与 `--notimestamp` 冲突；正式版不带时间，因此 `--release` 与显式 `--timezone` 冲突。
 - `--pre`、`--release`、`--tag` 互斥。`--tag` 也不能与 `--bump`、`--initial`、`--notimestamp`、`--timezone` 混用。

@@ -151,7 +151,7 @@ $ catmit squash-history
 `catmit tag` creates and pushes annotated tags for committed code using only Git. It never calls an LLM, reads project/LLM configuration, stages files, or creates commits. No API key is required; the worktree must be clean when publishing.
 
 ```bash
-# Default dev prerelease, UTC+8: v1.2.4-dev.1.20261105T153000UTC8
+# Default dev prerelease, UTC+8: v1.2.4-dev.1.20261105.153000UTC8
 catmit tag
 
 # Full usage, timezone and increment rules
@@ -195,7 +195,7 @@ catmit tag --remote upstream --yes
 
 **Timezones and flags:**
 
-- `--timezone` defaults to `Asia/Shanghai`: `20261105T153000UTC8`. The same instant is `20261105T073000Z` in `UTC` or `20261105T163000UTC9` in `Asia/Tokyo`.
+- `--timezone` defaults to `Asia/Shanghai`: `20261105.153000UTC8`. The same instant is `20261105.073000Z` in `UTC` or `20261105.163000UTC9` in `Asia/Tokyo`.
 - IANA daylight-saving offsets are honored. Fractional offsets use SemVer-safe forms such as `UTC5-30`, `UTC5-45` and `UTC-3-30`. The timestamp is fixed when the plan is created.
 - Explicit `--timezone` conflicts with `--notimestamp` and `--release` (stable releases have no timestamps).
 - `--pre`, `--release` and `--tag` are mutually exclusive. `--tag` also conflicts with `--bump`, `--initial`, `--notimestamp` and `--timezone`.

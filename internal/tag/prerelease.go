@@ -18,7 +18,7 @@ func ValidateChannel(channel string) error {
 }
 
 // NextPrerelease always increments the channel counter. The optional timestamp
-// follows the counter as a prerelease identifier without Docker's invalid '+' separator.
+// follows the counter as date and time prerelease identifiers without Docker's invalid '+' separator.
 func NextPrerelease(base Version, channel string, noTimestamp bool, tags []string, now time.Time) (Version, error) {
 	if err := ValidateChannel(channel); err != nil {
 		return Version{}, err
@@ -67,5 +67,5 @@ func FormatTimestamp(now time.Time) string {
 			suffix += fmt.Sprintf("-%02d", offset%60)
 		}
 	}
-	return now.Format("20060102T150405") + suffix
+	return now.Format("20060102.150405") + suffix
 }

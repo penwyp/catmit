@@ -37,7 +37,7 @@ produce the same version (especially with --notimestamp or within one second).
 Publishing-only checks (new commits, local/remote tag availability) are skipped.
 
 Default: a dev prerelease with a counter and an Asia/Shanghai (UTC+8) timestamp,
-for example v1.2.4-dev.1.20261105T153000UTC8. --notimestamp removes only the
+for example v1.2.4-dev.1.20261105.153000UTC8. --notimestamp removes only the
 timestamp; the prerelease counter still increments. --release creates a
 plain stable version (v1.2.4), with no prerelease suffix or timestamp.
 
@@ -65,8 +65,8 @@ Increment rules:
      --tag uses an exact name, bypassing automatic naming and timestamps.
 
 Timezones:
-  --timezone defaults to Asia/Shanghai. UTC gives 20261105T073000Z;
-  Asia/Tokyo gives 20261105T163000UTC9 for the same instant. IANA daylight-saving
+  --timezone defaults to Asia/Shanghai. UTC gives 20261105.073000Z;
+  Asia/Tokyo gives 20261105.163000UTC9 for the same instant. IANA daylight-saving
   offsets are honored; fractional offsets use UTC5-30, UTC-3-30, etc.
   Explicit --timezone and --notimestamp cannot be combined.
   --release has no timestamp and cannot be combined with explicit --timezone.

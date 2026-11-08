@@ -164,13 +164,13 @@ func TestTagPrintOutputContract(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"--print"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}UTC8\n$`},
+		{[]string{"--print"}, `^v0\.1\.0-dev\.1\.[0-9]{8}\.[0-9]{6}UTC8\n$`},
 		{[]string{"--print", "--notimestamp", "--yes"}, `^v0\.1\.0-dev\.1\n$`},
-		{[]string{"--print", "--pre", "rc"}, `^v0\.1\.0-rc\.1\.[0-9]{8}T[0-9]{6}UTC8\n$`},
-		{[]string{"--print", "--timezone", "Asia/Kolkata"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}UTC5-30\n$`},
+		{[]string{"--print", "--pre", "rc"}, `^v0\.1\.0-rc\.1\.[0-9]{8}\.[0-9]{6}UTC8\n$`},
+		{[]string{"--print", "--timezone", "Asia/Kolkata"}, `^v0\.1\.0-dev\.1\.[0-9]{8}\.[0-9]{6}UTC5-30\n$`},
 		{[]string{"--print", "--pre", "rc", "--notimestamp"}, `^v0\.1\.0-rc\.1\n$`},
 		{[]string{"--print", "--release"}, `^v0\.1\.0\n$`},
-		{[]string{"--print", "--timezone", "UTC", "--debug"}, `^v0\.1\.0-dev\.1\.[0-9]{8}T[0-9]{6}Z\n$`},
+		{[]string{"--print", "--timezone", "UTC", "--debug"}, `^v0\.1\.0-dev\.1\.[0-9]{8}\.[0-9]{6}Z\n$`},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			cmd := newTagCommand()
